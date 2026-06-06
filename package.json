@@ -1,6 +1,9 @@
 {
-  "name": "aigentflow-flow-validator",
+  "name": "@vaudience/aigentflow-flow-validator",
   "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Static, offline validator for AIgentFlow workflow YAML. Works in Node, the browser, and as a CLI.",
   "keywords": [
     "aigentflow",

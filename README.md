@@ -16,11 +16,11 @@ It catches the structural and semantic problems in a flow definition _before_ yo
 ## Install
 
 ```bash
-npm install aigentflow-flow-validator
+npm install @vaudience/aigentflow-flow-validator
 ```
 
-Until the package is published to npm, install it straight from git — the
-`prepare` script builds `dist/` automatically on install:
+You can also install straight from git (the `prepare` script builds `dist/`
+automatically on install):
 
 ```bash
 npm install github:itsatony/aigentflow-flow-validator-js
@@ -35,7 +35,7 @@ Requires Node ≥ 20 (for library + CLI use). For browser/bundler use, any moder
 ### Node (ESM)
 
 ```ts
-import { validateFlow } from 'aigentflow-flow-validator';
+import { validateFlow } from '@vaudience/aigentflow-flow-validator';
 
 const result = validateFlow(yamlString);
 if (!result.valid) {
@@ -48,7 +48,7 @@ if (!result.valid) {
 ### Node (CommonJS)
 
 ```js
-const { validateFlow } = require('aigentflow-flow-validator');
+const { validateFlow } = require('@vaudience/aigentflow-flow-validator');
 const result = validateFlow(yamlString);
 ```
 
@@ -57,7 +57,7 @@ const result = validateFlow(yamlString);
 The package's main entry pulls in no Node built-ins, so it works in the browser via any bundler (Vite, webpack, esbuild, Rollup):
 
 ```ts
-import { validateFlow } from 'aigentflow-flow-validator';
+import { validateFlow } from '@vaudience/aigentflow-flow-validator';
 
 const result = validateFlow(editor.getValue());
 renderDiagnostics(result.errors, result.warnings);
@@ -68,7 +68,7 @@ renderDiagnostics(result.errors, result.warnings);
 If you parsed the YAML yourself (or are validating JSON), skip the parse step:
 
 ```ts
-import { validateFlowObject } from 'aigentflow-flow-validator';
+import { validateFlowObject } from '@vaudience/aigentflow-flow-validator';
 const result = validateFlowObject(myFlowObject);
 ```
 
