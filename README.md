@@ -19,6 +19,13 @@ It catches the structural and semantic problems in a flow definition _before_ yo
 npm install aigentflow-flow-validator
 ```
 
+Until the package is published to npm, install it straight from git — the
+`prepare` script builds `dist/` automatically on install:
+
+```bash
+npm install github:itsatony/aigentflow-flow-validator-js
+```
+
 Requires Node ≥ 18 (for library + CLI use). For browser/bundler use, any modern bundler works.
 
 ---
