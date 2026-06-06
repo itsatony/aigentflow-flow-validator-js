@@ -26,7 +26,7 @@ Until the package is published to npm, install it straight from git — the
 npm install github:itsatony/aigentflow-flow-validator-js
 ```
 
-Requires Node ≥ 18 (for library + CLI use). For browser/bundler use, any modern bundler works.
+Requires Node ≥ 20 (for library + CLI use). For browser/bundler use, any modern bundler works.
 
 ---
 

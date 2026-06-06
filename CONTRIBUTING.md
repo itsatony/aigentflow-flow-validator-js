@@ -2,17 +2,22 @@
 
 Thanks for helping improve the AIgentFlow flow validator.
 
+Requires Node ≥ 20 (the test toolchain needs it; Node 18 is EOL).
+
 ## Development setup
 
 ```bash
 npm install
-npm run typecheck   # tsc --noEmit
-npm run lint        # eslint
-npm test            # vitest
-npm run build       # tsup → dist/ (ESM + CJS + .d.ts + CLI)
+npm run ci     # the full gate — MUST pass before you push
 ```
 
-All four must pass before a PR is merged; CI runs them on Node 18 / 20 / 22.
+`npm run ci` runs exactly what GitHub Actions runs — `typecheck → lint →
+format:check → test → build` — so a green local run means a green CI run. The
+GitHub workflow invokes this same script (on Node 20 and 22), so the two cannot
+diverge. **Run it before every push** (it is the pre-push step of the dev cycle).
+
+Individual steps if you need them: `npm run typecheck`, `npm run lint`,
+`npm run format` (auto-fix) / `npm run format:check`, `npm test`, `npm run build`.
 
 ## Project layout
 
