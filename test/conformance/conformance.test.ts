@@ -27,6 +27,12 @@ const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
   { file: 'valid-branching.yaml', valid: true },
   {
+    // Skope retired in v2.435.0 → skope:// is now an unknown scheme (warns, not rejects).
+    file: 'valid-retired-skope-scheme-warns.yaml',
+    valid: true,
+    expectWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
     file: 'invalid-missing-fields.yaml',
     valid: false,
     expectErrorCodes: ['missing_required_field', 'step_not_found'],

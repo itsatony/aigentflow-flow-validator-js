@@ -1,6 +1,6 @@
 {
   "$comment": "Vendored enum surface mirrored from the AIgentFlow Go reference implementation. Regenerate / review on every flow-YAML schema change. See PARITY.md. Values here are public protocol/type names only.",
-  "specVersion": "2.433.0",
+  "specVersion": "2.435.0",
   "inputSchemaVersion": 1,
   "executorSchemes": [
     "ai",
@@ -25,7 +25,6 @@
     "flow",
     "mcp",
     "a2a",
-    "skope",
     "e2b",
     "browser",
     "storage",
@@ -131,11 +130,6 @@
       "aif_memory_record",
       "aif_tool_discover",
       "aif_tool_execute",
-      "aif_skope_create",
-      "aif_skope_discover",
-      "aif_skope_execute",
-      "aif_skope_inspect",
-      "aif_skope_update",
       "aif_trove_upload",
       "aif_trove_download",
       "aif_trove_list",
