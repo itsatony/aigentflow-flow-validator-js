@@ -4,7 +4,7 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.435.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.466.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
 
 The Go reference has two layers, both ported here:
 
@@ -17,21 +17,23 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 
 ## Rule map
 
-| Area                                                                          | Go source                                                                                         | JS module                                               | Tested by                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------- |
-| Required fields, start-step existence, per-step executor, reserved `.` in IDs | `validateBasicStructure`, `ValidateFlow` head                                                     | `validators/basicStructure.ts`                          | `validate.test.ts`                          |
-| Executor URI shape + scheme                                                   | (registry, runtime)                                                                               | `validators/executors.ts`                               | `validate.test.ts`                          |
-| Query/property/array-item schema + array constraints                          | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints` | `validators/querySchema.ts`                             | `validate.test.ts`                          |
-| Response-expectation types + array items + `required`                         | `ValidateFlow` (response block), `validateSemantics`                                              | `validators/responseExpectation.ts`                     | `validate.test.ts`                          |
-| Error strategy (action, goto, max_delay, backoff, retry_on)                   | `validateErrorStrategy`                                                                           | `validators/errorStrategy.ts`                           | `validate.test.ts`                          |
-| `next` references, reachability, cycles                                       | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                | `validators/connectivity.ts`                            | `validate.test.ts`                          |
-| `next.parallel` + orchestrator-next requirement                               | `validateNextLogic`, `validateOrchestratorNext`                                                   | `validators/nextLogic.ts`                               | `validate.test.ts`                          |
-| Expression functions (XOR package/function)                                   | `validateExpressionFunctions`                                                                     | `validators/expressionFunctions.ts`                     | `validate.test.ts`                          |
-| Loop / for_each / throttle                                                    | `validateLoop`, `validateForEach`, `validateThrottle`                                             | `validators/loopForEachThrottle.ts`                     | `validate.test.ts`                          |
-| Orchestrator structure + campaign requires orchestrator                       | `validateOrchestrator`, `validateAndNormalizeCampaign`                                            | `validators/orchestratorCampaign.ts`                    | `validate.test.ts`                          |
-| Credential bindings (`stored/...`, inject_as, exclusivity)                    | `validateStepCredentialBindings`                                                                  | `validators/credentialBindings.ts`                      | `validate.test.ts`                          |
-| `input_schema` definition + ordering lint                                     | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                   | `validators/inputSchema.ts`                             | `validate.test.ts`                          |
-| Go-template syntax                                                            | `validateTemplateExpression` (Parse step)                                                         | `template/gotmpl-syntax.ts` + `validators/templates.ts` | `gotmpl-syntax.test.ts`, `validate.test.ts` |
+| Area                                                                          | Go source                                                                                         | JS module                                                | Tested by                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------- |
+| Required fields, start-step existence, per-step executor, reserved `.` in IDs | `validateBasicStructure`, `ValidateFlow` head                                                     | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
+| Executor URI shape + scheme                                                   | (registry, runtime)                                                                               | `validators/executors.ts`                                | `validate.test.ts`                          |
+| Query/property/array-item schema + array constraints                          | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints` | `validators/querySchema.ts`                              | `validate.test.ts`                          |
+| Response-expectation types + array items + `required`                         | `ValidateFlow` (response block), `validateSemantics`                                              | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
+| Error strategy (action, goto, max_delay, backoff, retry_on)                   | `validateErrorStrategy`                                                                           | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
+| `next` references, reachability, cycles                                       | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                | `validators/connectivity.ts`                             | `validate.test.ts`                          |
+| `next.parallel` + orchestrator-next requirement                               | `validateNextLogic`, `validateOrchestratorNext`                                                   | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
+| Expression functions (XOR package/function)                                   | `validateExpressionFunctions`                                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
+| Loop / for_each / throttle                                                    | `validateLoop`, `validateForEach`, `validateThrottle`                                             | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
+| Orchestrator structure + campaign requires orchestrator                       | `validateOrchestrator`, `validateAndNormalizeCampaign`                                            | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
+| Credential bindings (`stored/...`, inject_as, exclusivity)                    | `validateStepCredentialBindings`                                                                  | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
+| `input_schema` definition + ordering lint                                     | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                   | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
+| Step `output_schema` definition (reuses the input-schema subset)              | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                               | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
+| `quality_gate:` block (rubric/threshold/on_fail/goto)                         | `FlowParser.validateQualityGate` (parser.go)                                                      | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
+| Go-template syntax                                                            | `validateTemplateExpression` (Parse step)                                                         | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
 
 ---
 
@@ -74,6 +76,24 @@ validator useful and low-false-positive while staying offline.
 8. **Shape errors.** Because YAML decodes into an untyped object (vs. Go's typed
    unmarshal), this validator emits `invalid_type` errors where Go would have failed at
    decode time. This is strictly additive.
+
+9. **`unresolvable_data_path` is not reproduced (DC-CP-7).** The Go engine, when a step
+   declares an `output_schema`, treats that step's output as a typed contract and errors
+   (`unresolvable_data_path`) on any `.data.<step>.<field>` template reference elsewhere in
+   the flow that names a field the producing step's `output_schema` does not declare
+   (opt-in: steps _without_ an `output_schema` are left lenient). Emitting it here would
+   require statically resolving `.data.<step>.<field>` references out of every template and
+   matching them to the producing step — i.e. the very runtime template field-resolution
+   this validator deliberately does not perform (see divergence #3). We therefore validate
+   the `output_schema` **definition** (structure/field types, via the shared input-schema
+   validator) but do **not** cross-check template references against it. Candidate for the
+   same future best-effort resolution pass as divergence #3.
+
+   The `wait://` and `eval://` schemes (DC-CP-5 / DC-CP-8) are now in the known-scheme set,
+   so they no longer warn (`unknown_executor_scheme`); malformed `wait://` / `eval://` URIs
+   still error via the shared shape check. `quality_gate.on_fail=human` exists in the Go
+   enum but is validation-REJECTED there (pending the human-task inbox), so this validator
+   rejects it too (`quality_gate_on_fail_unsupported`) — this is parity, not a divergence.
 
 ---
 

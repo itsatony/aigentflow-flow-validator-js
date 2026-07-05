@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.435.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.466.0"`).
 
 ### Options
 
@@ -173,6 +173,8 @@ interface ValidationIssue {
 - **Credential bindings** — `stored/{provider}/{name}` format, `inject_as`, `credential`/`credentials` mutual exclusion.
 - **Expression functions** — exactly one of `package`/`function`.
 - **`input_schema`** — version, field-name pattern, type enum, per-type constraints, `pattern` compilation, `visible_when` predicate + reference resolution, duplicate-name detection, file-ordering lint.
+- **Step `output_schema`** — the same JSON-Schema subset as `input_schema`, validated at step scope (and on loop sub-steps).
+- **`quality_gate:`** — `rubric` required, `threshold` in `[0,1]`, `on_fail` enum (`fail`/`goto`/`retry`; `human` is rejected as not-yet-supported), `goto_step` existence + no self-goto when `on_fail=goto`, and the composite/parallel-member scope guards.
 - **Templates** — Go `text/template` **syntax** across query, processing, and conditions.
 
 ## What it does **not** check

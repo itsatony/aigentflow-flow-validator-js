@@ -396,3 +396,132 @@ describe('templates + summary', () => {
     expect(r.summary.templatesValid).toBe(1);
   });
 });
+
+describe('wait:// + eval:// executor schemes (CLEANER POWER Phase 2)', () => {
+  it('accepts wait:// as a known scheme (no unknown-scheme warning)', () => {
+    for (const url of ['wait://timer/30s', 'wait://timer/until', 'wait://event/approved']) {
+      const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor: url } } });
+      expect(warnCodes(r), url).not.toContain('unknown_executor_scheme');
+      expect(r.valid, url).toBe(true);
+    }
+  });
+  it('accepts eval://judge/evaluate as a known scheme', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: 'eval://judge/evaluate' } },
+    });
+    expect(warnCodes(r)).not.toContain('unknown_executor_scheme');
+    expect(r.valid).toBe(true);
+  });
+  it('still errors on a malformed wait:// URI', () => {
+    const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor: 'wait://' } } });
+    expect(codes(r)).toContain('invalid_executor_url');
+  });
+});
+
+describe('step output_schema (DC-CP-7)', () => {
+  const withOutput = (schema: unknown) => ({
+    ...MINIMAL,
+    steps: { a: { executor: 'ai://openai/chat', output_schema: schema } },
+  });
+  it('accepts a well-formed output_schema (same subset as input_schema)', () => {
+    const r = validateFlowObject(
+      withOutput({ version: 1, fields: [{ name: 'summary', type: 'string', required: true }] }),
+    );
+    expect(r.valid).toBe(true);
+  });
+  it('rejects a bad output_schema version', () => {
+    const r = validateFlowObject(withOutput({ version: 2, fields: [] }));
+    expect(codes(r)).toContain('input_schema_invalid_version');
+  });
+  it('reuses input-schema field rules (bad field name) at step scope', () => {
+    const r = validateFlowObject(
+      withOutput({ version: 1, fields: [{ name: 'NotSnake', type: 'string' }] }),
+    );
+    expect(codes(r)).toContain('input_schema_invalid_field_name');
+    expect(r.errors.some((e) => e.field === 'steps.a.output_schema.fields[0]')).toBe(true);
+  });
+  it('validates output_schema on loop sub-steps', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ lt .loop.index 3 }}',
+            max_iterations: 5,
+            steps: [{ id: 's', executor: 'mock://x/y', output_schema: { version: 9, fields: [] } }],
+          },
+        },
+      },
+    });
+    expect(codes(r)).toContain('input_schema_invalid_version');
+  });
+});
+
+describe('quality_gate block (DC-CP-8)', () => {
+  const withGate = (gate: unknown, extra: Record<string, unknown> = {}) => ({
+    ...MINIMAL,
+    steps: {
+      a: { executor: 'ai://openai/chat', quality_gate: gate, ...extra },
+      b: { executor: 'mock://x/y' },
+    },
+  });
+  it('accepts a well-formed quality_gate', () => {
+    const r = validateFlowObject(
+      withGate({ rubric: 'Be accurate.', threshold: 0.8, on_fail: 'retry', max_retries: 2 }),
+    );
+    expect(r.valid).toBe(true);
+  });
+  it('requires a rubric', () => {
+    const r = validateFlowObject(withGate({ threshold: 0.5 }));
+    expect(codes(r)).toContain('quality_gate_missing_rubric');
+  });
+  it('rejects a threshold out of [0,1]', () => {
+    const r = validateFlowObject(withGate({ rubric: 'x', threshold: 1.5 }));
+    expect(codes(r)).toContain('quality_gate_threshold_out_of_range');
+  });
+  it('rejects an unknown on_fail', () => {
+    const r = validateFlowObject(withGate({ rubric: 'x', on_fail: 'bogus' }));
+    expect(codes(r)).toContain('quality_gate_invalid_on_fail');
+  });
+  it('rejects on_fail=human (in the Go enum but not yet supported)', () => {
+    const r = validateFlowObject(withGate({ rubric: 'x', on_fail: 'human' }));
+    expect(codes(r)).toContain('quality_gate_on_fail_unsupported');
+  });
+  it('requires goto_step when on_fail=goto', () => {
+    const r = validateFlowObject(withGate({ rubric: 'x', on_fail: 'goto' }));
+    expect(codes(r)).toContain('quality_gate_goto_missing');
+  });
+  it('errors when goto_step does not exist', () => {
+    const r = validateFlowObject(withGate({ rubric: 'x', on_fail: 'goto', goto_step: 'nope' }));
+    expect(codes(r)).toContain('step_not_found');
+  });
+  it('accepts goto_step that exists', () => {
+    const r = validateFlowObject(withGate({ rubric: 'x', on_fail: 'goto', goto_step: 'b' }));
+    expect(r.valid).toBe(true);
+  });
+  it('rejects a self-goto', () => {
+    const r = validateFlowObject(withGate({ rubric: 'x', on_fail: 'goto', goto_step: 'a' }));
+    expect(codes(r)).toContain('quality_gate_goto_self');
+  });
+  it('rejects a gate on a composite (for_each) step', () => {
+    const r = validateFlowObject(
+      withGate({ rubric: 'x' }, { for_each: { items: '{{ .query.list }}', as: 'item' } }),
+    );
+    expect(codes(r)).toContain('quality_gate_on_composite');
+  });
+  it('rejects a gate on a parallel-member step', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      start: 'fan',
+      steps: {
+        fan: {
+          executor: 'mock://x/y',
+          next: { parallel: { steps: ['a'], resolution: 'all-complete' } },
+        },
+        a: { executor: 'ai://openai/chat', quality_gate: { rubric: 'x' } },
+      },
+    });
+    expect(codes(r)).toContain('quality_gate_on_parallel_member');
+  });
+});

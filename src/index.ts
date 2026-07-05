@@ -20,6 +20,8 @@ import { validateLoopForEachThrottle } from './validators/loopForEachThrottle.js
 import { validateOrchestratorCampaign } from './validators/orchestratorCampaign.js';
 import { validateCredentialBindings } from './validators/credentialBindings.js';
 import { validateInputSchema } from './validators/inputSchema.js';
+import { validateOutputSchemas } from './validators/outputSchema.js';
+import { validateQualityGates } from './validators/qualityGate.js';
 import { validateTemplates } from './validators/templates.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
@@ -85,6 +87,8 @@ export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): V
   validateOrchestratorCampaign(f, issues, opts);
   validateCredentialBindings(f, issues);
   validateInputSchema(f, issues);
+  validateOutputSchemas(f, issues);
+  validateQualityGates(f, issues);
   const templateStats = validateTemplates(f, issues, opts);
 
   const totalSteps =

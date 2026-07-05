@@ -16,17 +16,18 @@ const TYPE_NUMBER = 'number';
 const TYPE_ARRAY_OF_STRINGS = 'array_of_strings';
 const TYPE_FILE = 'file';
 
-function fieldPath(i: number): string {
-  return `input_schema.fields[${i}]`;
+function fieldPath(schemaPath: string, i: number): string {
+  return `${schemaPath}.fields[${i}]`;
 }
 
 function validateField(
   f: InputSchemaField,
+  schemaPath: string,
   i: number,
   seen: Map<string, number>,
   issues: Issues,
 ): void {
-  const base = fieldPath(i);
+  const base = fieldPath(schemaPath, i);
 
   // Name + duplicate detection.
   if (!isString(f.name) || !INPUT_SCHEMA.fieldNamePattern.test(f.name)) {
@@ -171,7 +172,7 @@ function validateField(
   }
 }
 
-function lintFieldOrdering(fields: InputSchemaField[], issues: Issues): void {
+function lintFieldOrdering(fields: InputSchemaField[], schemaPath: string, issues: Issues): void {
   let firstParametricIdx = -1;
   let firstParametricName = '';
   let firstParametricType = '';
@@ -185,7 +186,7 @@ function lintFieldOrdering(fields: InputSchemaField[], issues: Issues): void {
     }
     if (f.type === TYPE_FILE && firstParametricIdx !== -1) {
       issues.warn({
-        field: fieldPath(i),
+        field: fieldPath(schemaPath, i),
         message: `file field '${isString(f.name) ? f.name : `#${i}`}' is declared after parametric field '${firstParametricName}' (${firstParametricType}); consider moving file fields first`,
         code: 'input_schema_file_after_parametric',
       });
@@ -193,13 +194,24 @@ function lintFieldOrdering(fields: InputSchemaField[], issues: Issues): void {
   });
 }
 
-export function validateInputSchema(flow: Flow, issues: Issues): void {
-  const schema = flow.input_schema;
+/**
+ * Validate one `InputSchema`-shaped definition at an arbitrary base path.
+ *
+ * Mirrors the Go `ValidateInputSchemaDefinition`, which is reused verbatim for
+ * both `flow.input_schema` and a step's `output_schema` (DC-CP-7). The emitted
+ * `code`s are therefore the shared `input_schema_*` set regardless of the site;
+ * only the `field` path differs (`schemaPath`).
+ */
+export function validateSchemaDefinition(
+  schema: unknown,
+  schemaPath: string,
+  issues: Issues,
+): void {
   if (schema === undefined || schema === null) return;
   if (!isRecord(schema)) {
     issues.error({
-      field: 'input_schema',
-      message: 'input_schema must be a mapping',
+      field: schemaPath,
+      message: `${schemaPath} must be a mapping`,
       code: 'invalid_type',
     });
     return;
@@ -208,8 +220,8 @@ export function validateInputSchema(flow: Flow, issues: Issues): void {
 
   if (s.version !== INPUT_SCHEMA_VERSION) {
     issues.error({
-      field: 'input_schema.version',
-      message: `input_schema version ${String(s.version)} is not supported (expected ${INPUT_SCHEMA_VERSION})`,
+      field: `${schemaPath}.version`,
+      message: `${schemaPath} version ${String(s.version)} is not supported (expected ${INPUT_SCHEMA_VERSION})`,
       code: 'input_schema_invalid_version',
     });
   }
@@ -218,8 +230,8 @@ export function validateInputSchema(flow: Flow, issues: Issues): void {
   if (fields === undefined || fields === null) return;
   if (!Array.isArray(fields)) {
     issues.error({
-      field: 'input_schema.fields',
-      message: 'input_schema.fields must be a list',
+      field: `${schemaPath}.fields`,
+      message: `${schemaPath}.fields must be a list`,
       code: 'invalid_type',
     });
     return;
@@ -235,13 +247,13 @@ export function validateInputSchema(flow: Flow, issues: Issues): void {
   fields.forEach((rawField, i) => {
     if (!isRecord(rawField)) {
       issues.error({
-        field: fieldPath(i),
-        message: `input_schema field at index ${i} must be a mapping`,
+        field: fieldPath(schemaPath, i),
+        message: `${schemaPath} field at index ${i} must be a mapping`,
         code: 'invalid_type',
       });
       return;
     }
-    validateField(rawField as InputSchemaField, i, seen, issues);
+    validateField(rawField as InputSchemaField, schemaPath, i, seen, issues);
   });
 
   // Second pass: visible_when references must resolve.
@@ -252,12 +264,16 @@ export function validateInputSchema(flow: Flow, issues: Issues): void {
     const ref = (f.visible_when as VisibleWhenPredicate).field;
     if (isString(ref) && ref !== '' && !allNames.has(ref)) {
       issues.error({
-        field: `${fieldPath(i)}.visible_when.field`,
+        field: `${fieldPath(schemaPath, i)}.visible_when.field`,
         message: `field '${isString(f.name) ? f.name : `#${i}`}': visible_when references unknown field '${ref}'`,
         code: 'input_schema_visible_when_unknown_field',
       });
     }
   });
 
-  lintFieldOrdering(fields as InputSchemaField[], issues);
+  lintFieldOrdering(fields as InputSchemaField[], schemaPath, issues);
+}
+
+export function validateInputSchema(flow: Flow, issues: Issues): void {
+  validateSchemaDefinition(flow.input_schema, 'input_schema', issues);
 }

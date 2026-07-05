@@ -142,7 +142,23 @@ export interface LoopSubStep {
   executor?: string;
   credential?: string;
   credentials?: Record<string, CredentialBinding | null>;
+  output_schema?: InputSchema;
   [key: string]: unknown;
+}
+
+/**
+ * `quality_gate:` step block (DC-CP-8). An LLM-as-judge scores the step's own
+ * output against `rubric`; `passed = score >= threshold`. On failure the step
+ * is routed by `on_fail`.
+ */
+export interface QualityGateDefinition {
+  rubric?: string;
+  threshold?: number;
+  model?: string;
+  provider?: string;
+  on_fail?: string;
+  goto_step?: string;
+  max_retries?: number;
 }
 
 export interface LoopDefinition {
@@ -174,6 +190,8 @@ export interface StepDefinition {
   loop?: LoopDefinition;
   credential?: string;
   credentials?: Record<string, CredentialBinding | null>;
+  output_schema?: InputSchema;
+  quality_gate?: QualityGateDefinition;
   [key: string]: unknown;
 }
 
