@@ -60,3 +60,19 @@ export const ORCHESTRATOR_TOOLS: ReadonlySet<string> = new Set(spec.orchestrator
 
 /** Recognised Go template function names (Go builtins + AIgentFlow registry). */
 export const TEMPLATE_FUNCTIONS: ReadonlySet<string> = new Set(spec.templateFunctions);
+
+/** Canonical `eval://judge` URL invoked by the quality_gate machinery. */
+export const EVAL_JUDGE_URL: string = spec.evalJudgeUrl;
+
+/** `quality_gate:` step-block constants and limits (DC-CP-8). */
+export const QUALITY_GATE = {
+  /** Accepted `on_fail` actions. */
+  onFailActions: new Set(spec.qualityGate.onFailActions) as ReadonlySet<string>,
+  /**
+   * `on_fail` values that exist in the Go enum but are currently
+   * validation-REJECTED (e.g. `human`, pending the human-task inbox).
+   */
+  onFailRejected: new Set(spec.qualityGate.onFailRejected) as ReadonlySet<string>,
+  thresholdMin: spec.qualityGate.thresholdMin,
+  thresholdMax: spec.qualityGate.thresholdMax,
+} as const;

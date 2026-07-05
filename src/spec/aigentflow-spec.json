@@ -1,9 +1,11 @@
 {
   "$comment": "Vendored enum surface mirrored from the AIgentFlow Go reference implementation. Regenerate / review on every flow-YAML schema change. See PARITY.md. Values here are public protocol/type names only.",
-  "specVersion": "2.435.0",
+  "specVersion": "2.466.0",
   "inputSchemaVersion": 1,
   "executorSchemes": [
     "ai",
+    "wait",
+    "eval",
     "agent",
     "openai",
     "anthropic",
@@ -69,6 +71,14 @@
   "forEachResolutions": ["all-complete", "all-succeed"],
   "loopMaxIterationsLimit": 1000,
   "credentialReferencePrefix": "stored/",
+  "evalJudgeUrl": "eval://judge/evaluate",
+  "qualityGate": {
+    "$comment": "DC-CP-8: the quality_gate: step block. on_fail 'human' exists in the Go enum but is validation-REJECTED (pending the human-task inbox), so it is NOT in onFailActions and is flagged as rejected here.",
+    "onFailActions": ["fail", "goto", "retry"],
+    "onFailRejected": ["human"],
+    "thresholdMin": 0,
+    "thresholdMax": 1
+  },
   "inputSchema": {
     "types": [
       "string",

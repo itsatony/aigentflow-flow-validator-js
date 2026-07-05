@@ -27,6 +27,22 @@ const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
   { file: 'valid-branching.yaml', valid: true },
   {
+    // CLEANER POWER Phase 2: wait:// + eval:// schemes, output_schema, quality_gate.
+    file: 'valid-wait-eval-schema-gate.yaml',
+    valid: true,
+  },
+  {
+    file: 'invalid-output-schema-and-quality-gate.yaml',
+    valid: false,
+    expectErrorCodes: [
+      'input_schema_invalid_version',
+      'input_schema_invalid_field_name',
+      'quality_gate_missing_rubric',
+      'quality_gate_threshold_out_of_range',
+      'quality_gate_on_fail_unsupported',
+    ],
+  },
+  {
     // Skope retired in v2.435.0 → skope:// is now an unknown scheme (warns, not rejects).
     file: 'valid-retired-skope-scheme-warns.yaml',
     valid: true,
