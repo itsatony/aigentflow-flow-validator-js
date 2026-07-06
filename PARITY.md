@@ -4,7 +4,12 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.466.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.478.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+
+> v2.478.0: added the `htmlDocument` template function (sanitises LLM chat output
+> destined for public hosting — slices `<!doctype>`…`</html>`, dropping markdown
+> fences + conversational preamble/postamble). Allow-list only; runtime behaviour
+> is out of scope for static validation.
 
 The Go reference has two layers, both ported here:
 
