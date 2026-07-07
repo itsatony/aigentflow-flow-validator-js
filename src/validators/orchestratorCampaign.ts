@@ -12,10 +12,32 @@ import type {
   OrchestratorTrigger,
   ValidateOptions,
 } from '../types.js';
-import { ORCHESTRATOR_TOOLS, ORCHESTRATOR_TRIGGERS } from '../spec/index.js';
+import { ORCHESTRATOR_MODES, ORCHESTRATOR_TOOLS, ORCHESTRATOR_TRIGGERS } from '../spec/index.js';
 import { Issues, isRecord, isString, isValidGoDuration } from './util.js';
 
 const TRIGGER_TIMER = 'timer';
+const MODE_OWNER = 'owner';
+const NEXT_MARKER_ORCHESTRATOR = 'orchestrator';
+
+// flowHasOrchestratorYieldEdge mirrors the Go helper: does any step route to the
+// orchestrator via next.default or a conditional goto? (DC-COND-1)
+function flowHasOrchestratorYieldEdge(flow: Flow): boolean {
+  const steps = flow.steps;
+  if (!isRecord(steps)) return false;
+  for (const step of Object.values(steps)) {
+    if (!isRecord(step) || !isRecord(step.next)) continue;
+    const next = step.next as { default?: unknown; conditions?: unknown };
+    if (next.default === NEXT_MARKER_ORCHESTRATOR) return true;
+    if (Array.isArray(next.conditions)) {
+      for (const cond of next.conditions) {
+        if (isRecord(cond) && (cond as { goto_step?: unknown }).goto_step === NEXT_MARKER_ORCHESTRATOR) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
 
 export function validateOrchestratorCampaign(
   flow: Flow,
@@ -32,6 +54,25 @@ export function validateOrchestratorCampaign(
         field: 'orchestrator.exons',
         message: 'orchestrator requires an exons specification',
         code: 'orchestrator_exons_required',
+      });
+    }
+
+    // DC-COND-1: termination-authority mode. Empty defaults to monitor (valid).
+    if (isString(orch.mode) && orch.mode !== '' && !ORCHESTRATOR_MODES.has(orch.mode)) {
+      issues.error({
+        field: 'orchestrator.mode',
+        message: `Invalid orchestrator mode '${orch.mode}'`,
+        code: 'orchestrator_mode_invalid',
+        suggestion: `Use one of: ${[...ORCHESTRATOR_MODES].join(', ')}`,
+      });
+    } else if (orch.mode === MODE_OWNER && !flowHasOrchestratorYieldEdge(flow)) {
+      // owner mode cedes lifecycle to the LLM, reachable only via an explicit
+      // next: orchestrator yield edge. A self-terminating DAG under owner is refused.
+      issues.error({
+        field: 'orchestrator.mode',
+        message:
+          "orchestrator mode 'owner' requires at least one step with next: 'orchestrator' (an explicit yield edge); a self-terminating DAG must use mode 'monitor'",
+        code: 'orchestrator_owner_needs_yield',
       });
     }
 
