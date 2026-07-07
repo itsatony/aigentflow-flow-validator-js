@@ -142,5 +142,19 @@ export function validateOrchestratorCampaign(
         code: 'campaign_requires_orchestrator',
       });
     }
+    // DC-COND-2: on_children_complete (if set) must reference a real step — the
+    // engine routes into it deterministically once every child is terminal.
+    const campaign = flow.campaign;
+    if (isRecord(campaign) && isString(campaign.on_children_complete) && campaign.on_children_complete !== '') {
+      const target = campaign.on_children_complete;
+      const steps = isRecord(flow.steps) ? flow.steps : {};
+      if (!(target in steps)) {
+        issues.error({
+          field: 'campaign.on_children_complete',
+          message: `campaign.on_children_complete references unknown step '${target}'`,
+          code: 'campaign_handoff_step_unknown',
+        });
+      }
+    }
   }
 }

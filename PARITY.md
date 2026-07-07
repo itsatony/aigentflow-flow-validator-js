@@ -4,8 +4,18 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.484.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.485.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
 
+> v2.485.0 (DC-COND-2 CONDUCTOR): added the `campaign.on_children_complete`
+> field (names the step the engine deterministically routes into once every
+> spawned child is terminal). One static check ported:
+> `campaign_handoff_step_unknown` (the referenced step must exist in `steps`) —
+> consistent with the existing `next`-reference validation. The field's *runtime*
+> effect (the deterministic all-children-terminal hand-off, idle-tick gating,
+> event-authoritative campaign state) is engine behaviour and out of scope for
+> static validation. New conformance fixtures: `valid-campaign-handoff.yaml`,
+> `invalid-campaign-handoff-unknown-step.yaml`.
+>
 > v2.484.0 (DC-COND-1 CONDUCTOR): added the orchestrator `mode:` field
 > (`monitor` | `owner`, default `monitor`). Two static checks ported:
 > `orchestrator_mode_invalid` (unknown mode value) and
