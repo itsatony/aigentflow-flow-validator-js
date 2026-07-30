@@ -54,6 +54,28 @@ const CASES: Case[] = [
     expectErrorCodes: ['missing_required_field', 'step_not_found'],
   },
   {
+    // DC-COND-1: monitor-mode orchestrator over a self-terminating DAG is valid.
+    file: 'valid-orchestrator-monitor.yaml',
+    valid: true,
+  },
+  {
+    // DC-COND-2: monitor-mode campaign with on_children_complete → a real step.
+    file: 'valid-campaign-handoff.yaml',
+    valid: true,
+  },
+  {
+    // DC-COND-2: on_children_complete referencing a nonexistent step is refused.
+    file: 'invalid-campaign-handoff-unknown-step.yaml',
+    valid: false,
+    expectErrorCodes: ['campaign_handoff_step_unknown'],
+  },
+  {
+    // DC-COND-1: owner mode with no next: orchestrator yield edge is refused.
+    file: 'invalid-orchestrator-owner-no-yield.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_owner_needs_yield'],
+  },
+  {
     file: 'invalid-references-and-templates.yaml',
     valid: false,
     expectErrorCodes: [

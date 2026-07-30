@@ -58,6 +58,9 @@ export const ORCHESTRATOR_TRIGGERS: ReadonlySet<string> = new Set(spec.orchestra
 /** Recognised orchestrator tool names (vendored allow-list, may lag). */
 export const ORCHESTRATOR_TOOLS: ReadonlySet<string> = new Set(spec.orchestrator.tools);
 
+/** Orchestrator termination-authority modes (DC-COND-1). Default = monitor. */
+export const ORCHESTRATOR_MODES: ReadonlySet<string> = new Set(spec.orchestrator.modes);
+
 /** Recognised Go template function names (Go builtins + AIgentFlow registry). */
 export const TEMPLATE_FUNCTIONS: ReadonlySet<string> = new Set(spec.templateFunctions);
 

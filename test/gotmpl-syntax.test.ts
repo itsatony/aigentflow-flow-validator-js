@@ -40,7 +40,9 @@ describe('gotmpl syntax — opt-in function allow-list', () => {
   });
   it('accepts htmlDocument (AIF v2.478.0 — sanitises LLM HTML output for hosting)', () => {
     expect(TEMPLATE_FUNCTIONS.has('htmlDocument')).toBe(true);
-    expect(checkGoTemplateSyntax('{{ htmlDocument .step.response.content }}', opts)).toHaveLength(0);
+    expect(checkGoTemplateSyntax('{{ htmlDocument .step.response.content }}', opts)).toHaveLength(
+      0,
+    );
   });
   it('flags an unknown command-position function', () => {
     const errs = checkGoTemplateSyntax('{{ bogusFunc .name }}', opts);

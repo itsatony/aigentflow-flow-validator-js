@@ -239,6 +239,7 @@ export interface OrchestratorTrigger {
 export interface OrchestratorDefinition {
   exons?: string;
   agentic?: boolean;
+  mode?: string;
   triggers?: OrchestratorTrigger[];
   tools?: string[];
   max_turns?: number;
