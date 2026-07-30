@@ -30,7 +30,10 @@ function flowHasOrchestratorYieldEdge(flow: Flow): boolean {
     if (next.default === NEXT_MARKER_ORCHESTRATOR) return true;
     if (Array.isArray(next.conditions)) {
       for (const cond of next.conditions) {
-        if (isRecord(cond) && (cond as { goto_step?: unknown }).goto_step === NEXT_MARKER_ORCHESTRATOR) {
+        if (
+          isRecord(cond) &&
+          (cond as { goto_step?: unknown }).goto_step === NEXT_MARKER_ORCHESTRATOR
+        ) {
           return true;
         }
       }
@@ -145,7 +148,11 @@ export function validateOrchestratorCampaign(
     // DC-COND-2: on_children_complete (if set) must reference a real step — the
     // engine routes into it deterministically once every child is terminal.
     const campaign = flow.campaign;
-    if (isRecord(campaign) && isString(campaign.on_children_complete) && campaign.on_children_complete !== '') {
+    if (
+      isRecord(campaign) &&
+      isString(campaign.on_children_complete) &&
+      campaign.on_children_complete !== ''
+    ) {
       const target = campaign.on_children_complete;
       const steps = isRecord(flow.steps) ? flow.steps : {};
       if (!(target in steps)) {

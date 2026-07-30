@@ -10,7 +10,7 @@ discipline for keeping the two in sync.
 > field (names the step the engine deterministically routes into once every
 > spawned child is terminal). One static check ported:
 > `campaign_handoff_step_unknown` (the referenced step must exist in `steps`) —
-> consistent with the existing `next`-reference validation. The field's *runtime*
+> consistent with the existing `next`-reference validation. The field's _runtime_
 > effect (the deterministic all-children-terminal hand-off, idle-tick gating,
 > event-authoritative campaign state) is engine behaviour and out of scope for
 > static validation. New conformance fixtures: `valid-campaign-handoff.yaml`,
@@ -21,7 +21,7 @@ discipline for keeping the two in sync.
 > `orchestrator_mode_invalid` (unknown mode value) and
 > `orchestrator_owner_needs_yield` (`owner` mode requires at least one step with
 > `next: orchestrator` — mirrored via `flowHasOrchestratorYieldEdge`). The
-> mode's *runtime* effect (terminal-vs-yield lifecycle, deterministic backstops)
+> mode's _runtime_ effect (terminal-vs-yield lifecycle, deterministic backstops)
 > is engine behaviour and out of scope for static validation. New conformance
 > fixtures: `valid-orchestrator-monitor.yaml`, `invalid-orchestrator-owner-no-yield.yaml`.
 >
