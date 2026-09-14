@@ -30,10 +30,7 @@ function flowHasOrchestratorYieldEdge(flow: Flow): boolean {
     if (next.default === NEXT_MARKER_ORCHESTRATOR) return true;
     if (Array.isArray(next.conditions)) {
       for (const cond of next.conditions) {
-        if (
-          isRecord(cond) &&
-          (cond as { goto_step?: unknown }).goto_step === NEXT_MARKER_ORCHESTRATOR
-        ) {
+        if (isRecord(cond) && (cond as { goto?: unknown }).goto === NEXT_MARKER_ORCHESTRATOR) {
           return true;
         }
       }

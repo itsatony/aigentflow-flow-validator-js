@@ -36,6 +36,21 @@ export const FOR_EACH_RESOLUTIONS: ReadonlySet<string> = new Set(spec.forEachRes
 /** Hard cap for `loop.max_iterations`. */
 export const LOOP_MAX_ITERATIONS_LIMIT: number = spec.loopMaxIterationsLimit;
 
+/**
+ * The ONE executor-URL shape, mirrored verbatim from `URL_PATTERN_REGEX` in
+ * `aigentflow/aigentflow.domain.executorregistry.go`.
+ *
+ * AIgentFlow has exactly one executor-URL parser (`ParseExecutorURLString`), and
+ * since v2.598.0 (DC-FORGE-30) its own static validation applies it at authoring
+ * time — so `openai:///gpt-4` is refused at save instead of failing at dispatch.
+ * Note how much stricter it is than a generic URI: the authority segment is
+ * required and non-empty, and neither authority nor path may contain a dot.
+ */
+export const EXECUTOR_URL_PATTERN: RegExp = new RegExp(spec.executorUrlPattern);
+
+/** Opening delimiter of a Go-template action; a URL containing one is rendered before dispatch. */
+export const TEMPLATE_ACTION_OPEN: string = spec.templateActionOpen;
+
 /** Credential binding source prefix (`stored/{provider}/{name}`). */
 export const CREDENTIAL_REFERENCE_PREFIX: string = spec.credentialReferencePrefix;
 

@@ -4,7 +4,86 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.485.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.608.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+
+> v2.608.0 (AIF DC-FORGE-38 — a parity sweep covering v2.485.0 → v2.607.0).
+> The audit of that 122-release window found only four rule-changing commits, and
+> the sweep closed every one that is in scope, plus a defect in this validator
+> that predates the window and mattered more than any of them.
+>
+> 1. **`next.conditions[].goto` — this validator read the wrong key.** The YAML
+>    key is `goto`; `ConditionDefinition.GotoStep` carries `yaml:"goto"`
+>    (aigentflow.domain.step.go:134). It is the ONE place in the grammar spelled
+>    that way — the flow-level and step-level `error_strategy` and `quality_gate`
+>    all use `goto_step` — and this validator read `goto_step` everywhere,
+>    including here. Two silent consequences: a conditional branch naming a
+>    step that does not exist was **never reported** (`step_not_found` on a
+>    condition could not fire at all), and every conditionally-reached step was
+>    accused of being `unreachable_step`. Measured against AIgentFlow's own
+>    validator over its 203 bundled flows, this validator reported **100**
+>    unreachable steps where the reference reported 24, and **missed** the one
+>    `potential_infinite_loop` the reference finds. Both numbers now match
+>    exactly. The old conformance fixtures used `goto_step`, so the whole suite
+>    was green over the defect. A condition carrying `goto_step` is now an
+>    explicit error (`unknown_yaml_key`), because AIgentFlow's create/update/
+>    validate path parses with `KnownFields(true)` and refuses such a flow
+>    outright — verified directly against the Go parser.
+> 2. **Executor URL shape (AIF DC-FORGE-30, v2.598.0; DC-FORGE-38, v2.608.0).**
+>    `FlowParser.ValidateFlow` now applies the ONE parser (`URL_PATTERN_REGEX`,
+>    `ParseExecutorURLString`) to every step executor, and from v2.608.0 to
+>    `loop.steps[i].executor` as well. `openai:///gpt-4`, `ai://openai` and
+>    `http://api.example.com/v1` are refused at SAVE; this validator accepted all
+>    three. The regex is vendored verbatim as `executorUrlPattern`. **Templated
+>    URLs are skipped** in both implementations — the engine renders
+>    `step.executor` as a Go template before dispatch, and omitting that exception
+>    rejected eight working bundled flows when the Go rule was first written.
+>    Divergence #1 is untouched: the new rule is about SHAPE, and an unknown
+>    scheme is still a warning.
+> 3. **Reachability follows five edge kinds (AIF DC-FORGE-30 §8, v2.598.0 +
+>    v2.598.1).** `findReachableSteps` delegates to the simulator's
+>    `collectNextTargets` — `next.default`, `next.conditions[].goto`,
+>    `next.parallel.steps[]`, `next.parallel.rendezvous`, step-level
+>    `error_strategy.goto_step` — plus the FLOW-level `error_strategy.goto_step`
+>    seeded into the queue. **The cycle detector was deliberately NOT widened**
+>    (`checkForCycles` still walks two edges), so this validator now uses two
+>    separate target functions; widening `hasCycle` too would invent a divergence
+>    and emit a spurious `potential_infinite_loop` on any rendezvous or error
+>    redirect back to an earlier step.
+> 4. **`executorSchemes` is AIgentFlow's registered set exactly** (43 protocols,
+>    enumerated from `NewExecutorSchemaRegistry`). `web://` was missing, so a
+>    correct step warned; nine schemes AIgentFlow does not register (`openai`,
+>    `anthropic`, `perplexity`, `vertexai`, `ollama`, `vllm`, `aigentchat`,
+>    `external`, `https` — legacy names banner-marked non-functional in AIF
+>    v2.596.0) were listed, so this validator stayed silent where AIgentFlow
+>    fails at dispatch.
+>
+> **Audited and deliberately NOT ported** (recorded so the next sweep does not
+> re-derive them):
+>
+> - `ValidateExecutorConfigEnvScopes` (AIF DC-FORGE-29, v2.597.0) — `executor_config`
+>   may only expand the environment variables belonging to the provider or protocol
+>   it writes them under. The rule is a pure function of the flow and is therefore
+>   portable, but faithful parity needs four vendored scope tables
+>   (`authorEnvScopes`, `aiProviderEnvScopeExtras`, `nexusEnvScope`,
+>   `executorConfigKeyProtocols`) — a new vendoring surface that will drift silently,
+>   and a reduced-fidelity version produces false positives on the `extras` rows.
+>   **Owed, not skipped.**
+> - Unknown-key rejection. AIgentFlow's create path has always parsed with
+>   `KnownFields(true)`; AIF v2.604.0 made `POST /flows/validate` and the Studio
+>   assistant strict too, so "would this save" now answers the same everywhere.
+>   This validator inspects no unknown keys, so a step-level `output:` block
+>   (the real grammar is `post_processing: - output.set:`) still validates clean.
+>   Porting it means a full field inventory of `Flow`/`StepDefinition` and
+>   interacts with divergence #8. **A decision to make, not a delta.** The one
+>   case that mattered in practice — `goto_step` inside a condition — is now
+>   reported specifically.
+> - Everything else in the window is runtime field resolution (divergence #3),
+>   credentials/compliance (#5, #6) or documentation surface: AIF 2.526.0's
+>   `DeploymentQueryOption` rename, 2.580.0/2.582.0/2.585.0's
+>   `template_missing_field` grounding, 2.591.0–2.594.0's step-query stripping,
+>   2.603.0's billed-header redaction, 2.604.0's `BuildOutputContractWarnings`.
+>   `input_schema.go` and `template.registry.go` have a **zero** diff across the
+>   whole window, and no new YAML-tagged flow or step field was added.
 
 > v2.485.0 (DC-COND-2 CONDUCTOR): added the `campaign.on_children_complete`
 > field (names the step the engine deterministically routes into once every
@@ -44,7 +123,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | Area                                                                          | Go source                                                                                         | JS module                                                | Tested by                                   |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------- |
 | Required fields, start-step existence, per-step executor, reserved `.` in IDs | `validateBasicStructure`, `ValidateFlow` head                                                     | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
-| Executor URI shape + scheme                                                   | (registry, runtime)                                                                               | `validators/executors.ts`                                | `validate.test.ts`                          |
+| Executor URI shape (the ONE parser) + scheme                                  | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                            | `validators/executors.ts`                                | `validate.test.ts`                          |
 | Query/property/array-item schema + array constraints                          | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints` | `validators/querySchema.ts`                              | `validate.test.ts`                          |
 | Response-expectation types + array items + `required`                         | `ValidateFlow` (response block), `validateSemantics`                                              | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
 | Error strategy (action, goto, max_delay, backoff, retry_on)                   | `validateErrorStrategy`                                                                           | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |

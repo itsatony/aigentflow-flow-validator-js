@@ -108,6 +108,15 @@ export interface ErrorStrategyDefinition {
 
 export interface NextCondition {
   if?: string;
+  /**
+   * The branch target. The YAML key is `goto`, NOT `goto_step` — this is the
+   * ONE place in the whole grammar spelled that way (`ConditionDefinition.GotoStep`
+   * carries `yaml:"goto"`, aigentflow.domain.step.go:134), while the flow-level
+   * and step-level `error_strategy` and `quality_gate` all use `goto_step`.
+   * Reading the wrong key here silently disabled every conditional-branch check.
+   */
+  goto?: string;
+  /** Present only so the misspelling can be REPORTED; AIgentFlow's strict parser rejects it. */
   goto_step?: string;
 }
 

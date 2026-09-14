@@ -25,6 +25,28 @@ interface Case {
 
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
+  {
+    // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
+    // Reading `goto_step` here disabled every conditional-branch check in this
+    // validator AND made every conditionally-reached step look unreachable.
+    file: 'invalid-condition-goto-step-misspelling.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    // v2.608.0 (DC-FORGE-30 + DC-FORGE-38): executor URLs are parsed with the ONE
+    // parser at authoring time. Four shapes AIgentFlow refuses at SAVE — including
+    // one inside a loop sub-step, which the Go side only started checking in
+    // v2.608.0 and this validator has always checked.
+    file: 'invalid-executor-url-shapes.yaml',
+    valid: false,
+    expectErrorCodes: ['invalid_executor_url'],
+  },
+  {
+    // The `{{` exception is load-bearing in both implementations.
+    file: 'valid-templated-executor-url.yaml',
+    valid: true,
+  },
   { file: 'valid-branching.yaml', valid: true },
   {
     // CLEANER POWER Phase 2: wait:// + eval:// schemes, output_schema, quality_gate.

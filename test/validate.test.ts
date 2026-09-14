@@ -48,11 +48,171 @@ describe('basic structure', () => {
   });
 });
 
+// v2.608.0 — the branch-target key. This validator read `goto_step` here for its
+// whole life, which is the spelling used by error_strategy and quality_gate and
+// the WRONG one for a condition (aigentflow.domain.step.go:134 carries
+// `yaml:"goto"`). Two silent consequences, both of which these cases pin:
+// a typo'd branch target was never reported, and every conditionally-reached step
+// was accused of being unreachable. The old fixtures used `goto_step`, so 105
+// tests were green over the defect.
+describe('conditional branch targets', () => {
+  const BRANCHING = {
+    ...MINIMAL,
+    steps: {
+      a: {
+        executor: 'mock://x/y',
+        next: { default: 'null', conditions: [{ if: '{{ true }}', goto: 'b' }] },
+      },
+      b: { executor: 'mock://x/y', next: { default: 'null' } },
+    },
+  };
+
+  it('reports a conditional branch target that does not exist', () => {
+    const r = validateFlowObject({
+      ...BRANCHING,
+      steps: {
+        ...BRANCHING.steps,
+        a: {
+          ...BRANCHING.steps.a,
+          next: { default: 'null', conditions: [{ if: '{{ true }}', goto: 'nope' }] },
+        },
+      },
+    });
+    expect(codes(r)).toContain('step_not_found');
+  });
+
+  it('does NOT accuse a conditionally-reached step of being unreachable', () => {
+    const r = validateFlowObject(BRANCHING);
+    expect(warnCodes(r)).not.toContain('unreachable_step');
+  });
+
+  it("rejects the 'goto_step' spelling inside a condition", () => {
+    const r = validateFlowObject({
+      ...BRANCHING,
+      steps: {
+        ...BRANCHING.steps,
+        a: {
+          ...BRANCHING.steps.a,
+          next: { default: 'null', conditions: [{ if: '{{ true }}', goto_step: 'b' }] },
+        },
+      },
+    });
+    expect(codes(r)).toContain('unknown_yaml_key');
+    expect(r.valid).toBe(false);
+  });
+});
+
+// v2.608.0 — reachability follows five edge kinds plus the flow-level error
+// redirect; cycles deliberately still follow two. See connectivity.ts.
+describe('reachability edge kinds', () => {
+  const via = (stepA: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+    ...MINIMAL,
+    ...extra,
+    steps: { a: { executor: 'mock://x/y', ...stepA }, b: { executor: 'mock://x/y' } },
+  });
+
+  it.each([
+    ['next.parallel.steps', via({ next: { parallel: { steps: ['b'] } } })],
+    ['next.parallel.rendezvous', via({ next: { parallel: { steps: [], rendezvous: 'b' } } })],
+    ['step error_strategy.goto_step', via({ error_strategy: { action: 'goto', goto_step: 'b' } })],
+    [
+      'flow error_strategy.goto_step',
+      via({}, { error_strategy: { action: 'goto', goto_step: 'b' } }),
+    ],
+  ])('reaches a step through %s', (_label, flow) => {
+    const r = validateFlowObject(flow);
+    expect(warnCodes(r)).not.toContain('unreachable_step');
+  });
+
+  it('still reports a genuinely orphaned step', () => {
+    const r = validateFlowObject(via({}));
+    expect(warnCodes(r)).toContain('unreachable_step');
+  });
+
+  it('does not call a rendezvous loop-back an infinite loop', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: { executor: 'mock://x/y', next: { parallel: { steps: ['b'], rendezvous: 'a' } } },
+        b: { executor: 'mock://x/y' },
+      },
+    });
+    expect(warnCodes(r)).not.toContain('potential_infinite_loop');
+  });
+});
+
 describe('executors', () => {
   it('errors on a malformed executor URI', () => {
     const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor: 'nope' } } });
     expect(codes(r)).toContain('invalid_executor_url');
   });
+  // v2.608.0 — the shape check is now AIgentFlow's ONE parser (URL_PATTERN_REGEX),
+  // not a loose `scheme://path` test. Each of these SAVED here and is refused by
+  // AIgentFlow at create, which is a false pass in the worst direction.
+  it.each([
+    ['openai:///gpt-4', 'empty authority'],
+    ['ai://openai', 'no path segment'],
+    ['http://api.example.com/v1', 'dots in the authority'],
+    ['ai://openai/chat!', 'a character outside the parser class'],
+    ['ai://open ai/chat', 'a space'],
+  ])('rejects %s (%s)', (executor) => {
+    const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor } } });
+    expect(codes(r)).toContain('invalid_executor_url');
+  });
+
+  it('accepts a templated executor URL, which the engine renders before dispatch', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: 'flow://stored/{{ .query.child_flow_id }}' } },
+    });
+    expect(codes(r)).not.toContain('invalid_executor_url');
+  });
+
+  it('checks a loop sub-step executor too (AIgentFlow DC-FORGE-38)', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ lt .loop.index 2 }}',
+            max_iterations: 2,
+            steps: [{ id: 'work', executor: 'openai:///gpt-4' }],
+          },
+        },
+      },
+    });
+    expect(codes(r)).toContain('invalid_executor_url');
+  });
+
+  // v2.608.0 — the vendored scheme set is now AIgentFlow's registered set exactly
+  // (43 protocols, `NewExecutorSchemaRegistry`). `web://` was missing, so a correct
+  // step warned; nine schemes AIgentFlow does not register (openai, anthropic,
+  // perplexity, vertexai, ollama, vllm, aigentchat, external, https — legacy names
+  // banner-marked non-functional in v2.596.0) were listed, so this validator stayed
+  // silent where AIgentFlow fails at dispatch.
+  it('does not warn on web://, which AIgentFlow registers', () => {
+    const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor: 'web://fetch/page' } } });
+    expect(warnCodes(r)).not.toContain('unknown_executor_scheme');
+  });
+
+  it.each([
+    'openai',
+    'anthropic',
+    'perplexity',
+    'vertexai',
+    'ollama',
+    'vllm',
+    'aigentchat',
+    'external',
+    'https',
+  ])('warns on %s://, which AIgentFlow does not register', (scheme) => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: `${scheme}://provider/op` } },
+    });
+    expect(warnCodes(r)).toContain('unknown_executor_scheme');
+  });
+
   it('warns on an unknown scheme', () => {
     const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor: 'bogus://x/y' } } });
     expect(warnCodes(r)).toContain('unknown_executor_scheme');
