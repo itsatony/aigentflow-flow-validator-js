@@ -23,6 +23,7 @@ import { validateInputSchema } from './validators/inputSchema.js';
 import { validateOutputSchemas } from './validators/outputSchema.js';
 import { validateQualityGates } from './validators/qualityGate.js';
 import { validateTemplates } from './validators/templates.js';
+import { validateProcessingOperations } from './validators/processingOperations.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
 export { parseFlow } from './parse.js';
@@ -89,6 +90,7 @@ export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): V
   validateInputSchema(f, issues);
   validateOutputSchemas(f, issues);
   validateQualityGates(f, issues);
+  validateProcessingOperations(f, issues);
   const templateStats = validateTemplates(f, issues, opts);
 
   const totalSteps =
