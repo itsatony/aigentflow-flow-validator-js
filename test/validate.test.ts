@@ -364,9 +364,88 @@ describe('expression_functions', () => {
     });
     expect(codes(r)).toContain('invalid_expression_function');
   });
-  it('accepts a single-key entry', () => {
+  it('accepts a single-key entry naming a catalog function', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      expression_functions: [{ function: 'fn_slugify' }],
+    });
+    expect(codes(r)).not.toContain('invalid_expression_function');
+    expect(r.valid).toBe(true);
+  });
+  it('is structurally well-formed but refused when it names a package', () => {
     const r = validateFlowObject({ ...MINIMAL, expression_functions: [{ package: 'p' }] });
     expect(codes(r)).not.toContain('invalid_expression_function');
+    expect(codes(r)).toContain('expression_function_package_unsupported');
+  });
+  it('refuses a function name outside the catalog', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      expression_functions: [{ function: 'fn_not_a_real_one' }],
+    });
+    expect(codes(r)).toContain('expression_function_unknown');
+  });
+  it('declaring a catalog function without using it is fine', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      expression_functions: [{ function: 'fn_round' }],
+    });
+    expect(r.valid).toBe(true);
+  });
+});
+
+describe('expression_functions usage', () => {
+  const withQuery = (value: string, declared?: string[]) => ({
+    ...MINIMAL,
+    ...(declared ? { expression_functions: declared.map((f) => ({ function: f })) } : {}),
+    steps: { a: { executor: 'mock://x/y', query: { v: value } } },
+  });
+
+  it('accepts a declared catalog function', () => {
+    const r = validateFlowObject(withQuery('{{ fn_slugify .query.name }}', ['fn_slugify']));
+    expect(r.valid).toBe(true);
+  });
+  it('refuses a catalog function the flow does not declare', () => {
+    const r = validateFlowObject(withQuery('{{ fn_slugify .query.name }}'));
+    expect(codes(r)).toContain('expression_function_undeclared_use');
+  });
+  it('refuses an fn_ name that is not in the catalog at all', () => {
+    const r = validateFlowObject(withQuery('{{ fn_slugfy .query.name }}', ['fn_slugify']));
+    expect(codes(r)).toContain('expression_function_unknown_use');
+    expect(codes(r)).not.toContain('expression_function_undeclared_use');
+  });
+  it('does NOT flag an fn_ name mentioned in prose outside a template action', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      description: 'This flow would benefit from fn_slugify one day.',
+      steps: {
+        a: {
+          executor: 'mock://x/y',
+          description: 'fn_round is not called here',
+          query: { v: 'plain text mentioning fn_uniq' },
+        },
+      },
+    });
+    expect(r.valid).toBe(true);
+  });
+  it('scans a multi-line template action', () => {
+    const r = validateFlowObject(withQuery('{{\n  fn_sha256\n    .query.name\n}}'));
+    expect(codes(r)).toContain('expression_function_undeclared_use');
+  });
+  it('scans template strings outside steps (orchestrator prompts, output bindings)', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      output: ['{{ fn_uniq .data.a.items }}'],
+    });
+    expect(codes(r)).toContain('expression_function_undeclared_use');
+  });
+  it('reports one finding per distinct name, not per call site', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: { executor: 'mock://x/y', query: { v: '{{ fn_sum .a }}', w: '{{ fn_sum .b }}' } },
+      },
+    });
+    expect(r.errors.filter((e) => e.code === 'expression_function_undeclared_use')).toHaveLength(1);
   });
 });
 

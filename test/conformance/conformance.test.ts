@@ -98,6 +98,37 @@ const CASES: Case[] = [
     expectErrorCodes: ['orchestrator_owner_needs_yield'],
   },
   {
+    // v2.642.0 (DC-FORGE-72): the expression-function catalog is compiled in and
+    // nothing is loaded at run time, so `package:` is refused outright.
+    file: 'invalid-expression-function-package.yaml',
+    valid: false,
+    expectErrorCodes: ['expression_function_package_unsupported'],
+  },
+  {
+    // v2.642.0: a `function:` outside the fixed catalog is refused.
+    file: 'invalid-expression-function-unknown-name.yaml',
+    valid: false,
+    expectErrorCodes: ['expression_function_unknown'],
+  },
+  {
+    // v2.642.0: a template may only call an `fn_` function the flow declares,
+    // and a name that is not in the catalog at all gets its own verdict.
+    file: 'invalid-expression-function-undeclared-use.yaml',
+    valid: false,
+    expectErrorCodes: ['expression_function_undeclared_use', 'expression_function_unknown_use'],
+  },
+  {
+    // v2.642.0: declared and used, one of them inside a multi-line action.
+    file: 'valid-expression-functions.yaml',
+    valid: true,
+  },
+  {
+    // v2.642.0: only the text between `{{` and `}}` is scanned — prose that
+    // mentions an `fn_` name is not a call.
+    file: 'valid-expression-function-prose-mention.yaml',
+    valid: true,
+  },
+  {
     file: 'invalid-references-and-templates.yaml',
     valid: false,
     expectErrorCodes: [

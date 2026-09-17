@@ -94,3 +94,19 @@ export const QUALITY_GATE = {
   thresholdMin: spec.qualityGate.thresholdMin,
   thresholdMax: spec.qualityGate.thresholdMax,
 } as const;
+
+/**
+ * The fixed `expression_functions:` catalog (DC-FORGE-72).
+ *
+ * The catalog is compiled into the AIgentFlow binary — nothing is loaded at run
+ * time, ever — so it is an enumerable set, and a `function:` outside it is an
+ * error rather than a lag-prone allow-list warning (contrast divergence #4).
+ * Every entry carries {@link EXPRESSION_FUNCTION_NAME_PREFIX} so a catalog entry
+ * can never shadow a standard template function such as `index` or `default`.
+ */
+export const EXPRESSION_FUNCTION_CATALOG: ReadonlySet<string> = new Set(
+  spec.expressionFunctions.catalog,
+);
+
+/** Mandatory namespace prefix carried by every catalog entry. */
+export const EXPRESSION_FUNCTION_NAME_PREFIX: string = spec.expressionFunctions.namePrefix;

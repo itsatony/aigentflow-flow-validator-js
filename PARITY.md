@@ -4,7 +4,71 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.608.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.642.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+
+> v2.642.0 — **`expression_functions:` stopped being inert.** The block had always
+> been validated for SHAPE (exactly one key, `package` XOR `function`, non-empty
+> value) and honoured in no other way: nothing read it, so a flow could declare
+> functions and get none. It is now a real opt-in over a **fixed catalog of 20
+> functions compiled into the AIgentFlow binary**. Three rules ported, all into
+> [`src/validators/expressionFunctions.ts`](./src/validators/expressionFunctions.ts);
+> the pre-existing structural rules are unchanged and still fire first.
+>
+> 1. **`package:` is refused** (`expression_function_package_unsupported`).
+>    Nothing is loaded at run time, ever — there is no safe way to load a package
+>    at run time, and flow YAML is reachable by any authenticated caller, so the
+>    catalog _is_ the security envelope. The message points at `function:` and
+>    lists the catalog.
+> 2. **A `function:` outside the catalog is refused** (`expression_function_unknown`).
+>    The catalog is an enumerable, compile-time-linked set, which is why this is
+>    an error and not the lag-prone allow-list warning of divergence #4 — a name
+>    this validator does not know is a name AIgentFlow does not have.
+> 3. **A template action calling an `fn_` name must name a catalog entry
+>    (`expression_function_unknown_use`) and be declared by the flow
+>    (`expression_function_undeclared_use`).** This is what makes the block
+>    load-bearing rather than decorative. Only the text between `{{` and `}}` is
+>    scanned, so a description mentioning `fn_slugify` in prose is not a call, and
+>    the action pattern is newline-tolerant so a multi-line action in a block
+>    scalar is matched whole. Every catalog name carries the `fn_` prefix
+>    precisely so a catalog entry can never shadow a standard function such as
+>    `index` or `default`.
+>
+> The 20 catalog names are also added to `templateFunctions`: the reference
+> registers the whole catalog on its standard template registry unconditionally,
+> so `{{ fn_round … }}` is a _known_ function there, and omitting them would make
+> `{ strictRegistries: true }` report a second, wrong verdict on a correct flow.
+>
+> **Severity choice — the save door vs the run door.** Upstream, rules 1 and 2 are
+> hard refusals when a flow is SAVED but only warnings when a stored flow is
+> LOADED, so flows written before the rules existed keep running. This validator
+> has no notion of doors and no severity meaning "refused at save, tolerated at
+> run"; it answers **"would this save"**, which is the same choice already made
+> for the executor-URL shape rule (also retroactive-tolerant upstream, also an
+> error here). So all three rules are `error`, and no new severity was invented.
+> **Consequence to know:** a flow this validator refuses may still be running in
+> production — the refusal means it can no longer be saved unchanged, not that it
+> is broken. Rule 3 is save-door-only upstream for a different reason (cost: the
+> scan re-serialises the flow, and the load path runs on every mission start),
+> which lands in the same place.
+>
+> **One deliberate scope difference (divergence #10).** The Go rule re-serialises
+> the `Flow` struct, so it sees only fields that struct declares; this validator
+> walks the parsed document, so it also sees keys the struct does not carry. On a
+> flow AIgentFlow would accept the two are identical, because AIgentFlow's create
+> path parses with `KnownFields(true)` and refuses anything else outright.
+>
+> New conformance fixtures: `invalid-expression-function-package.yaml`,
+> `invalid-expression-function-unknown-name.yaml`,
+> `invalid-expression-function-undeclared-use.yaml`,
+> `valid-expression-functions.yaml`,
+> `valid-expression-function-prose-mention.yaml`.
+
+> v2.640.0 — `unique_items` removed from the spec surface and from
+> `PropertyDefinition`. AIgentFlow deleted the grammar field: it was declared
+> twice in the Go domain with **zero** readers anywhere, and the served OpenAPI
+> spec advertised it under a camelCase name the YAML parser would have rejected.
+> Nothing honoured it in either direction. `billing.budget_exceeded_policy`,
+> deleted in the same upstream cycle, was never mirrored here.
 
 > v2.608.0 (AIF DC-FORGE-38 — a parity sweep covering v2.485.0 → v2.607.0).
 > The audit of that 122-release window found only four rule-changing commits, and
@@ -130,6 +194,8 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | `next` references, reachability, cycles                                       | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                | `validators/connectivity.ts`                             | `validate.test.ts`                          |
 | `next.parallel` + orchestrator-next requirement                               | `validateNextLogic`, `validateOrchestratorNext`                                                   | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
 | Expression functions (XOR package/function)                                   | `validateExpressionFunctions`                                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
+| Expression-function catalog (`package:` refused, unknown `function:` refused) | `validateExpressionFunctionCatalog` (parser.go)                                                   | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)    | `validateExpressionFunctionUsage` (parser.go)                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
 | Loop / for_each / throttle                                                    | `validateLoop`, `validateForEach`, `validateThrottle`                                             | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
 | Orchestrator structure + campaign requires orchestrator                       | `validateOrchestrator`, `validateAndNormalizeCampaign`                                            | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
 | Credential bindings (`stored/...`, inject_as, exclusivity)                    | `validateStepCredentialBindings`                                                                  | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
@@ -197,6 +263,21 @@ validator useful and low-false-positive while staying offline.
    still error via the shared shape check. `quality_gate.on_fail=human` exists in the Go
    enum but is validation-REJECTED there (pending the human-task inbox), so this validator
    rejects it too (`quality_gate_on_fail_unsupported`) — this is parity, not a divergence.
+
+10. **The `fn_*` usage scan walks the document, not the typed struct (v2.642.0).** The
+    Go rule re-serialises the `Flow` struct before scanning for template actions, so it
+    sees only fields the struct declares. This validator has no typed unmarshal, so it
+    walks every string leaf of the parsed document — including keys the Go struct does
+    not carry. The two agree on every flow AIgentFlow would accept, because its create
+    path parses with `KnownFields(true)`; they differ only on a document that AIgentFlow
+    rejects for an unrelated reason. Same family as divergence #8, and strictly additive.
+
+    Severity: the catalog and usage rules are refused at AIgentFlow's SAVE door and only
+    warned at its load/run door, so a flow stored before the rules existed keeps running.
+    This validator answers "would this save" and therefore reports all of them as
+    `error` — the choice already made for the executor-URL shape rule. That is parity
+    with the save door, not a divergence, but it means a refusal here does **not** imply
+    a broken running flow.
 
 ---
 

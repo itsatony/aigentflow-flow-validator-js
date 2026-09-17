@@ -1,6 +1,6 @@
 {
   "$comment": "Vendored enum surface mirrored from the AIgentFlow Go reference implementation. Regenerate / review on every flow-YAML schema change. See PARITY.md. Values here are public protocol/type names only.",
-  "specVersion": "2.640.0",
+  "specVersion": "2.642.0",
   "inputSchemaVersion": 1,
   "executorSchemes": [
     "a2a",
@@ -141,6 +141,31 @@
       "aif_trove_delete"
     ]
   },
+  "expressionFunctions": {
+    "namePrefix": "fn_",
+    "catalog": [
+      "fn_avg",
+      "fn_camelCase",
+      "fn_chunk",
+      "fn_clamp",
+      "fn_compact",
+      "fn_kebabCase",
+      "fn_max",
+      "fn_min",
+      "fn_padLeft",
+      "fn_padRight",
+      "fn_regexReplaceAll",
+      "fn_reverse",
+      "fn_round",
+      "fn_sha256",
+      "fn_slugify",
+      "fn_snakeCase",
+      "fn_sortStrings",
+      "fn_sum",
+      "fn_uniq",
+      "fn_urldecode"
+    ]
+  },
   "templateFunctions": [
     "and",
     "or",
@@ -206,6 +231,26 @@
     "regexFind",
     "truncate",
     "htmlEscape",
-    "urlencode"
+    "urlencode",
+    "fn_avg",
+    "fn_camelCase",
+    "fn_chunk",
+    "fn_clamp",
+    "fn_compact",
+    "fn_kebabCase",
+    "fn_max",
+    "fn_min",
+    "fn_padLeft",
+    "fn_padRight",
+    "fn_regexReplaceAll",
+    "fn_reverse",
+    "fn_round",
+    "fn_sha256",
+    "fn_slugify",
+    "fn_snakeCase",
+    "fn_sortStrings",
+    "fn_sum",
+    "fn_uniq",
+    "fn_urldecode"
   ]
 }
