@@ -48,6 +48,30 @@ export interface ProcessingOperationRef {
    * unmarshal, so it carries them all and each rule decides what it can say.
    */
   entries: Array<readonly [string, unknown]>;
+  /** Which handler will dispatch this operation — the dispatch set differs. */
+  scope: ProcessingOperationScope;
+}
+
+/**
+ * WHERE a processing operation is declared, because the dispatch set is not the
+ * same in both places.
+ *
+ * `standard` is the top-level handler. `loopSubStep` is `executeLoopPostProcessing`,
+ * which dispatches `loop.set` / `loop.break` ITSELF and falls through to the
+ * standard handler for everything else — a strict superset. ⛔ The two are a
+ * PARTITION and never a union: `loop.set` at the top level is an operation the
+ * standard handler cannot dispatch, and saying otherwise would silently accept a
+ * flow that fails at run time.
+ */
+export type ProcessingOperationScope = 'standard' | 'loopSubStep';
+
+/** The operation types dispatchable in a scope. */
+export function dispatchableOperationTypes(scope: ProcessingOperationScope): ReadonlySet<string> {
+  if (scope === 'standard') return PROCESSING_OPERATIONS.standardTypes;
+  return new Set([
+    ...PROCESSING_OPERATIONS.standardTypes,
+    ...PROCESSING_OPERATIONS.loopSubStepTypes,
+  ]);
 }
 
 /** Decompose both processing phases of one step, in declaration order. */
@@ -55,17 +79,74 @@ export function processingOperationsOfStep(
   stepId: string,
   step: StepDefinition,
 ): ProcessingOperationRef[] {
+  return decomposePhases(stepId, step as Record<string, unknown>, `steps.${stepId}`, 'standard');
+}
+
+/**
+ * Decompose the processing operations of every sub-step of a `loop:` step.
+ *
+ * ⛔ The reference's `validateStepsInOrder` walks `flow.steps`, and a loop body
+ * is a SECOND step table — so until v2.648.0 no template and no operation shape
+ * inside a loop sub-step had been looked at by either implementation. This
+ * validator inherited the same blind spot, recorded in PARITY.md as a scope note
+ * rather than a divergence. DC-FORGE-78 closed it on both sides.
+ *
+ * Findings are attributed to the PARENT step id, because that is the id every
+ * other surface knows this work by; the sub-step is named by its INDEX in the
+ * field path, matching the reference's `steps.<id>.loop.steps[i]…`.
+ */
+export function loopSubStepProcessingOperations(
+  stepId: string,
+  step: StepDefinition,
+): ProcessingOperationRef[] {
+  const refs: ProcessingOperationRef[] = [];
+  for (const sub of loopSubStepsOfStep(stepId, step)) {
+    refs.push(...decomposePhases(stepId, sub.raw, sub.basePath, 'loopSubStep'));
+  }
+  return refs;
+}
+
+/** One sub-step of a `loop:` body, with the field path the reference addresses it by. */
+export interface LoopSubStepRef {
+  /** `steps.<parent>.loop.steps[i]` */
+  basePath: string;
+  raw: Record<string, unknown>;
+}
+
+/** Enumerate a loop step's sub-steps. Empty for a step with no `loop:` block. */
+export function loopSubStepsOfStep(stepId: string, step: StepDefinition): LoopSubStepRef[] {
+  const loop = (step as Record<string, unknown>).loop;
+  if (!isRecord(loop)) return [];
+  const subSteps = (loop as Record<string, unknown>).steps;
+  if (!isArray(subSteps)) return [];
+  const refs: LoopSubStepRef[] = [];
+  subSteps.forEach((sub, i) => {
+    if (!isRecord(sub)) return;
+    refs.push({
+      basePath: `steps.${stepId}.loop.steps[${i}]`,
+      raw: sub as Record<string, unknown>,
+    });
+  });
+  return refs;
+}
+
+function decomposePhases(
+  stepId: string,
+  container: Record<string, unknown>,
+  pathPrefix: string,
+  scope: ProcessingOperationScope,
+): ProcessingOperationRef[] {
   const refs: ProcessingOperationRef[] = [];
   for (const phase of PROCESSING_PHASES) {
-    const ops = (step as Record<string, unknown>)[phase];
+    const ops = container[phase];
     if (!isArray(ops)) continue;
     ops.forEach((op, i) => {
-      const basePath = `steps.${stepId}.${phase}[${i}]`;
+      const basePath = `${pathPrefix}.${phase}[${i}]`;
       if (!isRecord(op)) {
-        refs.push({ stepId, basePath, raw: op, entries: [] });
+        refs.push({ stepId, basePath, raw: op, entries: [], scope });
         return;
       }
-      const ref: ProcessingOperationRef = { stepId, basePath, raw: op, entries: [] };
+      const ref: ProcessingOperationRef = { stepId, basePath, raw: op, entries: [], scope };
       for (const [key, value] of Object.entries(op)) {
         if (key === PROCESSING_OP_GUARD_KEY) {
           ref.guard = value;
@@ -83,7 +164,7 @@ function unknownOperationIssue(
   ref: ProcessingOperationRef,
   operationType: string,
 ): Omit<ValidationIssue, 'severity'> {
-  const known = [...PROCESSING_OPERATIONS.standardTypes].sort().join(', ');
+  const known = [...dispatchableOperationTypes(ref.scope)].sort().join(', ');
   return {
     // The operation type is the YAML MAP KEY (`- data.set: {…}`), not a field.
     // Addressing a `.operation_type` here would send the author looking for
@@ -104,9 +185,10 @@ function unknownOperationIssue(
  * Warn about an operation type the standard handler cannot dispatch and about a
  * config key its handler never reads.
  *
- * Scope is the standard (top-level step) handler, because this validator walks
- * `flow.steps` and a loop body is a second step table it does not reach. So
- * `loop.set` / `loop.break` at the top level are correctly unknown here.
+ * Both scopes are walked (DC-FORGE-78): the top-level steps, where `loop.set` /
+ * `loop.break` are correctly UNKNOWN because the standard handler has no case for
+ * them, and every `loop:` body, where they are dispatchable. ⛔ Merging the two
+ * sets would accept `loop.set` at the top level, which fails at run time.
  */
 export function validateProcessingOperations(flow: Flow, issues: Issues): void {
   const steps = flow.steps;
@@ -114,14 +196,18 @@ export function validateProcessingOperations(flow: Flow, issues: Issues): void {
 
   for (const [stepId, rawStep] of Object.entries(steps)) {
     if (!isRecord(rawStep)) continue;
-    for (const ref of processingOperationsOfStep(stepId, rawStep as StepDefinition)) {
+    const step = rawStep as StepDefinition;
+    for (const ref of [
+      ...processingOperationsOfStep(stepId, step),
+      ...loopSubStepProcessingOperations(stepId, step),
+    ]) {
       // The reference refuses an entry that is not a one-key map outright, at
       // unmarshal time. There is no operation to have an opinion about here, so
       // this rule says nothing and leaves the verdict to the structural pass.
       if (ref.entries.length !== 1) continue;
       const [operationType, config] = ref.entries[0] as readonly [string, unknown];
 
-      if (!PROCESSING_OPERATIONS.standardTypes.has(operationType)) {
+      if (!dispatchableOperationTypes(ref.scope).has(operationType)) {
         issues.warn(unknownOperationIssue(ref, operationType));
         // An unknown type has no key set, so every key under it would warn a
         // second time for the same one mistake. One verdict per defect.

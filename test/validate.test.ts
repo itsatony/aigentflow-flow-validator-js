@@ -911,3 +911,132 @@ describe('quality_gate block (DC-CP-8)', () => {
     expect(codes(r)).toContain('quality_gate_on_parallel_member');
   });
 });
+
+// DC-FORGE-78 — the loop body, and the three template functions the reference
+// used in five of its own bundled flows while registering them nowhere.
+describe('loop bodies (DC-FORGE-78)', () => {
+  const loopFlow = (sub: Record<string, unknown>) => ({
+    ...MINIMAL,
+    start: 'looper',
+    steps: {
+      looper: {
+        loop: { while: 'true', max_iterations: 3, vars: { n: '0' }, steps: [sub] },
+      },
+    },
+  });
+
+  it('walks every template site inside a loop sub-step', () => {
+    // Each site SEPARATELY: one flow with one broken template would pass while
+    // four sites stayed blind.
+    const sites: Array<[string, Record<string, unknown>, string]> = [
+      [
+        'query',
+        { id: 'b', executor: 'function://text/noop', query: { m: '{{ .x ' } },
+        'loop.steps[0].query',
+      ],
+      [
+        'condition',
+        { id: 'b', executor: 'function://text/noop', condition: '{{ .x ' },
+        'loop.steps[0].condition',
+      ],
+      [
+        'pre_processing',
+        {
+          id: 'b',
+          executor: 'function://text/noop',
+          pre_processing: [{ 'data.set': { k: '{{ .x ' } }],
+        },
+        'loop.steps[0].pre_processing[0]',
+      ],
+      [
+        'post_processing',
+        {
+          id: 'b',
+          executor: 'function://text/noop',
+          post_processing: [{ 'data.set': { k: '{{ .x ' } }],
+        },
+        'loop.steps[0].post_processing[0]',
+      ],
+      [
+        'next.conditions',
+        {
+          id: 'b',
+          executor: 'function://text/noop',
+          next: { conditions: [{ if: '{{ .x ', goto: 'b' }] },
+        },
+        'loop.steps[0].next.conditions[0].if',
+      ],
+    ];
+    for (const [name, sub, path] of sites) {
+      const r = validateFlowObject(loopFlow(sub));
+      expect(
+        r.warnings.some((w) => w.field.includes(path)),
+        `${name} must be walked`,
+      ).toBe(true);
+    }
+  });
+
+  it('never raises an ERROR from inside a loop body', () => {
+    // ⛔ The reference consults this validator at its RUN door over flows stored
+    // before the walk existed. The code survives the demotion; only severity
+    // changes — dropping the finding would be worse than an error.
+    const r = validateFlowObject(
+      loopFlow({ id: 'b', executor: 'function://text/noop', query: { m: '{{ .x ' } }),
+    );
+    expect(r.valid).toBe(true);
+    expect(r.errors.filter((e) => e.field.includes('loop.steps['))).toHaveLength(0);
+    expect(warnCodes(r)).toContain('template_syntax_error');
+  });
+
+  it('dispatches loop.set / loop.break in a loop body and nowhere else', () => {
+    for (const op of ['loop.set', 'loop.break']) {
+      const inBody = validateFlowObject(
+        loopFlow({
+          id: 'b',
+          executor: 'function://text/noop',
+          post_processing: [{ [op]: { if: 'true' } }],
+        }),
+      );
+      expect(warnCodes(inBody), `${op} is dispatchable on a loop sub-step`).not.toContain(
+        'unknown_processing_operation',
+      );
+
+      const topLevel = validateFlowObject({
+        ...MINIMAL,
+        steps: {
+          a: { executor: 'function://text/noop', post_processing: [{ [op]: { if: 'true' } }] },
+        },
+      });
+      expect(warnCodes(topLevel), `${op} is NOT dispatchable at the top level`).toContain(
+        'unknown_processing_operation',
+      );
+    }
+  });
+
+  it('knows atoi, mod and int — and still refuses an invented name', () => {
+    // ⚠️ strictRegistries is what turns an unknown function into a finding, so a
+    // fixture validated without it cannot say anything about the registry at
+    // all. Five reference flows used these three while they existed NOWHERE.
+    for (const expr of [
+      '{{ atoi .loop.vars.n }}',
+      '{{ mod .loop.vars.n 2 }}',
+      '{{ int .query.t }}',
+    ]) {
+      const r = validateFlowObject(
+        { ...MINIMAL, steps: { a: { executor: 'function://text/noop', query: { m: expr } } } },
+        { strictRegistries: true },
+      );
+      expect(codes(r), `${expr} must be accepted`).not.toContain('template_function_unknown');
+    }
+    const invented = validateFlowObject(
+      {
+        ...MINIMAL,
+        steps: { a: { executor: 'function://text/noop', query: { m: '{{ env.API_KEY }}' } } },
+      },
+      { strictRegistries: true },
+    );
+    // `env` is not and has never been a template function here — one bundled
+    // reference flow used it in its `data:` block for the life of the repo.
+    expect(codes(invented)).toContain('template_function_unknown');
+  });
+});

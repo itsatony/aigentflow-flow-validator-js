@@ -32,6 +32,38 @@ interface Case {
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
   {
+    // DC-FORGE-78: the loop body is a SECOND step table, and neither
+    // implementation walked it until v2.648.0. ⛔ Every template in this fixture
+    // is unparseable and the flow must still be VALID — the reference consults
+    // this validator at its RUN door over flows stored before the walk existed,
+    // and the "the run already died anyway" licence needs the failing path
+    // UNCONDITIONAL, which inside a loop body it is not.
+    file: 'valid-loop-body-templates-warn.yaml',
+    valid: true,
+    expectWarningCodes: ['template_syntax_error'],
+  },
+  {
+    // ⚠️ The control, and it is the assertion that matters: a rule whose whole
+    // risk is a false positive needs a fixture that goes red when it fires, and
+    // `valid: true` cannot express that — a warning never changes the verdict.
+    file: 'valid-loop-body-clean.yaml',
+    valid: true,
+    forbidWarningCodes: [
+      'template_syntax_error',
+      'template_function_unknown',
+      'unknown_processing_operation',
+      'unknown_processing_config_key',
+    ],
+  },
+  {
+    // The partition from the side that is easy to lose: `loop.set` is
+    // dispatchable ONLY on a loop sub-step, so at the top level it is an
+    // operation the standard handler has no case for. A union would accept it.
+    file: 'valid-loop-only-op-at-top-level-warns.yaml',
+    valid: true,
+    expectWarningCodes: ['unknown_processing_operation'],
+  },
+  {
     // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
     // Reading `goto_step` here disabled every conditional-branch check in this
     // validator AND made every conditionally-reached step look unreachable.

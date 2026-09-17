@@ -4,8 +4,37 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.647.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.648.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
 
+> v2.648.0 — **the loop body is walked.** ⛔ The reference's `validateStepsInOrder`
+> iterates `flow.steps`, and a `loop:` step's sub-steps live in a SECOND step table
+> — so until v2.648.0 **no template and no operation shape inside a loop sub-step
+> had been examined by either implementation.** This validator inherited the same
+> blind spot and recorded it as a scope note, which is what that note was for.
+>
+> ⚠️ **Read it as a capability statement about the defects it PERMITS.** Turning
+> the walk on in the reference produced ten syntax findings across five of its own
+> shipped example flows, behind which sat five engine defects — including three
+> template functions (`atoi`, `mod`, `int`) that five bundled flows used and the
+> registry did not have. Those three are now in `templateFunctions`.
+>
+> 1. **Every loop-body finding is a WARNING, never an error.** ⛔ The reference
+>    consults this validator at its RUN door over flows stored long before the
+>    walk existed. ⚠️ The "the run already died anyway" licence that would make an
+>    Error safe requires the failing path to be UNCONDITIONAL, and inside a loop
+>    body four of the six evaluation sites SWALLOW a template failure and carry on
+>    with the raw string. The CODE survives the demotion; only the severity
+>    changes — dropping the finding would be worse than raising it.
+> 2. **The dispatch set is a PARTITION, never a union.** `loop.set` / `loop.break`
+>    are dispatched by `executeLoopPostProcessing` and are legal ONLY on a loop
+>    sub-step; at the top level they remain undispatchable, and a merged set would
+>    silently accept a flow that fails at run time. `dispatchableOperationTypes`
+>    takes the scope as a parameter for exactly that reason, and both halves have
+>    their own fixture.
+> 3. **Findings are attributed to the PARENT step id** — the id every other
+>    surface knows this work by — with the sub-step named by its index in the
+>    field path (`steps.<id>.loop.steps[i].…`), matching the reference.
+>
 > v2.647.0 — **a processing operation's SHAPE is now checked: the operation type,
 > and the config keys its handler reads.** Both verdicts are **warnings** in the
 > reference and here, which is the point of them: a flow carrying either mistake
@@ -393,10 +422,9 @@ validator useful and low-false-positive while staying offline.
     structural pass keeps whatever it already said. Same family as divergence
     #8, in the lenient direction.
 
-    Scope note, not a divergence: both implementations check the **top-level**
-    step's processing blocks only. A loop body is a second step table neither
-    walks yet, which is why `loop.set` / `loop.break` are reported as
-    undispatchable wherever this rule can currently see them.
+    Scope note, resolved in v2.648.0: both implementations now walk the loop body
+    as well, with `loop.set` / `loop.break` dispatchable there and undispatchable
+    at the top level.
 
 ---
 
