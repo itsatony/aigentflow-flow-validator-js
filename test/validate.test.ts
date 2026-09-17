@@ -438,6 +438,49 @@ describe('expression_functions usage', () => {
     });
     expect(codes(r)).toContain('expression_function_undeclared_use');
   });
+  // A `\b` before fn_ also matches between the DOT and the `f`, so a FIELD whose
+  // name starts with fn_ looked like a call. That is a false refusal on a valid
+  // flow, which is worse than a missed detection.
+  it.each([
+    ['a dotted data field', '{{ .data.fn_total }}'],
+    ['a dotted step-response field', '{{ .step.response.fn_score }}'],
+    ['a quoted data key', '{{ index .data "fn_result" }}'],
+    ['a quoted dotted data key', '{{ index .data "step.fn_result" }}'],
+    ['a backquoted data key', '{{ index .data `fn_result` }}'],
+    ['a field whose name merely contains fn_', '{{ .data.step.xfn_total }}'],
+  ])('does NOT read %s as a call', (_label, template) => {
+    const r = validateFlowObject(withQuery(template));
+    expect(codes(r).filter((c) => c.startsWith('expression_function'))).toEqual([]);
+  });
+
+  it('does NOT read a step NAMED fn_something as a call', () => {
+    const r = validateFlowObject({
+      aigentflow_version: '2.0.0',
+      name: 'step-named-fn',
+      start: 'fn_build',
+      steps: {
+        fn_build: {
+          executor: 'mock://x/y',
+          query: { v: '{{ .data.fn_build.value }}' },
+          next: { default: 'end' },
+        },
+      },
+    });
+    expect(r.valid).toBe(true);
+  });
+
+  it('still catches a real call standing next to a same-named field', () => {
+    const r = validateFlowObject(withQuery('{{ fn_sum .data.fn_sum }}'));
+    expect(codes(r)).toContain('expression_function_undeclared_use');
+  });
+
+  it('still catches a call in a pipeline and inside parentheses', () => {
+    const piped = validateFlowObject(withQuery('{{ .query.x | fn_slugify }}'));
+    expect(codes(piped)).toContain('expression_function_undeclared_use');
+    const parens = validateFlowObject(withQuery('{{ print (fn_sha256 .query.x) }}'));
+    expect(codes(parens)).toContain('expression_function_undeclared_use');
+  });
+
   it('reports one finding per distinct name, not per call site', () => {
     const r = validateFlowObject({
       ...MINIMAL,

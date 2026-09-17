@@ -129,6 +129,13 @@ const CASES: Case[] = [
     valid: true,
   },
   {
+    // v2.642.0 correction: a FIELD, a data KEY or a STEP whose name begins with
+    // `fn_` is not a call. `\b` matches between the dot and the `f`, so the
+    // first cut of this rule refused these valid flows.
+    file: 'valid-expression-function-field-lookalikes.yaml',
+    valid: true,
+  },
+  {
     file: 'invalid-references-and-templates.yaml',
     valid: false,
     expectErrorCodes: [

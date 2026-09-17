@@ -36,12 +36,33 @@ const CATALOG_LIST = [...EXPRESSION_FUNCTION_CATALOG].sort().join(', ');
 const TEMPLATE_ACTION_PATTERN = /\{\{[\s\S]*?\}\}/g;
 
 /**
- * A catalog-namespaced identifier. Applied ONLY to the text between `{{` and
- * `}}`, so a step description that mentions `fn_slugify` in prose is not read as
- * a call — the same restriction the Go rule carries.
+ * A double-quoted or backquoted string inside a template action. Its contents
+ * are DATA — a key name — never an identifier, so it is stripped before the call
+ * scan runs: `{{ index .data "fn_result" }}` reads a data key, it calls nothing.
+ */
+const TEMPLATE_STRING_LITERAL_PATTERN = /"[^"]*"|`[^`]*`/g;
+
+/**
+ * A catalog-namespaced identifier being CALLED. Applied ONLY to the text between
+ * `{{` and `}}`, so a step description that mentions `fn_slugify` in prose is not
+ * read as a call — the same restriction the Go rule carries.
+ *
+ * ⚠️ THE LOOKBEHIND IS NOT DECORATION. A bare `\bfn_\w+` also matches the FIELD
+ * reference `{{ .data.fn_total }}`, because `\b` matches happily between the `.`
+ * and the `f`. A flow with a state field, a step, or a data key whose name begins
+ * with `fn_` would then be refused with a message about a function it never
+ * called — a false refusal on a valid flow, which is worse than a missed
+ * detection. A call is preceded by `{{`, `(`, `|` or whitespace: never by a dot
+ * or a word character.
+ *
+ * The Go reference captures and discards the preceding character
+ * (`(^|[^.\w])(fn_…)`) because RE2 has no lookbehind. JS has one, and this
+ * package targets Node >= 20, so the equivalent negative lookbehind is used
+ * instead: it needs no capture group and cannot consume the delimiter between
+ * two adjacent matches.
  */
 const EXPRESSION_FUNCTION_CALL_PATTERN = new RegExp(
-  `\\b${EXPRESSION_FUNCTION_NAME_PREFIX}[A-Za-z0-9_]+`,
+  `(?<![.\\w])${EXPRESSION_FUNCTION_NAME_PREFIX}[A-Za-z0-9_]+`,
   'g',
 );
 
@@ -173,7 +194,9 @@ function validateUsage(flow: Flow, declared: Set<string>, issues: Issues): void 
 
   walkStrings('', flow as unknown, (path, text) => {
     if (!text.includes('{{')) return;
-    for (const action of text.match(TEMPLATE_ACTION_PATTERN) ?? []) {
+    for (const rawAction of text.match(TEMPLATE_ACTION_PATTERN) ?? []) {
+      // Quoted spans go first: what they contain is a data key, not a call.
+      const action = rawAction.replace(TEMPLATE_STRING_LITERAL_PATTERN, '');
       for (const called of action.match(EXPRESSION_FUNCTION_CALL_PATTERN) ?? []) {
         if (reported.has(called)) continue;
         if (!EXPRESSION_FUNCTION_CATALOG.has(called)) {

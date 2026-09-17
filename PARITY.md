@@ -57,11 +57,30 @@ discipline for keeping the two in sync.
 > flow AIgentFlow would accept the two are identical, because AIgentFlow's create
 > path parses with `KnownFields(true)` and refuses anything else outright.
 >
+> **Correction to rule 3, made in the reference and ported here: a FIELD is not a
+> CALL.** The first cut matched `\bfn_[A-Za-z0-9_]+`, and `\b` matches happily
+> between the `.` and the `f` — so `{{ .data.fn_total }}`,
+> `{{ .step.response.fn_score }}`, `{{ index .data "fn_result" }}` and
+> `{{ index .data "step.fn_result" }}` were all read as calls. A flow with a state
+> field, a step, or a data key whose name begins with `fn_` was then **refused
+> with a message about a function it never called** — a false refusal on a valid
+> flow, which is worse than a missed detection. Two guards, both required, each
+> covered by its own test: quoted spans (`"…"` and backticks) are **stripped from
+> the action before the scan**, because a quoted string inside an action names a
+> data key rather than an identifier; and the character before `fn_` must be
+> neither a dot nor a word character. The Go side captures and discards that
+> character (`(^|[^.\w])(fn_…)`) because RE2 has no lookbehind; this validator uses
+> the negative lookbehind `(?<![.\w])`, which is the cleaner equivalent — no
+> capture group, and it cannot consume the delimiter between two adjacent matches
+> — and is available on the Node >= 20 this package requires. A real call still
+> matches after `{{`, `(`, `|` or whitespace.
+>
 > New conformance fixtures: `invalid-expression-function-package.yaml`,
 > `invalid-expression-function-unknown-name.yaml`,
 > `invalid-expression-function-undeclared-use.yaml`,
 > `valid-expression-functions.yaml`,
-> `valid-expression-function-prose-mention.yaml`.
+> `valid-expression-function-prose-mention.yaml`,
+> `valid-expression-function-field-lookalikes.yaml`.
 
 > v2.640.0 — `unique_items` removed from the spec surface and from
 > `PropertyDefinition`. AIgentFlow deleted the grammar field: it was declared
