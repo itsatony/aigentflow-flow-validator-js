@@ -6,6 +6,30 @@ discipline for keeping the two in sync.
 
 **Tracks AIgentFlow flow schema: `v2.642.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
 
+> v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
+> finally validates `pre_processing:` / `post_processing:` templates at all.** Its
+> `validateProcessingOperation` took `operation any` and asserted `map[string]any`
+> while both call sites passed `*ProcessingOperationDefinition`, so it returned
+> silently for the life of the repository. ⭐ **This validator has checked those
+> blocks for syntax the whole time, which means the port was STRICTER than the
+> reference it ports** — the opposite of the direction a mirror is usually wrong in,
+> and invisible to both sides.
+>
+> What changed here: nothing about *what* is reported, only *where*. The reference
+> unmarshals a processing operation's single key into `OperationType` and its body
+> into an inline `Config`, so it addresses findings as
+> `steps.<id>.post_processing[0].<configKey>` and `steps.<id>.post_processing[0].if`.
+> This validator walked the raw record and inserted the operation name as a path
+> segment (`…post_processing[0].data.set.<configKey>`). The walker now matches the
+> reference, pinned by a test that fails on the old address.
+>
+> The reference also gained `template_missing_field` coverage inside those blocks,
+> grounded on the namespaces the processing handler actually builds — which is
+> **narrower** than a step's own context (no `.loop`, no `.binary`, four of five
+> `.step` sub-namespaces absent, and `.step.response` only after the step, holding
+> the *evaluated* response). That whole class stays out of scope here under
+> **divergence #3**, unchanged.
+
 > v2.642.0 — **`expression_functions:` stopped being inert.** The block had always
 > been validated for SHAPE (exactly one key, `package` XOR `function`, non-empty
 > value) and honoured in no other way: nothing read it, so a flow could declare

@@ -669,6 +669,29 @@ describe('templates + summary', () => {
     expect(r.summary.templatesFound).toBe(1);
     expect(r.summary.templatesValid).toBe(0);
   });
+  // DC-FORGE-76 (AIgentFlow v2.646.0): the reference absorbs a processing
+  // operation's name into OperationType and its body into an inline Config, so
+  // its field paths carry no operation segment. Pin the address, not just the
+  // finding — this walker reported the same defect under a different one until
+  // the reference had any address at all to agree with.
+  it('addresses processing-operation templates the way the reference does', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          executor: 'mock://x/y',
+          pre_processing: [{ 'data.set': { prepped: '{{ if .x }}oops' } }],
+          post_processing: [
+            { 'output.set': { done: '{{ if .y }}oops' }, if: '{{ if .z }}oops' },
+          ],
+        },
+      },
+    });
+    const fields = r.errors.filter((e) => e.code === 'template_syntax_error').map((e) => e.field);
+    expect(fields).toContain('steps.a.pre_processing[0].prepped');
+    expect(fields).toContain('steps.a.post_processing[0].done');
+    expect(fields).toContain('steps.a.post_processing[0].if');
+  });
   it('counts a valid template as valid', () => {
     const r = validateFlowObject({
       ...MINIMAL,
