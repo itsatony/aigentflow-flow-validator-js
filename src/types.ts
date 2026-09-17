@@ -89,7 +89,6 @@ export interface PropertyDefinition {
   items?: PropertyDefinition;
   min_items?: number;
   max_items?: number;
-  unique_items?: boolean;
 }
 
 export type QueryDefinition = PropertyDefinition;
