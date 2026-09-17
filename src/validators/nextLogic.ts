@@ -70,7 +70,7 @@ export function validateNextLogic(flow: Flow, issues: Issues): void {
         n.default === NEXT_ORCHESTRATOR ||
         (Array.isArray(n.conditions) &&
           (n.conditions as NextCondition[]).some(
-            (c) => isRecord(c) && c.goto_step === NEXT_ORCHESTRATOR,
+            (c) => isRecord(c) && c.goto === NEXT_ORCHESTRATOR,
           ));
       if (usesOrch) {
         issues.error({

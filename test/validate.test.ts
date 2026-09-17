@@ -48,11 +48,171 @@ describe('basic structure', () => {
   });
 });
 
+// v2.608.0 — the branch-target key. This validator read `goto_step` here for its
+// whole life, which is the spelling used by error_strategy and quality_gate and
+// the WRONG one for a condition (aigentflow.domain.step.go:134 carries
+// `yaml:"goto"`). Two silent consequences, both of which these cases pin:
+// a typo'd branch target was never reported, and every conditionally-reached step
+// was accused of being unreachable. The old fixtures used `goto_step`, so 105
+// tests were green over the defect.
+describe('conditional branch targets', () => {
+  const BRANCHING = {
+    ...MINIMAL,
+    steps: {
+      a: {
+        executor: 'mock://x/y',
+        next: { default: 'null', conditions: [{ if: '{{ true }}', goto: 'b' }] },
+      },
+      b: { executor: 'mock://x/y', next: { default: 'null' } },
+    },
+  };
+
+  it('reports a conditional branch target that does not exist', () => {
+    const r = validateFlowObject({
+      ...BRANCHING,
+      steps: {
+        ...BRANCHING.steps,
+        a: {
+          ...BRANCHING.steps.a,
+          next: { default: 'null', conditions: [{ if: '{{ true }}', goto: 'nope' }] },
+        },
+      },
+    });
+    expect(codes(r)).toContain('step_not_found');
+  });
+
+  it('does NOT accuse a conditionally-reached step of being unreachable', () => {
+    const r = validateFlowObject(BRANCHING);
+    expect(warnCodes(r)).not.toContain('unreachable_step');
+  });
+
+  it("rejects the 'goto_step' spelling inside a condition", () => {
+    const r = validateFlowObject({
+      ...BRANCHING,
+      steps: {
+        ...BRANCHING.steps,
+        a: {
+          ...BRANCHING.steps.a,
+          next: { default: 'null', conditions: [{ if: '{{ true }}', goto_step: 'b' }] },
+        },
+      },
+    });
+    expect(codes(r)).toContain('unknown_yaml_key');
+    expect(r.valid).toBe(false);
+  });
+});
+
+// v2.608.0 — reachability follows five edge kinds plus the flow-level error
+// redirect; cycles deliberately still follow two. See connectivity.ts.
+describe('reachability edge kinds', () => {
+  const via = (stepA: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+    ...MINIMAL,
+    ...extra,
+    steps: { a: { executor: 'mock://x/y', ...stepA }, b: { executor: 'mock://x/y' } },
+  });
+
+  it.each([
+    ['next.parallel.steps', via({ next: { parallel: { steps: ['b'] } } })],
+    ['next.parallel.rendezvous', via({ next: { parallel: { steps: [], rendezvous: 'b' } } })],
+    ['step error_strategy.goto_step', via({ error_strategy: { action: 'goto', goto_step: 'b' } })],
+    [
+      'flow error_strategy.goto_step',
+      via({}, { error_strategy: { action: 'goto', goto_step: 'b' } }),
+    ],
+  ])('reaches a step through %s', (_label, flow) => {
+    const r = validateFlowObject(flow);
+    expect(warnCodes(r)).not.toContain('unreachable_step');
+  });
+
+  it('still reports a genuinely orphaned step', () => {
+    const r = validateFlowObject(via({}));
+    expect(warnCodes(r)).toContain('unreachable_step');
+  });
+
+  it('does not call a rendezvous loop-back an infinite loop', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: { executor: 'mock://x/y', next: { parallel: { steps: ['b'], rendezvous: 'a' } } },
+        b: { executor: 'mock://x/y' },
+      },
+    });
+    expect(warnCodes(r)).not.toContain('potential_infinite_loop');
+  });
+});
+
 describe('executors', () => {
   it('errors on a malformed executor URI', () => {
     const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor: 'nope' } } });
     expect(codes(r)).toContain('invalid_executor_url');
   });
+  // v2.608.0 — the shape check is now AIgentFlow's ONE parser (URL_PATTERN_REGEX),
+  // not a loose `scheme://path` test. Each of these SAVED here and is refused by
+  // AIgentFlow at create, which is a false pass in the worst direction.
+  it.each([
+    ['openai:///gpt-4', 'empty authority'],
+    ['ai://openai', 'no path segment'],
+    ['http://api.example.com/v1', 'dots in the authority'],
+    ['ai://openai/chat!', 'a character outside the parser class'],
+    ['ai://open ai/chat', 'a space'],
+  ])('rejects %s (%s)', (executor) => {
+    const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor } } });
+    expect(codes(r)).toContain('invalid_executor_url');
+  });
+
+  it('accepts a templated executor URL, which the engine renders before dispatch', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: 'flow://stored/{{ .query.child_flow_id }}' } },
+    });
+    expect(codes(r)).not.toContain('invalid_executor_url');
+  });
+
+  it('checks a loop sub-step executor too (AIgentFlow DC-FORGE-38)', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ lt .loop.index 2 }}',
+            max_iterations: 2,
+            steps: [{ id: 'work', executor: 'openai:///gpt-4' }],
+          },
+        },
+      },
+    });
+    expect(codes(r)).toContain('invalid_executor_url');
+  });
+
+  // v2.608.0 — the vendored scheme set is now AIgentFlow's registered set exactly
+  // (43 protocols, `NewExecutorSchemaRegistry`). `web://` was missing, so a correct
+  // step warned; nine schemes AIgentFlow does not register (openai, anthropic,
+  // perplexity, vertexai, ollama, vllm, aigentchat, external, https — legacy names
+  // banner-marked non-functional in v2.596.0) were listed, so this validator stayed
+  // silent where AIgentFlow fails at dispatch.
+  it('does not warn on web://, which AIgentFlow registers', () => {
+    const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor: 'web://fetch/page' } } });
+    expect(warnCodes(r)).not.toContain('unknown_executor_scheme');
+  });
+
+  it.each([
+    'openai',
+    'anthropic',
+    'perplexity',
+    'vertexai',
+    'ollama',
+    'vllm',
+    'aigentchat',
+    'external',
+    'https',
+  ])('warns on %s://, which AIgentFlow does not register', (scheme) => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: `${scheme}://provider/op` } },
+    });
+    expect(warnCodes(r)).toContain('unknown_executor_scheme');
+  });
+
   it('warns on an unknown scheme', () => {
     const r = validateFlowObject({ ...MINIMAL, steps: { a: { executor: 'bogus://x/y' } } });
     expect(warnCodes(r)).toContain('unknown_executor_scheme');
@@ -204,9 +364,131 @@ describe('expression_functions', () => {
     });
     expect(codes(r)).toContain('invalid_expression_function');
   });
-  it('accepts a single-key entry', () => {
+  it('accepts a single-key entry naming a catalog function', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      expression_functions: [{ function: 'fn_slugify' }],
+    });
+    expect(codes(r)).not.toContain('invalid_expression_function');
+    expect(r.valid).toBe(true);
+  });
+  it('is structurally well-formed but refused when it names a package', () => {
     const r = validateFlowObject({ ...MINIMAL, expression_functions: [{ package: 'p' }] });
     expect(codes(r)).not.toContain('invalid_expression_function');
+    expect(codes(r)).toContain('expression_function_package_unsupported');
+  });
+  it('refuses a function name outside the catalog', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      expression_functions: [{ function: 'fn_not_a_real_one' }],
+    });
+    expect(codes(r)).toContain('expression_function_unknown');
+  });
+  it('declaring a catalog function without using it is fine', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      expression_functions: [{ function: 'fn_round' }],
+    });
+    expect(r.valid).toBe(true);
+  });
+});
+
+describe('expression_functions usage', () => {
+  const withQuery = (value: string, declared?: string[]) => ({
+    ...MINIMAL,
+    ...(declared ? { expression_functions: declared.map((f) => ({ function: f })) } : {}),
+    steps: { a: { executor: 'mock://x/y', query: { v: value } } },
+  });
+
+  it('accepts a declared catalog function', () => {
+    const r = validateFlowObject(withQuery('{{ fn_slugify .query.name }}', ['fn_slugify']));
+    expect(r.valid).toBe(true);
+  });
+  it('refuses a catalog function the flow does not declare', () => {
+    const r = validateFlowObject(withQuery('{{ fn_slugify .query.name }}'));
+    expect(codes(r)).toContain('expression_function_undeclared_use');
+  });
+  it('refuses an fn_ name that is not in the catalog at all', () => {
+    const r = validateFlowObject(withQuery('{{ fn_slugfy .query.name }}', ['fn_slugify']));
+    expect(codes(r)).toContain('expression_function_unknown_use');
+    expect(codes(r)).not.toContain('expression_function_undeclared_use');
+  });
+  it('does NOT flag an fn_ name mentioned in prose outside a template action', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      description: 'This flow would benefit from fn_slugify one day.',
+      steps: {
+        a: {
+          executor: 'mock://x/y',
+          description: 'fn_round is not called here',
+          query: { v: 'plain text mentioning fn_uniq' },
+        },
+      },
+    });
+    expect(r.valid).toBe(true);
+  });
+  it('scans a multi-line template action', () => {
+    const r = validateFlowObject(withQuery('{{\n  fn_sha256\n    .query.name\n}}'));
+    expect(codes(r)).toContain('expression_function_undeclared_use');
+  });
+  it('scans template strings outside steps (orchestrator prompts, output bindings)', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      output: ['{{ fn_uniq .data.a.items }}'],
+    });
+    expect(codes(r)).toContain('expression_function_undeclared_use');
+  });
+  // A `\b` before fn_ also matches between the DOT and the `f`, so a FIELD whose
+  // name starts with fn_ looked like a call. That is a false refusal on a valid
+  // flow, which is worse than a missed detection.
+  it.each([
+    ['a dotted data field', '{{ .data.fn_total }}'],
+    ['a dotted step-response field', '{{ .step.response.fn_score }}'],
+    ['a quoted data key', '{{ index .data "fn_result" }}'],
+    ['a quoted dotted data key', '{{ index .data "step.fn_result" }}'],
+    ['a backquoted data key', '{{ index .data `fn_result` }}'],
+    ['a field whose name merely contains fn_', '{{ .data.step.xfn_total }}'],
+  ])('does NOT read %s as a call', (_label, template) => {
+    const r = validateFlowObject(withQuery(template));
+    expect(codes(r).filter((c) => c.startsWith('expression_function'))).toEqual([]);
+  });
+
+  it('does NOT read a step NAMED fn_something as a call', () => {
+    const r = validateFlowObject({
+      aigentflow_version: '2.0.0',
+      name: 'step-named-fn',
+      start: 'fn_build',
+      steps: {
+        fn_build: {
+          executor: 'mock://x/y',
+          query: { v: '{{ .data.fn_build.value }}' },
+          next: { default: 'end' },
+        },
+      },
+    });
+    expect(r.valid).toBe(true);
+  });
+
+  it('still catches a real call standing next to a same-named field', () => {
+    const r = validateFlowObject(withQuery('{{ fn_sum .data.fn_sum }}'));
+    expect(codes(r)).toContain('expression_function_undeclared_use');
+  });
+
+  it('still catches a call in a pipeline and inside parentheses', () => {
+    const piped = validateFlowObject(withQuery('{{ .query.x | fn_slugify }}'));
+    expect(codes(piped)).toContain('expression_function_undeclared_use');
+    const parens = validateFlowObject(withQuery('{{ print (fn_sha256 .query.x) }}'));
+    expect(codes(parens)).toContain('expression_function_undeclared_use');
+  });
+
+  it('reports one finding per distinct name, not per call site', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: { executor: 'mock://x/y', query: { v: '{{ fn_sum .a }}', w: '{{ fn_sum .b }}' } },
+      },
+    });
+    expect(r.errors.filter((e) => e.code === 'expression_function_undeclared_use')).toHaveLength(1);
   });
 });
 

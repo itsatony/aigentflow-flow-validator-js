@@ -25,6 +25,28 @@ interface Case {
 
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
+  {
+    // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
+    // Reading `goto_step` here disabled every conditional-branch check in this
+    // validator AND made every conditionally-reached step look unreachable.
+    file: 'invalid-condition-goto-step-misspelling.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    // v2.608.0 (DC-FORGE-30 + DC-FORGE-38): executor URLs are parsed with the ONE
+    // parser at authoring time. Four shapes AIgentFlow refuses at SAVE — including
+    // one inside a loop sub-step, which the Go side only started checking in
+    // v2.608.0 and this validator has always checked.
+    file: 'invalid-executor-url-shapes.yaml',
+    valid: false,
+    expectErrorCodes: ['invalid_executor_url'],
+  },
+  {
+    // The `{{` exception is load-bearing in both implementations.
+    file: 'valid-templated-executor-url.yaml',
+    valid: true,
+  },
   { file: 'valid-branching.yaml', valid: true },
   {
     // CLEANER POWER Phase 2: wait:// + eval:// schemes, output_schema, quality_gate.
@@ -74,6 +96,44 @@ const CASES: Case[] = [
     file: 'invalid-orchestrator-owner-no-yield.yaml',
     valid: false,
     expectErrorCodes: ['orchestrator_owner_needs_yield'],
+  },
+  {
+    // v2.642.0 (DC-FORGE-72): the expression-function catalog is compiled in and
+    // nothing is loaded at run time, so `package:` is refused outright.
+    file: 'invalid-expression-function-package.yaml',
+    valid: false,
+    expectErrorCodes: ['expression_function_package_unsupported'],
+  },
+  {
+    // v2.642.0: a `function:` outside the fixed catalog is refused.
+    file: 'invalid-expression-function-unknown-name.yaml',
+    valid: false,
+    expectErrorCodes: ['expression_function_unknown'],
+  },
+  {
+    // v2.642.0: a template may only call an `fn_` function the flow declares,
+    // and a name that is not in the catalog at all gets its own verdict.
+    file: 'invalid-expression-function-undeclared-use.yaml',
+    valid: false,
+    expectErrorCodes: ['expression_function_undeclared_use', 'expression_function_unknown_use'],
+  },
+  {
+    // v2.642.0: declared and used, one of them inside a multi-line action.
+    file: 'valid-expression-functions.yaml',
+    valid: true,
+  },
+  {
+    // v2.642.0: only the text between `{{` and `}}` is scanned — prose that
+    // mentions an `fn_` name is not a call.
+    file: 'valid-expression-function-prose-mention.yaml',
+    valid: true,
+  },
+  {
+    // v2.642.0 correction: a FIELD, a data KEY or a STEP whose name begins with
+    // `fn_` is not a call. `\b` matches between the dot and the `f`, so the
+    // first cut of this rule refused these valid flows.
+    file: 'valid-expression-function-field-lookalikes.yaml',
+    valid: true,
   },
   {
     file: 'invalid-references-and-templates.yaml',
