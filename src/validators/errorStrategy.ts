@@ -2,7 +2,8 @@
 //
 // Mirrors `validateErrorStrategy` (parser.go): action enum, goto target
 // existence, max_delay duration, backoff_multiplier > 0, retry_on categories —
-// plus `unreachable_error_goto` (validation.go, AIF v2.651.0 / DC-FORGE-81).
+// plus `unreachable_error_goto` (validation.go, AIF v2.651.0 / DC-FORGE-81) and
+// `loop_substep_error_goto_ignored` (validation.go, AIF v2.652.0 / DC-FORGE-82).
 
 import type { ErrorStrategyDefinition, Flow } from '../types.js';
 import { ERROR_STRATEGY_ACTIONS, RETRY_ON_CATEGORIES } from '../spec/index.js';
@@ -156,5 +157,48 @@ export function validateErrorStrategies(flow: Flow, issues: Issues): void {
         issues,
       );
     }
+    validateLoopBodyErrorGoto(step, stepID, issues);
   }
+}
+
+// A loop BODY is a second step table, and the walk above never entered it —
+// which is how the reference's own DC-FORGE-81 check missed this. Inside one,
+// `goto_step` is unreachable under EVERY action, so it is a different finding
+// from `unreachable_error_goto`: that one is fixed by writing `action: "goto"`,
+// and this one is not fixable in place at all.
+//
+// `executeLoopStep`'s failure switch has exactly two arms — `continue` (skip to
+// the next sub-step) and a default that aborts the whole loop step — so `goto`
+// lands in the default and the loop FAILS. The strategy the author chose to
+// avoid failing is the one that fails.
+//
+// Deliberately NOT routed through validateOne: the reference's parser does not
+// run its error_strategy checks over loop sub-steps at all, and an oracle that
+// refuses shapes its door accepts is wrong in the more damaging direction.
+// Only the new warning is emitted here.
+function validateLoopBodyErrorGoto(
+  step: Record<string, unknown>,
+  stepID: string,
+  issues: Issues,
+): void {
+  if (!isRecord(step.loop)) return;
+  const subSteps = (step.loop as Record<string, unknown>).steps;
+  if (!Array.isArray(subSteps)) return;
+
+  subSteps.forEach((sub: unknown, i: number) => {
+    if (!isRecord(sub)) return;
+    const strategy = sub.error_strategy;
+    if (!isRecord(strategy)) return;
+    const goto = (strategy as ErrorStrategyDefinition).goto_step;
+    if (!isString(goto) || goto === '') return;
+
+    const subID = isString(sub.id) && sub.id !== '' ? sub.id : `[${i}]`;
+    issues.warn({
+      field: `steps.${stepID}.loop.steps.${subID}.error_strategy.goto_step`,
+      message: `goto_step '${goto}' on loop step '${stepID}'s sub-step '${subID}' error_strategy is never read: a loop body honours only action "continue" (skip to the next sub-step) and fail. Any other action, including "goto", aborts the whole loop step — which then routes through the LOOP step's own error_strategy.`,
+      code: 'loop_substep_error_goto_ignored',
+      stepId: stepID,
+      suggestion: `Put the goto_step on the loop step '${stepID}' itself, or use action: "continue" here`,
+    });
+  });
 }
