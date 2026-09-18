@@ -1,7 +1,8 @@
 // Flow-level and per-step `error_strategy` validation.
 //
 // Mirrors `validateErrorStrategy` (parser.go): action enum, goto target
-// existence, max_delay duration, backoff_multiplier > 0, retry_on categories.
+// existence, max_delay duration, backoff_multiplier > 0, retry_on categories —
+// plus `unreachable_error_goto` (validation.go, AIF v2.651.0 / DC-FORGE-81).
 
 import type { ErrorStrategyDefinition, Flow } from '../types.js';
 import { ERROR_STRATEGY_ACTIONS, RETRY_ON_CATEGORIES } from '../spec/index.js';
@@ -49,6 +50,34 @@ function validateOne(
         ...(stepID ? { stepId: stepID } : {}),
       });
     }
+  }
+
+  // A `goto_step` the action can never take. The engine switches on `action`
+  // and reads `goto_step` in the `goto` branch ONLY; `retry`, `fail` and an
+  // absent action all fall through to failing the mission. The check above only
+  // asks whether the target EXISTS, and only once the action already is `goto` —
+  // so the one combination that silently does nothing went unasked about.
+  //
+  // Not hypothetical: both of AIF's bundled example flows declared
+  // `action: "retry"` beside a `goto_step:` naming an error handler, so neither
+  // handler was reachable at all.
+  //
+  // WARNING, not error, matching the reference: it is consulted at the RUN door
+  // over flows that are already stored, and the declaration is INERT rather than
+  // fatal — the run does not die, it takes a different path.
+  if (
+    action !== ACTION_GOTO &&
+    isString(strategy.goto_step) &&
+    strategy.goto_step !== ''
+  ) {
+    const shown = action === undefined || action === '' ? '(absent, defaults to fail)' : String(action);
+    issues.warn({
+      field: `${field}.goto_step`,
+      message: `goto_step '${strategy.goto_step}' on ${stepID ? `step '${stepID}'` : 'the flow-level error_strategy'} can never be taken: the engine reads goto_step only when action is "goto", and this action is '${shown}'`,
+      code: 'unreachable_error_goto',
+      ...(stepID ? { stepId: stepID } : {}),
+      suggestion: 'Set action: "goto" (retries still apply through max_retries), or remove goto_step',
+    });
   }
 
   if (

@@ -6,6 +6,38 @@ discipline for keeping the two in sync.
 
 **Tracks AIgentFlow flow schema: `v2.642.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
 
+> v2.651.0 (DC-FORGE-81; no grammar change, so `specVersion` stays `2.642.0`) —
+> **one new static rule ported: `unreachable_error_goto`.** The reference's engine
+> switches on `error_strategy.action` and reads `goto_step` in the `goto` branch
+> **only**; `retry`, `fail` and an absent action all fall through to failing the
+> mission. Its parser has always checked that a `goto_step` names an existing step
+> — but only once the action already was `goto`, so the one combination that
+> silently does nothing was the one combination nothing asked about. ⛔ **Both of
+> the reference's bundled example flows declared `action: "retry"` beside a
+> `goto_step:` naming an error handler**, so neither handler was reachable, which
+> is also why several broken `.step.error` reads inside those handlers had never
+> been noticed — the steps containing them never ran.
+>
+> It is a **warning** on both sides, for the same reason: the reference consults
+> this validator at its RUN door over flows that are already stored, and the
+> declaration is INERT rather than fatal.
+>
+> ⭐ **The fixture pair is the point, and `forbidWarningCodes` is new here because
+> of it.** This rule's entire risk is a FALSE POSITIVE, and neither `valid` nor
+> `expectWarningCodes` can express that: a warning never changes the verdict, so an
+> all-correct fixture stays green no matter how indiscriminately the rule fires.
+> `valid-reachable-error-goto.yaml` forbids the code; without that assertion the
+> suite passes with the rule's guard deleted. Both directions are mutation-verified.
+>
+> ⚠️ **`specVersion` deliberately understates.** This branch is cut from `main`,
+> which does not yet carry the v2.646.0–v2.648.0 work sitting in the two open
+> stacked PRs. Claiming `2.651.0` here would assert rules this branch does not
+> have. Reconcile the version on merge, in whatever order those land.
+>
+> The rest of v2.649.0–v2.651.0 is out of scope: v2.649.0 is SPA styling, and
+> v2.651.0's other five findings are runtime template-context behaviour
+> (divergence #3), engine routing, or documentation surface.
+
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
 > `validateProcessingOperation` took `operation any` and asserted `map[string]any`
