@@ -660,6 +660,89 @@ describe('input_schema', () => {
   });
 });
 
+describe('processing-operation shape', () => {
+  function opFlow(ops: unknown[], phase = 'post_processing') {
+    return { ...MINIMAL, steps: { a: { executor: 'function://text/noop', [phase]: ops } } };
+  }
+
+  it('warns about an operation type the engine does not dispatch', () => {
+    const r = validateFlowObject(opFlow([{ 'data.setx': { k: 'v' } }]));
+    expect(warnCodes(r)).toContain('unknown_processing_operation');
+    // The type is the YAML map key, so the finding addresses the operation
+    // itself — there is no `operation_type` field to point an author at.
+    const w = r.warnings.find((x) => x.code === 'unknown_processing_operation');
+    expect(w?.field).toBe('steps.a.post_processing[0]');
+    // One verdict per defect: an unknown type has no key set.
+    expect(warnCodes(r)).not.toContain('unknown_processing_config_key');
+  });
+
+  it('treats loop.set and loop.break as undispatchable in a top-level step', () => {
+    // Both are handled by a loop sub-step's post-processing before it delegates,
+    // so they are legal there and nowhere else. A merged dispatch set would
+    // silently accept them here.
+    for (const type of ['loop.set', 'loop.break']) {
+      const r = validateFlowObject(opFlow([{ [type]: { x: 1 } }]));
+      expect(warnCodes(r), type).toContain('unknown_processing_operation');
+    }
+  });
+
+  it('warns about a config key the operation does not read', () => {
+    const r = validateFlowObject(opFlow([{ parse: { source: 's', onerror: 'continue' } }]));
+    const w = r.warnings.filter((x) => x.code === 'unknown_processing_config_key');
+    expect(w).toHaveLength(1);
+    expect(w[0]?.field).toBe('steps.a.post_processing[0].onerror');
+  });
+
+  it('keeps the key sets per operation rather than unioning them', () => {
+    // `asset_id` is genuinely read by binary.get/update/delete and is NOT read
+    // by binary.transform, which reads source_asset_id. A union over the
+    // operations accepts it — the failure mode is a name in the wrong half.
+    const wrong = validateFlowObject(opFlow([{ 'binary.transform': { asset_id: 'x' } }]));
+    expect(warnCodes(wrong)).toContain('unknown_processing_config_key');
+
+    const right = validateFlowObject(opFlow([{ 'binary.get': { asset_id: 'x' } }]));
+    expect(warnCodes(right)).not.toContain('unknown_processing_config_key');
+  });
+
+  it('says nothing about the keys of an open-key operation', () => {
+    // data.set writes every key into `.data`, output.set into `.output`, and
+    // conversation.append treats every key as a conversation id: the names are
+    // the author's own, so "unknown key" is not a notion that applies.
+    const r = validateFlowObject(
+      opFlow([
+        { 'data.set': { whatever: 1, another_invented_key: 2 } },
+        { 'output.set': { some_output: 'v' } },
+        { 'conversation.append': { my_convo: { role: 'user', content: 'hi' } } },
+      ]),
+    );
+    expect(warnCodes(r)).not.toContain('unknown_processing_config_key');
+    expect(warnCodes(r)).not.toContain('unknown_processing_operation');
+  });
+
+  it('does not read the `if:` guard as a config key', () => {
+    // The guard is a sibling of the operation key, except on loop.break, where
+    // `if` IS the config key.
+    const r = validateFlowObject(
+      opFlow([{ 'binary.delete': { asset_id: 'x' }, if: '{{ eq .query.go "yes" }}' }]),
+    );
+    expect(warnCodes(r)).not.toContain('unknown_processing_config_key');
+  });
+
+  it('checks pre_processing as well as post_processing', () => {
+    const r = validateFlowObject(opFlow([{ 'data.setx': {} }], 'pre_processing'));
+    const w = r.warnings.find((x) => x.code === 'unknown_processing_operation');
+    expect(w?.field).toBe('steps.a.pre_processing[0]');
+  });
+
+  it('never turns either verdict into an error', () => {
+    const r = validateFlowObject(
+      opFlow([{ 'data.setx': {} }, { parse: { source: 's', onerror: 'x' } }]),
+    );
+    expect(r.valid).toBe(true);
+    expect(r.errors).toHaveLength(0);
+  });
+});
+
 describe('templates + summary', () => {
   it('reports a template syntax error and counts templates', () => {
     const r = validateFlow(

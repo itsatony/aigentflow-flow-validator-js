@@ -4,7 +4,68 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.642.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.647.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+
+> v2.647.0 — **a processing operation's SHAPE is now checked: the operation type,
+> and the config keys its handler reads.** Both verdicts are **warnings** in the
+> reference and here, which is the point of them: a flow carrying either mistake
+> saves and runs. An operation type the engine has no dispatch case for fails at
+> run time with "unsupported operation type"; a config key the handler never reads
+> is simply ignored, so `transformation:` written where the handler reads
+> `transformer:` produces a step that succeeds and does nothing. Ported into
+> [`src/validators/processingOperations.ts`](./src/validators/processingOperations.ts),
+> which also now owns the ONE decomposition of a processing operation —
+> `templates.ts` shares it, so the `if:` guard is recognised in a single place.
+>
+> 1. **`unknown_processing_operation`.** The dispatchable set in a top-level
+>    step's `pre_processing:` / `post_processing:` is `data.set`,
+>    `conversation.append`, `output.set`, `binary.store`, `binary.get`,
+>    `binary.update`, `binary.delete`, `binary.transform`, `parse`. `loop.set` and
+>    `loop.break` are handled by a loop sub-step's post-processing before it
+>    delegates, so they are dispatchable **only there** — and are correctly
+>    reported as undispatchable at the top level. The two scopes are kept apart
+>    rather than merged for the same reason the key sets are (below): a name in
+>    the wrong half is the failure mode, and no merged set can see it.
+>
+>    The operation type is the YAML **map key** (`- data.set: { … }`), not a
+>    field, so the finding addresses the operation itself
+>    (`steps.<id>.post_processing[0]`). Naming an `operation_type` field would
+>    send an author looking for something the grammar does not have. An unknown
+>    type also suppresses the key verdict beneath it: one verdict per defect.
+>
+> 2. **`unknown_processing_config_key`**, for the operations with a **closed** key
+>    set — `parse`, `binary.store`, `binary.get`, `binary.update`,
+>    `binary.delete`, `binary.transform`, `loop.break`. The sets are **per
+>    operation and are never unioned**: `asset_id` is read by
+>    `binary.get`/`binary.update`/`binary.delete` and is **not** read by
+>    `binary.transform`, which reads `source_asset_id`. A union over the
+>    operations accepts that key in the wrong half, which is precisely the
+>    mistake the rule exists to catch, so the spec models each operation
+>    separately and a conformance fixture pins the wrong-half case.
+>
+>    `data.set`, `output.set`, `conversation.append` and `loop.set` have **open**
+>    key sets — every key is a name the author chose (a data key, an output key, a
+>    conversation id, a loop variable) — so "unknown key" is not a notion that
+>    applies to them and they can never produce this warning. That half is what
+>    makes the rule safe; asking them for a known key set would accuse every
+>    correct flow. The `if:` guard is a **sibling** of the operation key rather
+>    than a config key, except on `loop.break`, where `if` IS its config key.
+>
+>    Scope, stated so it is not mistaken for more: **top-level config keys only**.
+>    Sub-keys of `metadata:` (forwarded to the asset store, which has its own
+>    vocabulary) and of `parameters:` (the transformer's, which varies per
+>    transformer) are out of scope in both implementations.
+>
+> Verified by running the reference validator over the new fixtures: identical
+> codes and identical field paths, and the all-correct fixture produces neither
+> code on either side.
+>
+> New conformance fixtures: `valid-processing-operation-unknown-type-warns.yaml`,
+> `valid-processing-config-key-wrong-half-warns.yaml`,
+> `valid-processing-config-keys-accepted.yaml`. The third needed a new
+> `forbidWarningCodes` assertion in the conformance harness: a rule whose whole
+> risk is a false positive needs a fixture that goes **red** when it fires, and
+> `valid: true` does not say that, because a warning never changes the verdict.
 
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
@@ -245,6 +306,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | `input_schema` definition + ordering lint                                     | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                   | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
 | Step `output_schema` definition (reuses the input-schema subset)              | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                               | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
 | `quality_gate:` block (rubric/threshold/on_fail/goto)                         | `FlowParser.validateQualityGate` (parser.go)                                                      | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
+| Processing-operation type + per-operation config keys                         | `validateProcessingOperationShape`                                                                | `validators/processingOperations.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
 | Go-template syntax                                                            | `validateTemplateExpression` (Parse step)                                                         | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
 
 ---
@@ -321,6 +383,20 @@ validator useful and low-false-positive while staying offline.
     `error` — the choice already made for the executor-URL shape rule. That is parity
     with the save door, not a divergence, but it means a refusal here does **not** imply
     a broken running flow.
+
+11. **A malformed processing-operation entry produces no shape verdict (v2.647.0).**
+    The reference's custom unmarshaller refuses an entry that is not a map, that
+    carries more than one non-`if` key, or whose config is not a mapping — those
+    flows never reach the rules above, because they fail to parse at all. This
+    validator has no typed unmarshal, so such an entry simply yields no
+    operation to have an opinion about and both rules stay silent; the
+    structural pass keeps whatever it already said. Same family as divergence
+    #8, in the lenient direction.
+
+    Scope note, not a divergence: both implementations check the **top-level**
+    step's processing blocks only. A loop body is a second step table neither
+    walks yet, which is why `loop.set` / `loop.break` are reported as
+    undispatchable wherever this rule can currently see them.
 
 ---
 
