@@ -87,7 +87,7 @@ discipline for keeping the two in sync.
 > reference it ports** — the opposite of the direction a mirror is usually wrong in,
 > and invisible to both sides.
 >
-> What changed here: nothing about *what* is reported, only *where*. The reference
+> What changed here: nothing about _what_ is reported, only _where_. The reference
 > unmarshals a processing operation's single key into `OperationType` and its body
 > into an inline `Config`, so it addresses findings as
 > `steps.<id>.post_processing[0].<configKey>` and `steps.<id>.post_processing[0].if`.
@@ -99,7 +99,7 @@ discipline for keeping the two in sync.
 > grounded on the namespaces the processing handler actually builds — which is
 > **narrower** than a step's own context (no `.loop`, no `.binary`, four of five
 > `.step` sub-namespaces absent, and `.step.response` only after the step, holding
-> the *evaluated* response). That whole class stays out of scope here under
+> the _evaluated_ response). That whole class stays out of scope here under
 > **divergence #3**, unchanged.
 
 > v2.642.0 — **`expression_functions:` stopped being inert.** The block had always

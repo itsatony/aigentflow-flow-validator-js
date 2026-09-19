@@ -66,18 +66,16 @@ function validateOne(
   // WARNING, not error, matching the reference: it is consulted at the RUN door
   // over flows that are already stored, and the declaration is INERT rather than
   // fatal — the run does not die, it takes a different path.
-  if (
-    action !== ACTION_GOTO &&
-    isString(strategy.goto_step) &&
-    strategy.goto_step !== ''
-  ) {
-    const shown = action === undefined || action === '' ? '(absent, defaults to fail)' : String(action);
+  if (action !== ACTION_GOTO && isString(strategy.goto_step) && strategy.goto_step !== '') {
+    const shown =
+      action === undefined || action === '' ? '(absent, defaults to fail)' : String(action);
     issues.warn({
       field: `${field}.goto_step`,
       message: `goto_step '${strategy.goto_step}' on ${stepID ? `step '${stepID}'` : 'the flow-level error_strategy'} can never be taken: the engine reads goto_step only when action is "goto", and this action is '${shown}'`,
       code: 'unreachable_error_goto',
       ...(stepID ? { stepId: stepID } : {}),
-      suggestion: 'Set action: "goto" (retries still apply through max_retries), or remove goto_step',
+      suggestion:
+        'Set action: "goto" (retries still apply through max_retries), or remove goto_step',
     });
   }
 

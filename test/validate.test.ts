@@ -681,9 +681,7 @@ describe('templates + summary', () => {
         a: {
           executor: 'mock://x/y',
           pre_processing: [{ 'data.set': { prepped: '{{ if .x }}oops' } }],
-          post_processing: [
-            { 'output.set': { done: '{{ if .y }}oops' }, if: '{{ if .z }}oops' },
-          ],
+          post_processing: [{ 'output.set': { done: '{{ if .y }}oops' }, if: '{{ if .z }}oops' }],
         },
       },
     });
