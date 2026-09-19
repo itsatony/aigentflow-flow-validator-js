@@ -1,0 +1,10 @@
+#!/bin/sh
+# The gate is local, and this hook is what makes that a fact rather than a
+# sentence in CONTRIBUTING.md. Four pushes went out unformatted while that file
+# already said "MUST pass before you push" — a rule honoured by nobody reads
+# exactly like one that holds.
+#
+# Bypass with `git push --no-verify` when you genuinely mean to.
+set -e
+echo "pre-push: running the full gate (npm run ci)…"
+npm run ci
