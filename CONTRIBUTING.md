@@ -2,7 +2,9 @@
 
 Thanks for helping improve the AIgentFlow flow validator.
 
-Requires Node ≥ 20 (the test toolchain needs it; Node 18 is EOL).
+Requires Node ≥ 22. Node 20 reached end-of-life in April 2025, and since the
+gate is now local-only (below) there is no runner that still exercises it — so
+`engines` declares only what is actually tested.
 
 ## Development setup
 
@@ -11,10 +13,19 @@ npm install
 npm run ci     # the full gate — MUST pass before you push
 ```
 
-`npm run ci` runs exactly what GitHub Actions runs — `typecheck → lint →
-format:check → test → build` — so a green local run means a green CI run. The
-GitHub workflow invokes this same script (on Node 20 and 22), so the two cannot
-diverge. **Run it before every push** (it is the pre-push step of the dev cycle).
+`npm run ci` is **the** gate — `typecheck → lint → format:check → test →
+build`. GitHub Actions is disabled for this repository (the workflow is kept,
+inert, at `.github/workflows-disabled/ci.yml` as the specification this script
+is compared against); everything runs locally.
+
+**You do not have to remember to run it.** `npm install` points git at
+`.githooks/` (via the `prepare` script) and `.githooks/pre-push` runs the full
+gate on every push. Bypass with `git push --no-verify` only when you mean to.
+
+> Why the hook exists: this paragraph already said “MUST pass before you push”,
+> and four consecutive pushes still went out with `prettier --check` failing —
+> including `main`, and including two open PRs. A rule that is only written down
+> reads exactly like one that holds.
 
 Individual steps if you need them: `npm run typecheck`, `npm run lint`,
 `npm run format` (auto-fix) / `npm run format:check`, `npm test`, `npm run build`.
