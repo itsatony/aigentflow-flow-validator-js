@@ -25,7 +25,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -57,7 +57,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "ci": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build",
-    "prepare": "npm run build"
+    "prepare": "git config core.hooksPath .githooks || true; npm run build"
   },
   "dependencies": {
     "yaml": "^2.6.0"

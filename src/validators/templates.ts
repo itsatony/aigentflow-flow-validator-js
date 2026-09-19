@@ -130,7 +130,15 @@ function walkProcessingOperation(
   }
   for (const [key, value] of Object.entries(op)) {
     if (key === PROCESSING_OP_GUARD_KEY) {
-      walkStrings(`${basePath}.${PROCESSING_OP_GUARD_KEY}`, value, stepID, issues, stats, opts, true);
+      walkStrings(
+        `${basePath}.${PROCESSING_OP_GUARD_KEY}`,
+        value,
+        stepID,
+        issues,
+        stats,
+        opts,
+        true,
+      );
       continue;
     }
     // The operation name is absorbed into OperationType; its body is inline.
@@ -157,13 +165,25 @@ export function validateTemplates(
     if (isArray(step.pre_processing)) {
       step.pre_processing.forEach((op, i) => {
         walkProcessingOperation(
-          `steps.${stepID}.pre_processing[${i}]`, op, stepID, issues, stats, opts);
+          `steps.${stepID}.pre_processing[${i}]`,
+          op,
+          stepID,
+          issues,
+          stats,
+          opts,
+        );
       });
     }
     if (isArray(step.post_processing)) {
       step.post_processing.forEach((op, i) => {
         walkProcessingOperation(
-          `steps.${stepID}.post_processing[${i}]`, op, stepID, issues, stats, opts);
+          `steps.${stepID}.post_processing[${i}]`,
+          op,
+          stepID,
+          issues,
+          stats,
+          opts,
+        );
       });
     }
     // response_expectation templates are counted (matching countTemplates) but
