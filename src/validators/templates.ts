@@ -20,7 +20,10 @@ import { Issues, isArray, isRecord, isString } from './util.js';
 import {
   PROCESSING_OP_GUARD_KEY,
   processingOperationsOfStep,
+  loopSubStepProcessingOperations,
+  loopSubStepsOfStep,
   type ProcessingOperationRef,
+  type LoopSubStepRef,
 } from './processingOperations.js';
 
 function isTemplate(value: string): boolean {
@@ -40,6 +43,7 @@ function checkTemplateString(
   issues: Issues,
   stats: TemplateStats,
   opts: ValidateOptions,
+  demote = false,
 ): void {
   if (!isTemplate(value)) return;
   stats.found += 1;
@@ -47,9 +51,20 @@ function checkTemplateString(
     knownFunctions: TEMPLATE_FUNCTIONS,
     strictFunctions: opts.strictRegistries === true,
   });
+  // DC-FORGE-78: a finding from inside a LOOP BODY is a warning, never an error.
+  //
+  // ⛔ The reference consults this validator at its RUN door
+  // (FlowYAMLResolver.validateFlowWithQueryParams refuses the mission when the
+  // result is invalid), over flows stored long before the loop body was walked
+  // by anything. ⚠️ The "the run already died anyway" licence that would make an
+  // Error safe requires the failing path to be UNCONDITIONAL, and inside a loop
+  // body four of the six evaluation sites SWALLOW a template failure and carry
+  // on with the raw string. So the walk warns, uniformly, and the CODE survives
+  // the demotion — only the severity changes.
+  const report = demote ? issues.warn.bind(issues) : issues.error.bind(issues);
   for (const err of errors) {
     if (err.isFunctionError) {
-      issues.error({
+      report({
         field,
         message: `Template ${err.message}`,
         code: 'template_function_unknown',
@@ -58,7 +73,7 @@ function checkTemplateString(
       });
     } else {
       stats.syntaxErrors += 1;
-      issues.error({
+      report({
         field,
         message: `Template syntax error: ${err.message}`,
         code: 'template_syntax_error',
@@ -79,10 +94,11 @@ function walkStrings(
   stats: TemplateStats,
   opts: ValidateOptions,
   check: boolean,
+  demote = false,
 ): void {
   if (isString(value)) {
     if (check) {
-      checkTemplateString(value, basePath, stepID, issues, stats, opts);
+      checkTemplateString(value, basePath, stepID, issues, stats, opts, demote);
     } else if (isTemplate(value)) {
       stats.found += 1;
     }
@@ -90,13 +106,13 @@ function walkStrings(
   }
   if (isArray(value)) {
     value.forEach((item, i) => {
-      walkStrings(`${basePath}[${i}]`, item, stepID, issues, stats, opts, check);
+      walkStrings(`${basePath}[${i}]`, item, stepID, issues, stats, opts, check, demote);
     });
     return;
   }
   if (isRecord(value)) {
     for (const [key, v] of Object.entries(value)) {
-      walkStrings(`${basePath}.${key}`, v, stepID, issues, stats, opts, check);
+      walkStrings(`${basePath}.${key}`, v, stepID, issues, stats, opts, check, demote);
     }
   }
 }
@@ -121,8 +137,9 @@ function walkProcessingOperation(
   stats: TemplateStats,
   opts: ValidateOptions,
 ): void {
+  const demote = ref.scope === 'loopSubStep';
   if (!isRecord(ref.raw)) {
-    walkStrings(ref.basePath, ref.raw, ref.stepId, issues, stats, opts, true);
+    walkStrings(ref.basePath, ref.raw, ref.stepId, issues, stats, opts, true, demote);
     return;
   }
   if (ref.guard !== undefined) {
@@ -134,11 +151,57 @@ function walkProcessingOperation(
       stats,
       opts,
       true,
+      demote,
     );
   }
   for (const [, value] of ref.entries) {
     // The operation name is absorbed into OperationType; its body is inline.
-    walkStrings(ref.basePath, value, ref.stepId, issues, stats, opts, true);
+    walkStrings(ref.basePath, value, ref.stepId, issues, stats, opts, true, demote);
+  }
+}
+
+/**
+ * Walk one loop sub-step's own templates — `condition:`, `query:` and
+ * `next.conditions[].if`. Its processing operations come through
+ * walkProcessingOperation like any other, because the decomposition is shared.
+ *
+ * ⛔ None of this was reachable before DC-FORGE-78: the walk below iterates
+ * `flow.steps`, and a loop body is a second step table.
+ */
+function walkLoopSubStep(
+  sub: LoopSubStepRef,
+  stepID: string,
+  issues: Issues,
+  stats: TemplateStats,
+  opts: ValidateOptions,
+): void {
+  const condition = sub.raw.condition;
+  if (isString(condition) && condition !== '') {
+    checkTemplateString(condition, `${sub.basePath}.condition`, stepID, issues, stats, opts, true);
+  }
+  if (sub.raw.query !== undefined) {
+    walkStrings(`${sub.basePath}.query`, sub.raw.query, stepID, issues, stats, opts, true, true);
+  }
+  const next = sub.raw.next;
+  if (isRecord(next) && isArray((next as NextLogicDefinition).conditions)) {
+    (next as NextLogicDefinition).conditions!.forEach(
+      (cond: NextCondition | unknown, i: number) => {
+        if (!isRecord(cond)) return;
+        const ifExpr = (cond as NextCondition).if;
+        if (isString(ifExpr) && ifExpr !== '') {
+          stats.found += 1;
+          checkTemplateString(
+            ifExpr,
+            `${sub.basePath}.next.conditions[${i}].if`,
+            stepID,
+            issues,
+            stats,
+            opts,
+            true,
+          );
+        }
+      },
+    );
   }
 }
 
@@ -159,6 +222,12 @@ export function validateTemplates(
       walkStrings(`steps.${stepID}.query`, step.query, stepID, issues, stats, opts, true);
     }
     for (const ref of processingOperationsOfStep(stepID, step)) {
+      walkProcessingOperation(ref, issues, stats, opts);
+    }
+    for (const sub of loopSubStepsOfStep(stepID, step)) {
+      walkLoopSubStep(sub, stepID, issues, stats, opts);
+    }
+    for (const ref of loopSubStepProcessingOperations(stepID, step)) {
       walkProcessingOperation(ref, issues, stats, opts);
     }
     // response_expectation templates are counted (matching countTemplates) but
