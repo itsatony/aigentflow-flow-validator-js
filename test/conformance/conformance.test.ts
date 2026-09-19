@@ -21,10 +21,53 @@ interface Case {
   expectErrorCodes?: string[];
   /** Warning codes that MUST be present. */
   expectWarningCodes?: string[];
+  /**
+   * Error codes that must NOT be present on an otherwise-valid fixture.
+   *
+   * `valid: true` already fails on ANY spurious error, so this is not the
+   * verdict-shaped hole `forbidWarningCodes` fills for warning rules. It NAMES
+   * the rule under test, so a regression reads as "the loop-target rule fired on
+   * a legal backward jump" rather than as an anonymous count mismatch.
+   */
+  forbidErrorCodes?: string[];
 }
 
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
+  {
+    // AIF v2.672.0 (DC-FORGE-102, aigentflow#116): a loop sub-step's next:
+    // targets resolve ONLY against loop.steps of the SAME loop. Both jump
+    // directions are legal and an empty target is the documented sequential
+    // advance — this fixture exercises all three, and forbids the codes so an
+    // over-firing rule cannot hide behind a rule that is merely silent.
+    file: 'valid-loop-substep-next.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'loop_substep_next_target_not_found',
+      'loop_substep_next_sentinel',
+      'loop_substep_next_parallel',
+    ],
+  },
+  {
+    // The interesting miss: the target names a real TOP-LEVEL step, which the
+    // loop driver cannot see. Before the rule this saved clean and degraded to
+    // a runtime WARN plus a silent sequential advance.
+    file: 'invalid-loop-substep-next-unknown-target.yaml',
+    valid: false,
+    expectErrorCodes: ['loop_substep_next_target_not_found'],
+  },
+  {
+    // The two top-level sentinels have no meaning in a loop body.
+    file: 'invalid-loop-substep-next-sentinel.yaml',
+    valid: false,
+    expectErrorCodes: ['loop_substep_next_sentinel'],
+  },
+  {
+    // The loop driver reads conditions/default only; a parallel block is inert.
+    file: 'invalid-loop-substep-next-parallel.yaml',
+    valid: false,
+    expectErrorCodes: ['loop_substep_next_parallel'],
+  },
   {
     // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
     // Reading `goto_step` here disabled every conditional-branch check in this
@@ -164,6 +207,9 @@ describe('conformance fixtures', () => {
       }
       for (const code of c.expectWarningCodes ?? []) {
         expect(warningCodes, `expected warning code '${code}'`).toContain(code);
+      }
+      for (const code of c.forbidErrorCodes ?? []) {
+        expect(errorCodes, `error code '${code}' must NOT be raised here`).not.toContain(code);
       }
     });
   }
