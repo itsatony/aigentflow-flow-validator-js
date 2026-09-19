@@ -21,10 +21,37 @@ interface Case {
   expectErrorCodes?: string[];
   /** Warning codes that MUST be present. */
   expectWarningCodes?: string[];
+  /**
+   * Warning codes that must NOT be present.
+   *
+   * A rule whose entire risk is a FALSE POSITIVE cannot be expressed by `valid`
+   * or by `expectWarningCodes`: a warning never changes the verdict, so an
+   * all-correct fixture is green no matter how indiscriminately the rule fires.
+   * This is the only assertion that can fail on over-firing.
+   */
+  forbidWarningCodes?: string[];
 }
 
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
+  {
+    // AIF v2.651.0 (DC-FORGE-81): `goto_step` is read ONLY when the same
+    // strategy's action is `goto`. Beside any other action the engine never
+    // looks at it and the handler is unreachable — which is what BOTH of AIF's
+    // bundled example flows shipped. Both levels are checked independently, so
+    // both are declared here.
+    file: 'warn-unreachable-error-goto.yaml',
+    valid: true,
+    expectWarningCodes: ['unreachable_error_goto'],
+  },
+  {
+    // The counter-fixture, and the one that matters: every goto_step here IS
+    // reachable. Without forbidWarningCodes this file is green even if the rule
+    // fires on every error_strategy it sees.
+    file: 'valid-reachable-error-goto.yaml',
+    valid: true,
+    forbidWarningCodes: ['unreachable_error_goto'],
+  },
   {
     // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
     // Reading `goto_step` here disabled every conditional-branch check in this
@@ -164,6 +191,9 @@ describe('conformance fixtures', () => {
       }
       for (const code of c.expectWarningCodes ?? []) {
         expect(warningCodes, `expected warning code '${code}'`).toContain(code);
+      }
+      for (const code of c.forbidWarningCodes ?? []) {
+        expect(warningCodes, `warning code '${code}' must NOT be raised here`).not.toContain(code);
       }
     });
   }
