@@ -251,6 +251,11 @@ export interface OrchestratorDefinition {
   triggers?: OrchestratorTrigger[];
   tools?: string[];
   max_turns?: number;
+  // AIF v2.695.0 (DC-FORGE-125, aigentflow#124): an OPT-IN per-question HITL
+  // deadline. Absent means no deadline — the reference treats a default here as
+  // a policy nobody chose, so this validator must never infer one either.
+  human_question_timeout?: string;
+  human_question_timeout_response?: string;
 }
 
 export interface Flow {

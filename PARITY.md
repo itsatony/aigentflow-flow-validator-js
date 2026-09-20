@@ -322,6 +322,24 @@ validator useful and low-false-positive while staying offline.
     with the save door, not a divergence, but it means a refusal here does **not** imply
     a broken running flow.
 
+11. **`orchestrator.human_question_timeout` — the refusal is ported, the WARNING is not.**
+    AIF v2.695.0 (DC-FORGE-125, aigentflow#124) adds an opt-in per-question HITL deadline. The
+    reference refuses an unparseable **or non-positive** duration, and this validator does the same
+    — note the positivity half: `-5m` is a well-formed Go duration, so a bare `isValidGoDuration`
+    check would accept what the door refuses, and an oracle **looser** than its door is wrong in the
+    more damaging direction.
+
+    The reference ALSO warns when the declared timeout exceeds `ORCH_MAX_MISSION_DURATION` (the
+    orchestrator's 60-minute runaway guard), because a deadline the mission clock outlives can never
+    fire. That is **not** ported: the threshold is a deployment-side constant this package cannot
+    observe, and hard-coding it here would put a second copy of an AIgentFlow number in another
+    repository — the drift this file exists to prevent. A flow that declares an over-long timeout is
+    therefore `valid` here and warned there.
+
+    ⚠️ Absent means **no deadline**, in both. This validator must never infer a default: the
+    reference treats a default here as a policy nobody chose, and inventing one would make the
+    oracle refuse or accept on a premise the door does not hold.
+
 ---
 
 ## Migration discipline — keep this in sync with AIgentFlow
