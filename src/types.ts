@@ -192,6 +192,8 @@ export interface StepDefinition {
   pre_processing?: unknown[];
   post_processing?: unknown[];
   response_expectation?: Record<string, ResponseExpectationField>;
+  /** Parsed but never read by the retry engine — see `max_retries_unread`. Use `error_strategy.max_retries`. */
+  max_retries?: number;
   next?: NextLogicDefinition;
   error_strategy?: ErrorStrategyDefinition;
   for_each?: ForEachDefinition;
@@ -270,8 +272,10 @@ export interface Flow {
   // Constraints are embedded inline in the Go struct, so they may also appear
   // at the top level.
   currency?: string;
+  /** Parsed but never enforced — see `flow_budget_unenforced`. Use `billing.max_credits`. */
   budget?: number;
   max_duration?: string;
+  /** Parsed but never read by the retry engine — see `max_retries_unread`. */
   max_retries?: number;
   orchestrator?: OrchestratorDefinition;
   campaign?: Record<string, unknown>;

@@ -828,3 +828,98 @@ describe('quality_gate block (DC-CP-8)', () => {
     expect(codes(r)).toContain('quality_gate_on_parallel_member');
   });
 });
+
+describe('limits nothing reads (AIF DC-FORGE-146)', () => {
+  const budgetMessage = (g: string, currency: string): string =>
+    `budget: ${g} is never enforced: no part of the engine reads it, so a mission is not stopped at this figure. The spend ceiling that IS enforced is billing.max_credits (in credits, not ${currency}): it caps the mission's credit reservation and refuses further agentic turns (agentic ai://, exons://, the orchestrator) once reached. Plain chat steps and flow:// sub-flows are not checked against it. Set billing.max_credits, or remove budget.`;
+  const retriesMessage = (n: number, owner: string): string =>
+    `max_retries: ${n} on ${owner} is never read: the retry engine takes its retry count only from error_strategy.max_retries (or, without one, from the error category's default). Move it into ${owner}'s error_strategy, e.g. error_strategy: { action: "retry", max_retries: ${n} }, or remove it.`;
+
+  it('warns on a top-level budget, with the reference message verbatim', () => {
+    const r = validateFlowObject({ ...MINIMAL, budget: 0.000001 });
+    expect(r.valid).toBe(true);
+    const w = r.warnings.filter((x) => x.code === 'flow_budget_unenforced');
+    expect(w).toHaveLength(1);
+    expect(w[0]?.field).toBe('budget');
+    expect(w[0]?.stepId).toBeUndefined();
+    // Byte-identical to WARN_MSG_FLOW_BUDGET_UNENFORCED with Go's %g and "USD".
+    expect(w[0]?.message).toBe(budgetMessage('1e-06', 'USD'));
+  });
+  it('warns on budget: 0 and names the declared currency', () => {
+    const r = validateFlowObject({ ...MINIMAL, budget: 0, currency: 'EUR' });
+    const w = r.warnings.find((x) => x.code === 'flow_budget_unenforced');
+    expect(w?.message).toBe(budgetMessage('0', 'EUR'));
+  });
+  it("formats the budget the way Go's %g does", () => {
+    for (const [value, g] of [
+      [5, '5'],
+      [5.5, '5.5'],
+      [0.0001, '0.0001'],
+      [0.00001, '1e-05'],
+      [123456, '123456'],
+      [1000000, '1e+06'],
+      [1234567, '1.234567e+06'],
+      [-2.5, '-2.5'],
+      [1e100, '1e+100'],
+    ] as const) {
+      const r = validateFlowObject({ ...MINIMAL, budget: value });
+      const w = r.warnings.find((x) => x.code === 'flow_budget_unenforced');
+      expect(w?.message, String(value)).toBe(budgetMessage(g, 'USD'));
+    }
+  });
+  it('does not warn without a top-level budget', () => {
+    for (const extra of [
+      {},
+      { currency: 'USD' },
+      { billing: { max_credits: 100 } },
+      { constraints: { budget: 5 } },
+    ]) {
+      const r = validateFlowObject({ ...MINIMAL, ...extra });
+      expect(warnCodes(r), JSON.stringify(extra)).not.toContain('flow_budget_unenforced');
+    }
+  });
+
+  it('warns on flow-level and step-level max_retries, one per location', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      max_retries: 0,
+      steps: { a: { executor: 'mock://x/y', max_retries: 3 } },
+    });
+    expect(r.valid).toBe(true);
+    const w = r.warnings.filter((x) => x.code === 'max_retries_unread');
+    expect(w).toHaveLength(2);
+    const flowW = w.find((x) => x.field === 'max_retries');
+    expect(flowW?.stepId).toBeUndefined();
+    // Byte-identical to WARN_MSG_MAX_RETRIES_UNREAD with Go's %d and %q.
+    expect(flowW?.message).toBe(retriesMessage(0, 'the flow'));
+    const stepW = w.find((x) => x.field === 'steps.a.max_retries');
+    expect(stepW?.stepId).toBe('a');
+    expect(stepW?.message).toBe(retriesMessage(3, 'step "a"'));
+  });
+  it('does not warn on error_strategy.max_retries, or inside a loop body', () => {
+    for (const flow of [
+      { ...MINIMAL, error_strategy: { action: 'retry', max_retries: 2 } },
+      {
+        ...MINIMAL,
+        steps: {
+          a: { executor: 'mock://x/y', error_strategy: { action: 'retry', max_retries: 1 } },
+        },
+      },
+      {
+        ...MINIMAL,
+        steps: {
+          a: {
+            loop: {
+              while: '{{ true }}',
+              max_iterations: 3,
+              steps: [{ id: 's1', executor: 'mock://x/y', max_retries: 2 }],
+            },
+          },
+        },
+      },
+    ]) {
+      const r = validateFlowObject(flow);
+      expect(warnCodes(r), JSON.stringify(flow)).not.toContain('max_retries_unread');
+    }
+  });
+});

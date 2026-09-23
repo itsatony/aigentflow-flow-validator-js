@@ -12,6 +12,7 @@ import { validateBasicStructure } from './validators/basicStructure.js';
 import { validateExecutors } from './validators/executors.js';
 import { validateQuerySchema } from './validators/querySchema.js';
 import { validateResponseExpectations } from './validators/responseExpectation.js';
+import { validateUnreadLimits } from './validators/unreadLimits.js';
 import { validateErrorStrategies } from './validators/errorStrategy.js';
 import { validateConnectivity } from './validators/connectivity.js';
 import { validateNextLogic } from './validators/nextLogic.js';
@@ -79,6 +80,7 @@ export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): V
   validateExecutors(f, issues);
   validateQuerySchema(f, issues);
   validateResponseExpectations(f, issues);
+  validateUnreadLimits(f, issues);
   validateErrorStrategies(f, issues);
   validateConnectivity(f, issues);
   validateNextLogic(f, issues);

@@ -6,6 +6,55 @@ discipline for keeping the two in sync.
 
 **Tracks AIgentFlow flow schema: `v2.642.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
 
+> DC-FORGE-146 (no grammar change, so `specVersion` stays `2.642.0`) — **two new
+> static rules ported, both warnings: `flow_budget_unenforced` and
+> `max_retries_unread`.** Each is a limit the flow grammar accepts and the
+> reference's engine never reads:
+>
+> - **`budget:`** (top level) is parsed, saved, and copied into runtime option
+>   fields that nothing consults. The reference ran a hermetic mission with
+>   `budget: 0.000001` against $2 of mock spend and it **completed**. The ceiling
+>   that is enforced is `billing.max_credits`, and the message states its reach
+>   (agentic turns only; not plain chat, not `flow://` sub-flows). `budget: 0`
+>   warns too. A `budget` nested under any other mapping is not this field.
+> - **`max_retries:`** on the flow, or directly on a top-level step, is never read:
+>   the retry engine takes its count only from `error_strategy.max_retries`. The
+>   reference measured an always-failing step making the same **2** attempts with
+>   no retry config, with step `max_retries` 0 and 3, and with flow `max_retries`
+>   0 — and **1** attempt with `error_strategy: { action: retry, max_retries: 1 }`.
+>   One warning per location. Loop sub-steps are not walked: their type in the
+>   reference has no `max_retries` field.
+>
+> Both are **warnings** for the reason recorded under `response_expectation_unread`:
+> the reference consults them at its RUN door over flows that are already stored,
+> and the declarations are inert rather than fatal. Both messages are the
+> reference's `WARN_MSG_FLOW_BUDGET_UNENFORCED` / `WARN_MSG_MAX_RETRIES_UNREAD`
+> verbatim. Go's `%q` is rendered as `JSON.stringify` (as in #12), and Go's `%g`
+> by a small port (`goFormatG`), because JS's `String()` switches to exponent form
+> at different exponents and prints one exponent digit — `%g` of `0.000001` is
+> `1e-06`, which `String()` renders `0.000001`. The port was checked against Go's
+> own output for the eleven values the unit test pins.
+>
+> The false positive to guard is the working key one level down:
+> `error_strategy.max_retries` at flow **and** step level, and `billing.max_credits`.
+> The counter-fixture `valid-unread-limits-working-keys.yaml` carries
+> `forbidWarningCodes` for both codes; two mutants (reading
+> `error_strategy.max_retries` as the step-level key; firing the budget rule on a
+> `billing:` block) each fail one unit test and that fixture.
+>
+> Small divergences, none of which changes a verdict: the reference **refuses at
+> parse** a non-numeric `budget`, or a non-integer `max_retries`, because its
+> struct fields are `*float64` / `*int`; this validator does not type-check those
+> keys and simply does not warn on them. The reference iterates its step map in
+> Go's random order, so the order of per-step `max_retries_unread` warnings is
+> document order here and unspecified there (the comparison contract is codes, not
+> order).
+>
+> ⚠️ **`specVersion` deliberately understates**, as in #8 and #12: this branch is
+> cut from `main`, which does not carry the rules sitting in the open PRs.
+> `forbidWarningCodes` is added here too because it is not yet on `main`; it is
+> byte-identical to #8's and #12's, so the merge is trivial in any order.
+
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
 > `validateProcessingOperation` took `operation any` and asserted `map[string]any`
@@ -234,6 +283,8 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | Query/property/array-item schema + array constraints                          | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints` | `validators/querySchema.ts`                              | `validate.test.ts`                          |
 | Response-expectation types + array items + `required`                         | `ValidateFlow` (response block), `validateSemantics`                                              | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
 | Error strategy (action, goto, max_delay, backoff, retry_on)                   | `validateErrorStrategy`                                                                           | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
+| Flow `budget:` nothing enforces (`flow_budget_unenforced`, warning)           | `validateFlowBudgetIsEnforced` (validation.go)                                                    | `validators/unreadLimits.ts`                             | `validate.test.ts`, `conformance.test.ts`   |
+| Flow/step `max_retries:` nothing reads (`max_retries_unread`, warning)        | `validateMaxRetriesIsRead` (validation.go)                                                        | `validators/unreadLimits.ts`                             | `validate.test.ts`, `conformance.test.ts`   |
 | `next` references, reachability, cycles                                       | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                | `validators/connectivity.ts`                             | `validate.test.ts`                          |
 | `next.parallel` + orchestrator-next requirement                               | `validateNextLogic`, `validateOrchestratorNext`                                                   | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
 | Expression functions (XOR package/function)                                   | `validateExpressionFunctions`                                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |

@@ -1,0 +1,21 @@
+aigentflow_version: '2.0.0'
+name: unread-limits
+version: '1.0.0'
+description: >-
+  Two limits nothing reads. The top-level budget is parsed and saved but no
+  part of the engine enforces it, and max_retries on the flow or directly on a
+  step is never consulted: the retry engine takes its count only from
+  error_strategy.max_retries. The flow still SAVES and RUNS — each declaration
+  is inert, not fatal — so these are warnings on a valid flow.
+start: fetch
+budget: 0.000001
+currency: EUR
+max_retries: 0
+steps:
+  fetch:
+    executor: function://text/template
+    query:
+      message: 'Fetch.'
+    max_retries: 3
+    next:
+      default: 'null'

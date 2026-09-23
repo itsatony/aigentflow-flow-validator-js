@@ -21,10 +21,36 @@ interface Case {
   expectErrorCodes?: string[];
   /** Warning codes that MUST be present. */
   expectWarningCodes?: string[];
+  /**
+   * Warning codes that must NOT be present.
+   *
+   * A rule whose entire risk is a FALSE POSITIVE cannot be expressed by `valid`
+   * or by `expectWarningCodes`: a warning never changes the verdict, so an
+   * all-correct fixture is green no matter how indiscriminately the rule fires.
+   * This is the only assertion that can fail on over-firing.
+   */
+  forbidWarningCodes?: string[];
 }
 
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
+  {
+    // AIF DC-FORGE-146: a top-level `budget:` is never enforced — a hermetic
+    // run with `budget: 0.000001` and $2 of spend completed — and a
+    // `max_retries:` on the flow or directly on a step is never read by the
+    // retry engine, which reads only `error_strategy.max_retries`.
+    file: 'warn-unread-limits.yaml',
+    valid: true,
+    expectWarningCodes: ['flow_budget_unenforced', 'max_retries_unread'],
+  },
+  {
+    // The counter-fixture. `error_strategy.max_retries` at flow AND step level
+    // is the key the retry engine DOES read, and `billing.max_credits` is the
+    // ceiling that IS enforced; neither may warn.
+    file: 'valid-unread-limits-working-keys.yaml',
+    valid: true,
+    forbidWarningCodes: ['flow_budget_unenforced', 'max_retries_unread'],
+  },
   {
     // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
     // Reading `goto_step` here disabled every conditional-branch check in this
@@ -164,6 +190,9 @@ describe('conformance fixtures', () => {
       }
       for (const code of c.expectWarningCodes ?? []) {
         expect(warningCodes, `expected warning code '${code}'`).toContain(code);
+      }
+      for (const code of c.forbidWarningCodes ?? []) {
+        expect(warningCodes, `warning code '${code}' must NOT be raised here`).not.toContain(code);
       }
     });
   }

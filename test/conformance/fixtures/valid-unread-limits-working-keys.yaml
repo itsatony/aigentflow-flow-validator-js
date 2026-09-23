@@ -1,0 +1,24 @@
+aigentflow_version: '2.0.0'
+name: unread-limits-working-keys
+version: '1.0.0'
+description: >-
+  The keys that DO work. error_strategy.max_retries, at flow and at step level,
+  is what the retry engine reads, and billing.max_credits is the spend ceiling
+  that is enforced. A currency with no budget declares no limit at all.
+start: fetch
+currency: USD
+billing:
+  max_credits: 500
+error_strategy:
+  action: retry
+  max_retries: 2
+steps:
+  fetch:
+    executor: function://text/template
+    query:
+      message: 'Fetch.'
+    error_strategy:
+      action: retry
+      max_retries: 1
+    next:
+      default: 'null'

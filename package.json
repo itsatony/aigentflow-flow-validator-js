@@ -1,6 +1,6 @@
 {
   "name": "@vaudience/aigentflow-flow-validator",
-  "version": "0.8.1",
+  "version": "0.8.7",
   "publishConfig": {
     "access": "public"
   },
