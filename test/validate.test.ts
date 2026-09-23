@@ -264,6 +264,37 @@ describe('response_expectation', () => {
     });
     expect(codes(r)).toContain('response_expectation_array_items_missing');
   });
+  it('warns when no response_evaluation reads the expectation (DC-FORGE-145)', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: 'mock://x/y', response_expectation: { f: { type: 'string' } } } },
+    });
+    expect(r.valid).toBe(true);
+    const w = r.warnings.find((x) => x.code === 'response_expectation_unread');
+    expect(w?.field).toBe('steps.a.response_expectation');
+    expect(w?.stepId).toBe('a');
+    // Byte-identical to the reference's WARN_MSG_RESPONSE_EXPECTATION_UNREAD with %q.
+    expect(w?.message).toBe(
+      'response_expectation on step "a" is never checked: the engine reads it only when response_evaluation is set, and this step sets none, so required, type and fallback do nothing. Add response_evaluation: "raw-text" to check these fields against the executor\'s response unchanged, or remove response_expectation.',
+    );
+  });
+  it('does not warn when an evaluation mode is set, on async://, or on an empty expectation', () => {
+    const re = { f: { type: 'string' } };
+    for (const step of [
+      { executor: 'mock://x/y', response_evaluation: 'raw-text', response_expectation: re },
+      {
+        executor: 'mock://x/y',
+        response_evaluation: 'markdown-json-block',
+        response_expectation: re,
+      },
+      { executor: 'async://human/approve', response_expectation: re },
+      { executor: 'mock://x/y', response_expectation: {} },
+      { executor: 'mock://x/y' },
+    ]) {
+      const r = validateFlowObject({ ...MINIMAL, steps: { a: step } });
+      expect(warnCodes(r), JSON.stringify(step)).not.toContain('response_expectation_unread');
+    }
+  });
 });
 
 describe('error_strategy', () => {

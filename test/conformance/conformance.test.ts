@@ -21,10 +21,45 @@ interface Case {
   expectErrorCodes?: string[];
   /** Warning codes that MUST be present. */
   expectWarningCodes?: string[];
+  /**
+   * Warning codes that must NOT be present.
+   *
+   * A rule whose entire risk is a FALSE POSITIVE cannot be expressed by `valid`
+   * or by `expectWarningCodes`: a warning never changes the verdict, so an
+   * all-correct fixture is green no matter how indiscriminately the rule fires.
+   * This is the only assertion that can fail on over-firing.
+   */
+  forbidWarningCodes?: string[];
 }
 
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
+  {
+    // AIF DC-FORGE-145: `response_expectation` is read ONLY when
+    // `response_evaluation` is set. Without one, required/type/fallback are
+    // inert — the reference found 25 such steps in its own bundled flows.
+    file: 'warn-response-expectation-unread.yaml',
+    valid: true,
+    expectWarningCodes: ['response_expectation_unread'],
+  },
+  {
+    // The counter-fixtures. Each is a way the rule could over-fire: an
+    // evaluation mode that DOES read the expectation, an async:// step whose
+    // respond route enforces it on its own, and no (or an empty) expectation.
+    file: 'valid-response-expectation-raw-text.yaml',
+    valid: true,
+    forbidWarningCodes: ['response_expectation_unread'],
+  },
+  {
+    file: 'valid-response-expectation-async.yaml',
+    valid: true,
+    forbidWarningCodes: ['response_expectation_unread'],
+  },
+  {
+    file: 'valid-response-expectation-absent.yaml',
+    valid: true,
+    forbidWarningCodes: ['response_expectation_unread'],
+  },
   {
     // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
     // Reading `goto_step` here disabled every conditional-branch check in this
@@ -164,6 +199,9 @@ describe('conformance fixtures', () => {
       }
       for (const code of c.expectWarningCodes ?? []) {
         expect(warningCodes, `expected warning code '${code}'`).toContain(code);
+      }
+      for (const code of c.forbidWarningCodes ?? []) {
+        expect(warningCodes, `warning code '${code}' must NOT be raised here`).not.toContain(code);
       }
     });
   }
