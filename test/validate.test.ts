@@ -828,3 +828,80 @@ describe('quality_gate block (DC-CP-8)', () => {
     expect(codes(r)).toContain('quality_gate_on_parallel_member');
   });
 });
+
+describe('retired limit keys (AIF DC-FORGE-150, v2.721.0)', () => {
+  const retired = (r: ValidationResult) => r.errors.filter((e) => e.code === 'unknown_yaml_key');
+
+  it('refuses a flow-level budget, whatever its value (0 and null included)', () => {
+    for (const budget of [0.000001, 0, null, 'ten']) {
+      const r = validateFlowObject({ ...MINIMAL, budget });
+      expect(r.valid, `budget: ${String(budget)}`).toBe(false);
+      const hits = retired(r);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]?.field).toBe('budget');
+      expect(hits[0]?.message).toContain('v2.721.0');
+      expect(hits[0]?.message).toContain('refuses to save');
+      expect(hits[0]?.suggestion).toContain('billing: { max_credits: N }');
+      expect(hits[0]?.suggestion).toContain('flow:// sub-flows are not checked');
+    }
+  });
+
+  it('refuses a flow-level max_retries, 0 included', () => {
+    for (const max_retries of [3, 0]) {
+      const r = validateFlowObject({ ...MINIMAL, max_retries });
+      const hits = retired(r);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]?.field).toBe('max_retries');
+      expect(hits[0]?.suggestion).toContain('error_strategy: { action: "retry", max_retries: N }');
+    }
+  });
+
+  it('refuses max_retries directly on a step, one finding per step', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: { executor: 'function://text/noop', max_retries: 0, next: { default: 'b' } },
+        b: { executor: 'function://text/noop', max_retries: 3 },
+      },
+    });
+    expect(retired(r).map((e) => [e.field, e.stepId])).toEqual([
+      ['steps.a.max_retries', 'a'],
+      ['steps.b.max_retries', 'b'],
+    ]);
+  });
+
+  it('refuses max_retries on a loop sub-step (the reference type never had it)', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ lt .loop.index 3 }}',
+            max_iterations: 3,
+            steps: [{ id: 'inner', executor: 'function://text/noop', max_retries: 2 }],
+          },
+        },
+      },
+    });
+    expect(retired(r).map((e) => e.field)).toEqual(['steps.a.loop.steps[0].max_retries']);
+  });
+
+  it('never reports the working keys one level down', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      currency: 'USD',
+      max_duration: '10m',
+      billing: { max_credits: 500 },
+      error_strategy: { action: 'retry', max_retries: 2 },
+      steps: {
+        a: {
+          executor: 'function://text/noop',
+          error_strategy: { action: 'retry', max_retries: 0 },
+          quality_gate: { rubric: 'ok', threshold: 0.5, on_fail: 'retry', max_retries: 1 },
+          query: { budget: 5, max_retries: 4 },
+        },
+      },
+    });
+    expect(retired(r)).toHaveLength(0);
+  });
+});

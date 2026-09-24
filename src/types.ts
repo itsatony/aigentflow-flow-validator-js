@@ -269,10 +269,10 @@ export interface Flow {
   constraints?: Record<string, unknown>;
   // Constraints are embedded inline in the Go struct, so they may also appear
   // at the top level.
+  // `budget` and the flow-level `max_retries` were deleted from the grammar in
+  // AIgentFlow v2.721.0 (nothing read either); see validators/retiredKeys.ts.
   currency?: string;
-  budget?: number;
   max_duration?: string;
-  max_retries?: number;
   orchestrator?: OrchestratorDefinition;
   campaign?: Record<string, unknown>;
   checkpoint?: Record<string, unknown>;

@@ -136,6 +136,33 @@ const CASES: Case[] = [
     valid: true,
   },
   {
+    // AIF v2.721.0 (DC-FORGE-150): the flow-level `budget:` was deleted from the
+    // grammar — nothing read it. The save door refuses it, `0` included.
+    file: 'invalid-retired-flow-budget.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    // v2.721.0: the flow-level `max_retries:` was deleted too.
+    file: 'invalid-retired-flow-max-retries.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    // v2.721.0: and so was a `max_retries:` directly on a step.
+    file: 'invalid-retired-step-max-retries.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    // The false positive to guard: the WORKING keys one level down —
+    // error_strategy.max_retries (flow + step), quality_gate.max_retries,
+    // billing.max_credits — and the surviving currency / max_duration. An
+    // ERROR rule changes the verdict, so `valid: true` (zero errors) is the proof.
+    file: 'valid-limit-keys-one-level-down.yaml',
+    valid: true,
+  },
+  {
     file: 'invalid-references-and-templates.yaml',
     valid: false,
     expectErrorCodes: [
