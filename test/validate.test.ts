@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateFlow, validateFlowObject, type ValidationResult } from '../src/index.js';
+import { parseGoDuration } from '../src/validators/util.js';
 
 function codes(r: ValidationResult): string[] {
   return r.errors.map((e) => e.code);
@@ -826,5 +827,110 @@ describe('quality_gate block (DC-CP-8)', () => {
       },
     });
     expect(codes(r)).toContain('quality_gate_on_parallel_member');
+  });
+});
+
+describe('step max_duration the engine cannot apply (AIF DC-FORGE-147)', () => {
+  const unparseableMessage = (value: string, step: string): string =>
+    `max_duration ${JSON.stringify(value)} on step ${JSON.stringify(step)} is not a duration, so the step runs with no time limit. Use a Go duration such as "90s", "5m" or "2h" (there is no day unit: write "48h", not "2d"; templates are not rendered here), or "none" for no limit.`;
+  const loopMessage = (value: string, step: string): string =>
+    `max_duration ${JSON.stringify(value)} on loop step ${JSON.stringify(step)} bounds nothing: a loop step makes no executor call of its own, and loop sub-steps have no max_duration key. Bound the loop with loop.max_iterations, or remove max_duration.`;
+  const withStep = (step: Record<string, unknown>) => ({ ...MINIMAL, steps: { a: step } });
+  const ignored = (r: ValidationResult) =>
+    r.warnings.filter((w) => w.code === 'step_max_duration_ignored');
+
+  it('agrees with Go time.ParseDuration on every value pinned here', () => {
+    // Ground truth: `go run` of time.ParseDuration over exactly these strings.
+    for (const [value, ok] of [
+      ['90s', true],
+      ['1h30m', true],
+      ['500ms', true],
+      ['-5s', true],
+      ['0s', true],
+      ['0', true],
+      ['+0', true],
+      ['+3m', true],
+      ['1.s', true],
+      ['.5s', true],
+      ['1.5h', true],
+      ['1us', true],
+      ['1µs', true],
+      ['1μs', true],
+      ['1h1h', true],
+      ['2562047h', true],
+      ['2562048h', false],
+      ['3000000h', false],
+      ['2d', false],
+      ['5 minutes', false],
+      ['{{ .query.t }}', false],
+      ['5', false],
+      ['s', false],
+      ['.s', false],
+      ['5m ', false],
+      ['1e3s', false],
+      ['1_000s', false],
+      ['-', false],
+    ] as const) {
+      expect(parseGoDuration(value) !== null, JSON.stringify(value)).toBe(ok);
+    }
+  });
+
+  it('warns on each unparseable value, with the reference message verbatim', () => {
+    for (const value of ['2d', '5 minutes', '{{ .query.timeout }}', '5']) {
+      const r = validateFlowObject(withStep({ executor: 'mock://x/y', max_duration: value }));
+      expect(r.valid).toBe(true);
+      const w = ignored(r);
+      expect(w, value).toHaveLength(1);
+      expect(w[0]?.field).toBe('steps.a.max_duration');
+      // The reference sets no StepID on this warning.
+      expect(w[0]?.stepId).toBeUndefined();
+      expect(w[0]?.message).toBe(unparseableMessage(value, 'a'));
+    }
+  });
+
+  it('reads a YAML number as its text, as the reference string field does', () => {
+    const r = validateFlow(
+      'aigentflow_version: "2.0.0"\nname: n\nstart: a\nsteps:\n  a:\n    executor: mock://x/y\n    max_duration: 90\n',
+    );
+    expect(ignored(r)[0]?.message).toBe(unparseableMessage('90', 'a'));
+  });
+
+  it('warns on a valid max_duration on a loop step', () => {
+    const r = validateFlowObject(
+      withStep({
+        max_duration: '5m',
+        loop: {
+          while: '{{ true }}',
+          max_iterations: 2,
+          steps: [{ id: 's', executor: 'mock://x/y' }],
+        },
+      }),
+    );
+    const w = ignored(r);
+    expect(w).toHaveLength(1);
+    expect(w[0]?.message).toBe(loopMessage('5m', 'a'));
+  });
+
+  it('reports an unparseable value on a loop step once, as unparseable', () => {
+    const r = validateFlowObject(
+      withStep({ max_duration: '2d', loop: { while: '{{ true }}', max_iterations: 2, steps: [] } }),
+    );
+    const w = ignored(r);
+    expect(w).toHaveLength(1);
+    expect(w[0]?.message).toBe(unparseableMessage('2d', 'a'));
+  });
+
+  it('does not warn on applied values, no-bound spellings, or an absent key', () => {
+    for (const value of ['90s', '1h30m', '0s', '-5s', 'none', 'never', 'infinite', '', undefined]) {
+      const step: Record<string, unknown> = { executor: 'mock://x/y' };
+      if (value !== undefined) step.max_duration = value;
+      const r = validateFlowObject(withStep(step));
+      expect(warnCodes(r), String(value)).not.toContain('step_max_duration_ignored');
+    }
+  });
+
+  it('does not walk the flow-level max_duration', () => {
+    const r = validateFlowObject({ ...MINIMAL, max_duration: '2d' });
+    expect(warnCodes(r)).not.toContain('step_max_duration_ignored');
   });
 });

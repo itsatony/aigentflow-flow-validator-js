@@ -21,6 +21,15 @@ interface Case {
   expectErrorCodes?: string[];
   /** Warning codes that MUST be present. */
   expectWarningCodes?: string[];
+  /**
+   * Warning codes that must NOT be present.
+   *
+   * A rule whose entire risk is a FALSE POSITIVE cannot be expressed by `valid`
+   * or by `expectWarningCodes`: a warning never changes the verdict, so an
+   * all-correct fixture is green no matter how indiscriminately the rule fires.
+   * This is the only assertion that can fail on over-firing.
+   */
+  forbidWarningCodes?: string[];
 }
 
 const CASES: Case[] = [
@@ -145,6 +154,21 @@ const CASES: Case[] = [
       'invalid_error_strategy_action',
     ],
   },
+  {
+    // AIF DC-FORGE-147: the engine bounds each executor invocation by the
+    // step's max_duration. An unparseable value ("2d", "5 minutes", a template)
+    // bounds nothing, and neither does one on a loop step.
+    file: 'warn-step-max-duration-ignored.yaml',
+    valid: true,
+    expectWarningCodes: ['step_max_duration_ignored'],
+  },
+  {
+    // The counter-fixture: Go durations (incl. compound), the three no-bound
+    // spellings, and a bounded step beside a loop step with no max_duration.
+    file: 'valid-step-max-duration-applied.yaml',
+    valid: true,
+    forbidWarningCodes: ['step_max_duration_ignored'],
+  },
 ];
 
 describe('conformance fixtures', () => {
@@ -164,6 +188,9 @@ describe('conformance fixtures', () => {
       }
       for (const code of c.expectWarningCodes ?? []) {
         expect(warningCodes, `expected warning code '${code}'`).toContain(code);
+      }
+      for (const code of c.forbidWarningCodes ?? []) {
+        expect(warningCodes, `warning code '${code}' must NOT be raised here`).not.toContain(code);
       }
     });
   }
