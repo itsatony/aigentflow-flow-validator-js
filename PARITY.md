@@ -6,6 +6,76 @@ discipline for keeping the two in sync.
 
 **Tracks AIgentFlow flow schema: `v2.738.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
 
+> v2.738.0 — **five older save-door refusals, and one false positive removed
+> (package 0.13.0).** No grammar change, so `specVersion` stays `2.738.0`: every
+> rule below predates it and was simply never ported. The Go port
+> (`go-aigentflow-validator`) carried them first. Each was checked against the
+> reference's **strict save parser** (`NewStrictFlowParser().ParseFromYAMLBytes`,
+> then `ValidateFlowWithDetails`) with a refused shape and an accepted shape, and
+> each invalid conformance fixture was re-run with only the offending value
+> corrected, to confirm it then saves.
+>
+> 1. **`reserved_step_id_orchestrator`** (v2.484.0, DC-COND-1). A top-level step
+>    may not be called `orchestrator`: it is the engine's step id for
+>    orchestrator signals and a reserved `next:` marker. Case-sensitive
+>    (`Orchestrator` saves), top-level steps only. `basicStructure.ts`.
+> 2. **`tool_discovery_invalid`** (DC-FORGE-48). On the flow root, the
+>    orchestrator, and a step `query`, the value must be `eager`, `lazy` or
+>    `off`. Empty, null and templated values are skipped. The first two are Go
+>    `string` fields, which yaml.v3 fills from any scalar, so `tool_discovery: 5`
+>    or `true` is refused there. In a step `query` only a YAML string is judged.
+>    `saveDoor.ts`.
+> 3. **`mock_delay_invalid`** (DC-FORGE-51). A `mock_scenarios.<scenario>.<step>.delay`
+>    must pass `time.ParseDuration`. `100` is refused and `100ms` saves. Every
+>    step key is checked, including one the flow does not define, because the
+>    reference walks the scenario map. `saveDoor.ts`. See divergence #13 for
+>    the one spelling family that cannot be told apart here.
+> 4. **`output_param_empty`**. An `output:` entry may not be `''`. A YAML null
+>    entry is **not** refused: yaml.v3 drops null list entries while decoding,
+>    so the reference never sees it. `saveDoor.ts`.
+> 5. **`campaign_no_child_flows`, `campaign_child_flow_no_id`**
+>    (`CampaignConfig.Validate`). `campaign.child_flows` needs at least one entry,
+>    and each entry needs a non-empty `flow_id` or `flow_name`. Null entries are
+>    dropped before the check, as in (4): `[~]` is empty, and a null beside a real
+>    entry is ignored. `flow_id: 123` names a flow (a string field). A
+>    non-list `child_flows` or a non-mapping entry is `invalid_type`.
+>    `orchestratorCampaign.ts`.
+>
+>    The other `CampaignConfig.Validate` checks (`max_concurrent`, `max_depth`,
+>    `max_total_children` must each be `>= 1`) are **not ported, because no
+>    document can reach them**. `ApplyDefaults` runs first and replaces every
+>    value `<= 0` with a positive default. Measured: `max_concurrent: 0`,
+>    `-3`, `max_depth: 0.5` and `-1e30` all save.
+>
+> **False positive removed: `campaign.max_credits_per_child: 1.5` saves.**
+> The field is a Go `int64`, and yaml.v3 decodes a float into an int field by
+> truncating toward zero. Measured on the strict save parser: `1.5` is stored as
+> `1`, `0.9` and `-0.5` as `0` (which then passes the `>= 0` check), and `1e3`
+> as `1000`. All of them save. `-1`, `-1.5` and `-.inf` are refused by the
+> `>= 0` check. A string (`"5"`), a boolean, `.nan`, `.inf`, and any float at or
+> above 2^63 (`9.3e18`, `1e30`) fail to decode. Until now this validator refused
+> every non-integer as `invalid_type`, which made it stricter than the door it
+> predicts.
+>
+> **`parseGoDuration` is now a line-for-line port of `time.ParseDuration`**,
+> using integer arithmetic with Go's overflow rules. The old version summed in
+> floating point and was approximate near the int64 limit
+> (`9223372036854775807ns` saves, `9223372036854775808ns` does not). This also
+> affects every other duration rule that uses it (throttle, timer interval,
+> `human_question_timeout`, step `max_duration`, error-strategy delays). None of
+> their verdicts change outside that boundary.
+>
+> Cross-check over the reference's `example_flows/` (216 files; the reference
+> run through its strict save parser, then `ValidateFlowWithDetails`):
+> `unreachable_step` 25 = 25 and `potential_infinite_loop` 1 = 1, with identical
+> `(file, field)` pairs. With `strictRegistries` the verdict matches on all 216
+> files (206 valid on both sides). In default mode the same 10 files as before
+> differ, for the reason given in the 0.12.0 note. 115 of the 216 files use
+> `mock_scenarios`, `tool_discovery` or `child_flows`, and none of the new rules
+> fires on any of them. The reference's parser, validator, flow, step, campaign,
+> orchestrator, input-schema and template-registry sources are unchanged from
+> `v2.738.0` to `v2.745.0`.
+
 > v2.738.0 — **merge train (package 0.12.0).** The ten open parity PRs (#6–#12,
 > #14–#16) landed together, and `specVersion` moved from `2.642.0` straight to
 > `2.738.0`. Several of those PRs recorded a `specVersion` that deliberately
@@ -57,9 +127,8 @@ discipline for keeping the two in sync.
 > undefined template function are valid here and carry the warning instead.
 >
 > Still not ported, and older than this window: the rest of
-> `CampaignConfig.Validate` (`child_flows` must be non-empty, each entry needs a
-> `flow_id` or `flow_name`, and `max_concurrent` / `max_depth` /
-> `max_total_children` must each be at least 1 after defaults).
+> `CampaignConfig.Validate`. Ported in package 0.13.0 (note above), apart from
+> the `>= 1` checks, which no document can reach.
 
 > v2.648.0 — **the loop body is walked.** ⛔ The reference's `validateStepsInOrder`
 > iterates `flow.steps`, and a `loop:` step's sub-steps live in a SECOND step table
@@ -615,32 +684,33 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 
 ## Rule map
 
-| Area                                                                                                                    | Go source                                                                                              | JS module                                                | Tested by                                   |
-| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------- |
-| Required fields, start-step existence, per-step executor, reserved `.` in IDs                                           | `validateBasicStructure`, `ValidateFlow` head                                                          | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
-| Executor URI shape (the ONE parser) + scheme                                                                            | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                                 | `validators/executors.ts`                                | `validate.test.ts`                          |
-| Query/property/array-item schema + array constraints                                                                    | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints`      | `validators/querySchema.ts`                              | `validate.test.ts`                          |
-| Response-expectation types + array items + `required`                                                                   | `ValidateFlow` (response block), `validateSemantics`                                                   | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
-| Response expectation nothing reads (`response_expectation_unread`, warning)                                             | `validateResponseExpectationIsRead` (validation.go)                                                    | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Error strategy (action, goto, max_delay, backoff, retry_on)                                                             | `validateErrorStrategy`                                                                                | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
-| Retired `budget:` / `max_retries:` (flow, step, loop sub-step) and `campaign.budget_max_per_child` → `unknown_yaml_key` | `retiredGrammarKeys` + `KnownFields(true)` (parser.go)                                                 | `validators/retiredKeys.ts`                              | `validate.test.ts`, `conformance.test.ts`   |
-| `next` references, reachability, cycles                                                                                 | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                     | `validators/connectivity.ts`                             | `validate.test.ts`                          |
-| `next.parallel` + orchestrator-next requirement                                                                         | `validateNextLogic`, `validateOrchestratorNext`                                                        | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
-| Expression functions (XOR package/function)                                                                             | `validateExpressionFunctions`                                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
-| Expression-function catalog (`package:` refused, unknown `function:` refused)                                           | `validateExpressionFunctionCatalog` (parser.go)                                                        | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)                                              | `validateExpressionFunctionUsage` (parser.go)                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Loop / for_each / throttle                                                                                              | `validateLoop`, `validateForEach`, `validateThrottle`                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
-| Loop sub-step id that shadows a loop-result summary field (`loop_sub_step_id_reserved`, warning)                        | `validateLoopSubStepIDCollision` (validation.loopbody.go)                                              | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Loop sub-step `next:` targets (same-loop only, sentinels, no parallel)                                                  | `validateLoopSubStepNext` (parser.go)                                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Orchestrator structure + campaign requires orchestrator                                                                 | `validateOrchestrator`, `validateAndNormalizeCampaign`                                                 | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
-| Campaign `max_credits_per_child` (integer, >= 0)                                                                        | `CampaignConfig.Validate` (domain.campaign.go)                                                         | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
-| Credential bindings (`stored/...`, inject_as, exclusivity)                                                              | `validateStepCredentialBindings`                                                                       | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
-| `input_schema` definition + ordering lint                                                                               | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                        | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
-| Step `output_schema` definition (reuses the input-schema subset)                                                        | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                                    | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
-| `quality_gate:` block (rubric/threshold/on_fail/goto)                                                                   | `FlowParser.validateQualityGate` (parser.go)                                                           | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
-| Processing-operation type + per-operation config keys                                                                   | `validateProcessingOperationShape`                                                                     | `validators/processingOperations.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
-| Step `max_duration` the engine cannot apply (`step_max_duration_ignored`, warning)                                      | `validateStepMaxDurationIsApplied` (validation.go), `parseStepMaxDuration` (flowengine.steptimeout.go) | `validators/stepMaxDuration.ts`                          | `validate.test.ts`, `conformance.test.ts`   |
-| Go-template syntax                                                                                                      | `validateTemplateExpression` (Parse step)                                                              | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
+| Area                                                                                                                    | Go source                                                                                               | JS module                                                | Tested by                                   |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------- |
+| Required fields, start-step existence, per-step executor, reserved `.` in IDs, reserved id `orchestrator`               | `validateBasicStructure`, `ValidateFlow` head                                                           | `validators/basicStructure.ts`                           | `validate.test.ts`, `conformance.test.ts`   |
+| Executor URI shape (the ONE parser) + scheme                                                                            | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                                  | `validators/executors.ts`                                | `validate.test.ts`                          |
+| Query/property/array-item schema + array constraints                                                                    | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints`       | `validators/querySchema.ts`                              | `validate.test.ts`                          |
+| Response-expectation types + array items + `required`                                                                   | `ValidateFlow` (response block), `validateSemantics`                                                    | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
+| Response expectation nothing reads (`response_expectation_unread`, warning)                                             | `validateResponseExpectationIsRead` (validation.go)                                                     | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Error strategy (action, goto, max_delay, backoff, retry_on)                                                             | `validateErrorStrategy`                                                                                 | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
+| Retired `budget:` / `max_retries:` (flow, step, loop sub-step) and `campaign.budget_max_per_child` → `unknown_yaml_key` | `retiredGrammarKeys` + `KnownFields(true)` (parser.go)                                                  | `validators/retiredKeys.ts`                              | `validate.test.ts`, `conformance.test.ts`   |
+| `next` references, reachability, cycles                                                                                 | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                      | `validators/connectivity.ts`                             | `validate.test.ts`                          |
+| `next.parallel` + orchestrator-next requirement                                                                         | `validateNextLogic`, `validateOrchestratorNext`                                                         | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
+| Expression functions (XOR package/function)                                                                             | `validateExpressionFunctions`                                                                           | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
+| Expression-function catalog (`package:` refused, unknown `function:` refused)                                           | `validateExpressionFunctionCatalog` (parser.go)                                                         | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)                                              | `validateExpressionFunctionUsage` (parser.go)                                                           | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Loop / for_each / throttle                                                                                              | `validateLoop`, `validateForEach`, `validateThrottle`                                                   | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
+| Loop sub-step id that shadows a loop-result summary field (`loop_sub_step_id_reserved`, warning)                        | `validateLoopSubStepIDCollision` (validation.loopbody.go)                                               | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Loop sub-step `next:` targets (same-loop only, sentinels, no parallel)                                                  | `validateLoopSubStepNext` (parser.go)                                                                   | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Orchestrator structure + campaign requires orchestrator                                                                 | `validateOrchestrator`, `validateAndNormalizeCampaign`                                                  | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
+| Campaign `max_credits_per_child` (decoded as int64, >= 0), `child_flows`                                                | `CampaignConfig.Validate` (domain.campaign.go)                                                          | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
+| `tool_discovery` vocabulary, mock scenario `delay`, empty `output:` entry                                               | `validateToolDiscoveryVocabulary`, `validateMockScenarioDelays`, `validateOutputParameters` (parser.go) | `validators/saveDoor.ts`                                 | `validate.test.ts`, `conformance.test.ts`   |
+| Credential bindings (`stored/...`, inject_as, exclusivity)                                                              | `validateStepCredentialBindings`                                                                        | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
+| `input_schema` definition + ordering lint                                                                               | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                         | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
+| Step `output_schema` definition (reuses the input-schema subset)                                                        | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                                     | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
+| `quality_gate:` block (rubric/threshold/on_fail/goto)                                                                   | `FlowParser.validateQualityGate` (parser.go)                                                            | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
+| Processing-operation type + per-operation config keys                                                                   | `validateProcessingOperationShape`                                                                      | `validators/processingOperations.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
+| Step `max_duration` the engine cannot apply (`step_max_duration_ignored`, warning)                                      | `validateStepMaxDurationIsApplied` (validation.go), `parseStepMaxDuration` (flowengine.steptimeout.go)  | `validators/stepMaxDuration.ts`                          | `validate.test.ts`, `conformance.test.ts`   |
+| Go-template syntax                                                                                                      | `validateTemplateExpression` (Parse step)                                                               | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
 
 ---
 
@@ -748,6 +818,20 @@ validator useful and low-false-positive while staying offline.
     the reference's field is a Go string and its check runs only on a non-empty value. This validator must never infer a default: the
     reference treats a default here as a policy nobody chose, and inventing one would make the
     oracle refuse or accept on a premise the door does not hold.
+
+13. **A mock `delay` written as a number is judged by its JavaScript spelling (0.13.0).**
+    yaml.v3 fills the reference's `string` field with the scalar's **source
+    text**, and this validator only has the parsed value. They agree on every
+    number except those that parse to zero without being written `0`, `+0` or
+    `-0`: `delay: 0.0`, `00` and `0x0` are refused by the reference (no unit) and
+    accepted here. Every other number is refused on both sides, because no
+    number's text carries a unit. This is the lenient direction, and the fix is
+    the one the refusal message already gives: write a unit. Same family as
+    divergence #8.
+
+    The same limit applies to `tool_discovery` and to the campaign `flow_id` /
+    `flow_name`, where it cannot change a verdict: no number or boolean spelling
+    is a valid mode, an empty one, or a template.
 
 ---
 

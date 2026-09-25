@@ -1457,16 +1457,21 @@ describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
       validateFlowObject(
         orchFlow({}, { child_flows: [{ flow_name: 'x' }], max_credits_per_child: value }),
       );
-    for (const ok of [0, 500, null]) {
+    // A fraction SAVES: yaml.v3 truncates a float into an int64 field toward
+    // zero, so 1.5 is stored as 1 and -0.5 as 0 (measured on the reference's
+    // strict save parser). 9.2e18 is still below 2^63.
+    for (const ok of [0, 500, null, 1.5, 0.9, -0.5, 1e3, 9.2e18]) {
       const r = run(ok);
-      expect(codes(r), String(ok)).not.toContain('campaign_invalid_max_credits_per_child');
+      expect(r.valid, String(ok)).toBe(true);
       expect(
         r.errors.filter((e) => e.field === 'campaign.max_credits_per_child'),
         String(ok),
       ).toHaveLength(0);
     }
-    expect(codes(run(-1))).toContain('campaign_invalid_max_credits_per_child');
-    for (const bad of [1.5, '5']) {
+    for (const neg of [-1, -1.5, -1e30, -Infinity]) {
+      expect(codes(run(neg)), String(neg)).toContain('campaign_invalid_max_credits_per_child');
+    }
+    for (const bad of ['5', true, NaN, Infinity, 9.3e18, 1e30, [1]]) {
       expect(
         run(bad).errors.some(
           (e) => e.code === 'invalid_type' && e.field === 'campaign.max_credits_per_child',
@@ -1501,5 +1506,196 @@ describe('unknown template functions by default (PARITY.md divergence #4)', () =
       steps: { a: { executor: 'function://text/noop', query: { m: '{{ addf 1.5 2 }}' } } },
     });
     expect(warnCodes(r)).not.toContain('template_function_unknown');
+  });
+});
+
+// Reference save-door refusals the Go port carried first (PARITY.md, v2.738.0
+// save-door note). Each has its refused AND its accepted shapes pinned, because
+// every one of these rules can only be wrong in two ways.
+describe('save-door refusals (reference FlowParser.ValidateFlow)', () => {
+  const withQuery = (query: Record<string, unknown>) => ({
+    ...MINIMAL,
+    steps: { a: { executor: 'function://text/noop', query } },
+  });
+  const orchestrator = {
+    agentic: true,
+    exons:
+      '---\nname: c\ndescription: c\ntype: agent\nexecution:\n  provider: anthropic\n  model: m\n---\n{~exons.message role="system"~}c{~/exons.message~}\n',
+  };
+
+  it("refuses a top-level step called 'orchestrator', case-sensitively", () => {
+    const flow = (id: string) => ({
+      ...MINIMAL,
+      start: id,
+      steps: { [id]: { executor: 'function://text/noop' } },
+    });
+    const r = validateFlowObject(flow('orchestrator'));
+    expect(r.errors.find((e) => e.code === 'reserved_step_id_orchestrator')?.field).toBe(
+      'steps.orchestrator',
+    );
+    for (const ok of ['Orchestrator', 'orchestrate', 'orchestrator_2']) {
+      expect(validateFlowObject(flow(ok)).valid, ok).toBe(true);
+    }
+  });
+
+  it('refuses an unknown tool_discovery on the flow, the orchestrator and a step query', () => {
+    for (const bad of ['of', 'Eager', ' eager', 5, true]) {
+      const flowLevel = validateFlowObject({ ...MINIMAL, tool_discovery: bad });
+      expect(codes(flowLevel), String(bad)).toContain('tool_discovery_invalid');
+      const orchLevel = validateFlowObject({
+        ...MINIMAL,
+        orchestrator: { ...orchestrator, tool_discovery: bad },
+      });
+      expect(
+        orchLevel.errors.find((e) => e.code === 'tool_discovery_invalid')?.field,
+        String(bad),
+      ).toBe('orchestrator.tool_discovery');
+    }
+    for (const bad of ['of', 'Eager', ' eager']) {
+      const r = validateFlowObject(withQuery({ tool_discovery: bad }));
+      expect(r.errors.find((e) => e.code === 'tool_discovery_invalid')?.field, bad).toBe(
+        'steps.a.query.tool_discovery',
+      );
+    }
+  });
+
+  it('accepts the vocabulary, empty, null and templated tool_discovery values', () => {
+    for (const ok of ['eager', 'lazy', 'off', '', null, '{{ .query.mode }}']) {
+      expect(validateFlowObject({ ...MINIMAL, tool_discovery: ok }).valid, String(ok)).toBe(true);
+      expect(
+        validateFlowObject({ ...MINIMAL, orchestrator: { ...orchestrator, tool_discovery: ok } })
+          .valid,
+        String(ok),
+      ).toBe(true);
+      expect(validateFlowObject(withQuery({ tool_discovery: ok })).valid, String(ok)).toBe(true);
+    }
+    // On a step the surface is a free-form query key: only a string is judged.
+    for (const ok of [5, true, { mode: 'x' }]) {
+      expect(validateFlowObject(withQuery({ tool_discovery: ok })).valid, String(ok)).toBe(true);
+    }
+  });
+
+  it('refuses a mock_scenarios delay that is not a Go duration', () => {
+    const mock = (delay: unknown, step = 'a') => ({
+      ...MINIMAL,
+      mock_scenarios: { s1: { [step]: { delay } } },
+    });
+    for (const bad of [100, '100', 'fast', 1.5, '1e3', true, '1s ', '.s', '1S', '1_000ms', '-']) {
+      const r = validateFlowObject(mock(bad));
+      expect(r.errors.find((e) => e.code === 'mock_delay_invalid')?.field, String(bad)).toBe(
+        'mock_scenarios.s1.a.delay',
+      );
+    }
+    // The reference walks the scenario map, not the step table.
+    expect(codes(validateFlowObject(mock('100', 'ghost')))).toContain('mock_delay_invalid');
+    for (const ok of ['100ms', 0, '0', '-0', '+0', '2s', '1h30m', '-1s', '.5s', '1.s', '1µs', '']) {
+      expect(validateFlowObject(mock(ok)).valid, String(ok)).toBe(true);
+    }
+    expect(validateFlowObject(mock(null)).valid).toBe(true);
+    expect(validateFlowObject({ ...MINIMAL, mock_scenarios: { s1: { a: null } } }).valid).toBe(
+      true,
+    );
+  });
+
+  it('refuses an empty-string output entry, and not a null one', () => {
+    const r = validateFlowObject({ ...MINIMAL, output: ['x', ''] });
+    expect(r.errors.find((e) => e.code === 'output_param_empty')?.field).toBe('output[1]');
+    // Measured: yaml.v3 drops a null list entry, so the reference saves it.
+    expect(validateFlowObject({ ...MINIMAL, output: ['x', null] }).valid).toBe(true);
+    expect(validateFlowObject({ ...MINIMAL, output: ['x', 5] }).valid).toBe(true);
+  });
+
+  it('refuses a campaign with no child flow, or a child with neither flow_id nor flow_name', () => {
+    const camp = (campaign: Record<string, unknown>) =>
+      validateFlowObject({ ...MINIMAL, orchestrator, campaign });
+    for (const noChildren of [
+      {},
+      { child_flows: [] },
+      { child_flows: null },
+      { child_flows: [null] },
+    ]) {
+      expect(codes(camp(noChildren)), JSON.stringify(noChildren)).toContain(
+        'campaign_no_child_flows',
+      );
+    }
+    for (const entry of [{ alias: 'x' }, { flow_id: '' }, { flow_id: null, flow_name: '' }]) {
+      const r = camp({ child_flows: [entry] });
+      expect(
+        r.errors.find((e) => e.code === 'campaign_child_flow_no_id')?.field,
+        JSON.stringify(entry),
+      ).toBe('campaign.child_flows[0]');
+    }
+    expect(codes(camp({ child_flows: 'x' }))).toContain('invalid_type');
+    expect(codes(camp({ child_flows: ['x'] }))).toContain('invalid_type');
+  });
+
+  it('accepts child flows named by flow_id or flow_name, with null entries ignored', () => {
+    const camp = (campaign: Record<string, unknown>) =>
+      validateFlowObject({ ...MINIMAL, orchestrator, campaign });
+    for (const entry of [
+      { flow_id: 'f1' },
+      { flow_id: 123 },
+      { flow_name: 'c' },
+      { flow_name: ' ' },
+    ]) {
+      expect(camp({ child_flows: [entry] }).valid, JSON.stringify(entry)).toBe(true);
+    }
+    // Measured: yaml.v3 drops the null entry, so this saves.
+    expect(camp({ child_flows: [{ flow_name: 'c' }, null] }).valid).toBe(true);
+    // max_concurrent / max_depth / max_total_children <= 0 are replaced by
+    // defaults before CampaignConfig.Validate runs, so they never refuse.
+    expect(
+      camp({
+        child_flows: [{ flow_name: 'c' }],
+        max_concurrent: 0,
+        max_depth: -3,
+        max_total_children: 0.5,
+      }).valid,
+    ).toBe(true);
+  });
+});
+
+describe('parseGoDuration is a faithful port of time.ParseDuration', () => {
+  it('matches Go on the int64 boundary, which a float sum cannot', () => {
+    expect(parseGoDuration('9223372036854775807ns')).not.toBeNull();
+    expect(parseGoDuration('9223372036854775808ns')).toBeNull();
+    expect(parseGoDuration('-9223372036854775808ns')).not.toBeNull();
+    expect(parseGoDuration('-9223372036854775809ns')).toBeNull();
+    expect(parseGoDuration('2562047h47m16.854775807s')).not.toBeNull();
+    expect(parseGoDuration('2562047h47m16.854775808s')).toBeNull();
+  });
+
+  it('computes values the way Go does', () => {
+    for (const [input, ns] of [
+      ['1h30m', 5_400_000_000_000],
+      ['1.5h', 5_400_000_000_000],
+      ['-1.5s', -1_500_000_000],
+      ['1.000000001s', 1_000_000_001],
+      ['.5ms', 500_000],
+      ['1us', 1_000],
+      ['1μs', 1_000],
+      ['3m2s1ms', 182_001_000_000],
+      ['01s', 1_000_000_000],
+      ['0.00000000000000000001s', 0],
+    ] as const) {
+      expect(parseGoDuration(input), input).toBe(ns);
+    }
+    for (const bad of [
+      '',
+      '+',
+      '-',
+      '1',
+      '00',
+      '0.0',
+      '1.5',
+      's',
+      '.',
+      '1..5s',
+      '1s2',
+      '1 s',
+      '1d',
+    ]) {
+      expect(parseGoDuration(bad), JSON.stringify(bad)).toBeNull();
+    }
   });
 });
