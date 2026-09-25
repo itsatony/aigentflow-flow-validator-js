@@ -192,10 +192,18 @@ export interface StepDefinition {
   pre_processing?: unknown[];
   post_processing?: unknown[];
   response_expectation?: Record<string, ResponseExpectationField>;
+  /** Evaluation mode (e.g. `raw-text`). `response_expectation` is read only when this is set. */
+  response_evaluation?: string;
   next?: NextLogicDefinition;
   error_strategy?: ErrorStrategyDefinition;
   for_each?: ForEachDefinition;
   loop?: LoopDefinition;
+  /**
+   * Bounds each executor invocation of the step (a Go duration, or
+   * "none"/"never"/"infinite"). Unparseable, or on a `loop:` step, it bounds
+   * nothing — see `step_max_duration_ignored`.
+   */
+  max_duration?: string;
   credential?: string;
   credentials?: Record<string, CredentialBinding | null>;
   output_schema?: InputSchema;
@@ -251,6 +259,11 @@ export interface OrchestratorDefinition {
   triggers?: OrchestratorTrigger[];
   tools?: string[];
   max_turns?: number;
+  // AIF v2.695.0 (DC-FORGE-125, aigentflow#124): an OPT-IN per-question HITL
+  // deadline. Absent means no deadline — the reference treats a default here as
+  // a policy nobody chose, so this validator must never infer one either.
+  human_question_timeout?: string;
+  human_question_timeout_response?: string;
 }
 
 export interface Flow {
@@ -269,10 +282,10 @@ export interface Flow {
   constraints?: Record<string, unknown>;
   // Constraints are embedded inline in the Go struct, so they may also appear
   // at the top level.
+  // `budget` and the flow-level `max_retries` were deleted from the grammar in
+  // AIgentFlow v2.721.0 (nothing read either); see validators/retiredKeys.ts.
   currency?: string;
-  budget?: number;
   max_duration?: string;
-  max_retries?: number;
   orchestrator?: OrchestratorDefinition;
   campaign?: Record<string, unknown>;
   checkpoint?: Record<string, unknown>;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateFlow, validateFlowObject, type ValidationResult } from '../src/index.js';
+import { parseGoDuration } from '../src/validators/util.js';
 
 function codes(r: ValidationResult): string[] {
   return r.errors.map((e) => e.code);
@@ -264,6 +265,37 @@ describe('response_expectation', () => {
     });
     expect(codes(r)).toContain('response_expectation_array_items_missing');
   });
+  it('warns when no response_evaluation reads the expectation (DC-FORGE-145)', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: 'mock://x/y', response_expectation: { f: { type: 'string' } } } },
+    });
+    expect(r.valid).toBe(true);
+    const w = r.warnings.find((x) => x.code === 'response_expectation_unread');
+    expect(w?.field).toBe('steps.a.response_expectation');
+    expect(w?.stepId).toBe('a');
+    // Byte-identical to the reference's WARN_MSG_RESPONSE_EXPECTATION_UNREAD with %q.
+    expect(w?.message).toBe(
+      'response_expectation on step "a" is never checked: the engine reads it only when response_evaluation is set, and this step sets none, so required, type and fallback do nothing. Add response_evaluation: "raw-text" to check these fields against the executor\'s response unchanged, or remove response_expectation.',
+    );
+  });
+  it('does not warn when an evaluation mode is set, on async://, or on an empty expectation', () => {
+    const re = { f: { type: 'string' } };
+    for (const step of [
+      { executor: 'mock://x/y', response_evaluation: 'raw-text', response_expectation: re },
+      {
+        executor: 'mock://x/y',
+        response_evaluation: 'markdown-json-block',
+        response_expectation: re,
+      },
+      { executor: 'async://human/approve', response_expectation: re },
+      { executor: 'mock://x/y', response_expectation: {} },
+      { executor: 'mock://x/y' },
+    ]) {
+      const r = validateFlowObject({ ...MINIMAL, steps: { a: step } });
+      expect(warnCodes(r), JSON.stringify(step)).not.toContain('response_expectation_unread');
+    }
+  });
 });
 
 describe('error_strategy', () => {
@@ -508,6 +540,103 @@ describe('loop / for_each / throttle', () => {
     });
     expect(r.valid).toBe(true);
   });
+  it('accepts a loop sub-step next: that jumps forward and backward', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 3,
+            steps: [
+              { id: 's1', executor: 'mock://x/y', next: { default: 's3' } },
+              { id: 's2', executor: 'mock://x/y', next: { default: '' } },
+              {
+                id: 's3',
+                executor: 'mock://x/y',
+                next: { conditions: [{ if: '{{ true }}', goto: 's1' }] },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(r.valid).toBe(true);
+  });
+  it('rejects a loop sub-step next: naming a TOP-LEVEL step', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 3,
+            steps: [{ id: 's1', executor: 'mock://x/y', next: { default: 'b' } }],
+          },
+          next: { default: 'b' },
+        },
+        b: { executor: 'mock://x/y' },
+      },
+    });
+    expect(codes(r)).toContain('loop_substep_next_target_not_found');
+  });
+  it('rejects the top-level next: sentinels inside a loop body', () => {
+    for (const marker of ['null', 'orchestrator']) {
+      const r = validateFlowObject({
+        ...MINIMAL,
+        steps: {
+          a: {
+            loop: {
+              while: '{{ true }}',
+              max_iterations: 3,
+              steps: [{ id: 's1', executor: 'mock://x/y', next: { default: marker } }],
+            },
+          },
+        },
+      });
+      expect(codes(r), marker).toContain('loop_substep_next_sentinel');
+    }
+  });
+  it('reports `end` in a loop body as a missing target, not as a sentinel', () => {
+    // Divergence #2 is about TOP-LEVEL targets. Inside a loop body nothing
+    // reads `end`, and the reference refuses only `null`/`orchestrator` by name.
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 3,
+            steps: [{ id: 's1', executor: 'mock://x/y', next: { default: 'end' } }],
+          },
+        },
+      },
+    });
+    expect(codes(r)).toContain('loop_substep_next_target_not_found');
+    expect(codes(r)).not.toContain('loop_substep_next_sentinel');
+  });
+  it('rejects next.parallel inside a loop body', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 3,
+            steps: [
+              {
+                id: 's1',
+                executor: 'mock://x/y',
+                next: { parallel: { steps: ['s2'], rendezvous: 's2' } },
+              },
+              { id: 's2', executor: 'mock://x/y' },
+            ],
+          },
+        },
+      },
+    });
+    expect(codes(r)).toContain('loop_substep_next_parallel');
+  });
   it('rejects a loop over the iteration limit', () => {
     const r = validateFlowObject({
       ...MINIMAL,
@@ -660,7 +789,116 @@ describe('input_schema', () => {
   });
 });
 
+describe('processing-operation shape', () => {
+  function opFlow(ops: unknown[], phase = 'post_processing') {
+    return { ...MINIMAL, steps: { a: { executor: 'function://text/noop', [phase]: ops } } };
+  }
+
+  it('warns about an operation type the engine does not dispatch', () => {
+    const r = validateFlowObject(opFlow([{ 'data.setx': { k: 'v' } }]));
+    expect(warnCodes(r)).toContain('unknown_processing_operation');
+    // The type is the YAML map key, so the finding addresses the operation
+    // itself — there is no `operation_type` field to point an author at.
+    const w = r.warnings.find((x) => x.code === 'unknown_processing_operation');
+    expect(w?.field).toBe('steps.a.post_processing[0]');
+    // One verdict per defect: an unknown type has no key set.
+    expect(warnCodes(r)).not.toContain('unknown_processing_config_key');
+  });
+
+  it('treats loop.set and loop.break as undispatchable in a top-level step', () => {
+    // Both are handled by a loop sub-step's post-processing before it delegates,
+    // so they are legal there and nowhere else. A merged dispatch set would
+    // silently accept them here.
+    for (const type of ['loop.set', 'loop.break']) {
+      const r = validateFlowObject(opFlow([{ [type]: { x: 1 } }]));
+      expect(warnCodes(r), type).toContain('unknown_processing_operation');
+    }
+  });
+
+  it('warns about a config key the operation does not read', () => {
+    const r = validateFlowObject(opFlow([{ parse: { source: 's', onerror: 'continue' } }]));
+    const w = r.warnings.filter((x) => x.code === 'unknown_processing_config_key');
+    expect(w).toHaveLength(1);
+    expect(w[0]?.field).toBe('steps.a.post_processing[0].onerror');
+  });
+
+  it('keeps the key sets per operation rather than unioning them', () => {
+    // `asset_id` is genuinely read by binary.get/update/delete and is NOT read
+    // by binary.transform, which reads source_asset_id. A union over the
+    // operations accepts it — the failure mode is a name in the wrong half.
+    const wrong = validateFlowObject(opFlow([{ 'binary.transform': { asset_id: 'x' } }]));
+    expect(warnCodes(wrong)).toContain('unknown_processing_config_key');
+
+    const right = validateFlowObject(opFlow([{ 'binary.get': { asset_id: 'x' } }]));
+    expect(warnCodes(right)).not.toContain('unknown_processing_config_key');
+  });
+
+  it('says nothing about the keys of an open-key operation', () => {
+    // data.set writes every key into `.data`, output.set into `.output`, and
+    // conversation.append treats every key as a conversation id: the names are
+    // the author's own, so "unknown key" is not a notion that applies.
+    const r = validateFlowObject(
+      opFlow([
+        { 'data.set': { whatever: 1, another_invented_key: 2 } },
+        { 'output.set': { some_output: 'v' } },
+        { 'conversation.append': { my_convo: { role: 'user', content: 'hi' } } },
+      ]),
+    );
+    expect(warnCodes(r)).not.toContain('unknown_processing_config_key');
+    expect(warnCodes(r)).not.toContain('unknown_processing_operation');
+  });
+
+  it('does not read the `if:` guard as a config key', () => {
+    // The guard is a sibling of the operation key, except on loop.break, where
+    // `if` IS the config key.
+    const r = validateFlowObject(
+      opFlow([{ 'binary.delete': { asset_id: 'x' }, if: '{{ eq .query.go "yes" }}' }]),
+    );
+    expect(warnCodes(r)).not.toContain('unknown_processing_config_key');
+  });
+
+  it('checks pre_processing as well as post_processing', () => {
+    const r = validateFlowObject(opFlow([{ 'data.setx': {} }], 'pre_processing'));
+    const w = r.warnings.find((x) => x.code === 'unknown_processing_operation');
+    expect(w?.field).toBe('steps.a.pre_processing[0]');
+  });
+
+  it('never turns either verdict into an error', () => {
+    const r = validateFlowObject(
+      opFlow([{ 'data.setx': {} }, { parse: { source: 's', onerror: 'x' } }]),
+    );
+    expect(r.valid).toBe(true);
+    expect(r.errors).toHaveLength(0);
+  });
+});
+
 describe('templates + summary', () => {
+  // aigentflow v2.735.0 (DC-FORGE-162, aigentflow#149): Sprig's float names are
+  // registered. Under strictRegistries an unknown function is an error, so this
+  // is the only setting in which the allow-list is actually exercised.
+  it('knows the Sprig float names under strictRegistries', () => {
+    const r = validateFlowObject(
+      {
+        ...MINIMAL,
+        steps: {
+          a: {
+            executor: 'function://text/noop',
+            query: { v: '{{ divf (addf (mulf 2 0.5) 1) (float64 "2") }} {{ subf 3 1 }}' },
+          },
+        },
+      },
+      { strictRegistries: true },
+    );
+    expect(codes(r)).not.toContain('template_function_unknown');
+    const control = validateFlowObject(
+      {
+        ...MINIMAL,
+        steps: { a: { executor: 'function://text/noop', query: { v: '{{ addg 1 2 }}' } } },
+      },
+      { strictRegistries: true },
+    );
+    expect(codes(control)).toContain('template_function_unknown');
+  });
   it('reports a template syntax error and counts templates', () => {
     const r = validateFlow(
       'aigentflow_version: "2.0.0"\nname: t\nstart: a\nsteps:\n  a:\n    executor: mock://x/y\n    query:\n      v: "{{ if .x }}oops"\n',
@@ -826,5 +1064,442 @@ describe('quality_gate block (DC-CP-8)', () => {
       },
     });
     expect(codes(r)).toContain('quality_gate_on_parallel_member');
+  });
+});
+
+// DC-FORGE-78 — the loop body, and the three template functions the reference
+// used in five of its own bundled flows while registering them nowhere.
+describe('loop bodies (DC-FORGE-78)', () => {
+  const loopFlow = (sub: Record<string, unknown>) => ({
+    ...MINIMAL,
+    start: 'looper',
+    steps: {
+      looper: {
+        loop: { while: 'true', max_iterations: 3, vars: { n: '0' }, steps: [sub] },
+      },
+    },
+  });
+
+  it('walks every template site inside a loop sub-step', () => {
+    // Each site SEPARATELY: one flow with one broken template would pass while
+    // four sites stayed blind.
+    const sites: Array<[string, Record<string, unknown>, string]> = [
+      [
+        'query',
+        { id: 'b', executor: 'function://text/noop', query: { m: '{{ .x ' } },
+        'loop.steps[0].query',
+      ],
+      [
+        'condition',
+        { id: 'b', executor: 'function://text/noop', condition: '{{ .x ' },
+        'loop.steps[0].condition',
+      ],
+      [
+        'pre_processing',
+        {
+          id: 'b',
+          executor: 'function://text/noop',
+          pre_processing: [{ 'data.set': { k: '{{ .x ' } }],
+        },
+        'loop.steps[0].pre_processing[0]',
+      ],
+      [
+        'post_processing',
+        {
+          id: 'b',
+          executor: 'function://text/noop',
+          post_processing: [{ 'data.set': { k: '{{ .x ' } }],
+        },
+        'loop.steps[0].post_processing[0]',
+      ],
+      [
+        'next.conditions',
+        {
+          id: 'b',
+          executor: 'function://text/noop',
+          next: { conditions: [{ if: '{{ .x ', goto: 'b' }] },
+        },
+        'loop.steps[0].next.conditions[0].if',
+      ],
+    ];
+    for (const [name, sub, path] of sites) {
+      const r = validateFlowObject(loopFlow(sub));
+      expect(
+        r.warnings.some((w) => w.field.includes(path)),
+        `${name} must be walked`,
+      ).toBe(true);
+    }
+  });
+
+  it('never raises an ERROR from inside a loop body', () => {
+    // ⛔ The reference consults this validator at its RUN door over flows stored
+    // before the walk existed. The code survives the demotion; only severity
+    // changes — dropping the finding would be worse than an error.
+    const r = validateFlowObject(
+      loopFlow({ id: 'b', executor: 'function://text/noop', query: { m: '{{ .x ' } }),
+    );
+    expect(r.valid).toBe(true);
+    expect(r.errors.filter((e) => e.field.includes('loop.steps['))).toHaveLength(0);
+    expect(warnCodes(r)).toContain('template_syntax_error');
+  });
+
+  it('dispatches loop.set / loop.break in a loop body and nowhere else', () => {
+    for (const op of ['loop.set', 'loop.break']) {
+      const inBody = validateFlowObject(
+        loopFlow({
+          id: 'b',
+          executor: 'function://text/noop',
+          post_processing: [{ [op]: { if: 'true' } }],
+        }),
+      );
+      expect(warnCodes(inBody), `${op} is dispatchable on a loop sub-step`).not.toContain(
+        'unknown_processing_operation',
+      );
+
+      const topLevel = validateFlowObject({
+        ...MINIMAL,
+        steps: {
+          a: { executor: 'function://text/noop', post_processing: [{ [op]: { if: 'true' } }] },
+        },
+      });
+      expect(warnCodes(topLevel), `${op} is NOT dispatchable at the top level`).toContain(
+        'unknown_processing_operation',
+      );
+    }
+  });
+
+  it('knows atoi, mod and int — and still refuses an invented name', () => {
+    // ⚠️ strictRegistries is what turns an unknown function into a finding, so a
+    // fixture validated without it cannot say anything about the registry at
+    // all. Five reference flows used these three while they existed NOWHERE.
+    for (const expr of [
+      '{{ atoi .loop.vars.n }}',
+      '{{ mod .loop.vars.n 2 }}',
+      '{{ int .query.t }}',
+    ]) {
+      const r = validateFlowObject(
+        { ...MINIMAL, steps: { a: { executor: 'function://text/noop', query: { m: expr } } } },
+        { strictRegistries: true },
+      );
+      expect(codes(r), `${expr} must be accepted`).not.toContain('template_function_unknown');
+    }
+    const invented = validateFlowObject(
+      {
+        ...MINIMAL,
+        steps: { a: { executor: 'function://text/noop', query: { m: '{{ env.API_KEY }}' } } },
+      },
+      { strictRegistries: true },
+    );
+    // `env` is not and has never been a template function here — one bundled
+    // reference flow used it in its `data:` block for the life of the repo.
+    expect(codes(invented)).toContain('template_function_unknown');
+  });
+});
+
+describe('step max_duration the engine cannot apply (AIF DC-FORGE-147)', () => {
+  const unparseableMessage = (value: string, step: string): string =>
+    `max_duration ${JSON.stringify(value)} on step ${JSON.stringify(step)} is not a duration, so the step runs with no time limit. Use a Go duration such as "90s", "5m" or "2h" (there is no day unit: write "48h", not "2d"; templates are not rendered here), or "none" for no limit.`;
+  const loopMessage = (value: string, step: string): string =>
+    `max_duration ${JSON.stringify(value)} on loop step ${JSON.stringify(step)} bounds nothing: a loop step makes no executor call of its own, and loop sub-steps have no max_duration key. Bound the loop with loop.max_iterations, or remove max_duration.`;
+  const withStep = (step: Record<string, unknown>) => ({ ...MINIMAL, steps: { a: step } });
+  const ignored = (r: ValidationResult) =>
+    r.warnings.filter((w) => w.code === 'step_max_duration_ignored');
+
+  it('agrees with Go time.ParseDuration on every value pinned here', () => {
+    // Ground truth: `go run` of time.ParseDuration over exactly these strings.
+    for (const [value, ok] of [
+      ['90s', true],
+      ['1h30m', true],
+      ['500ms', true],
+      ['-5s', true],
+      ['0s', true],
+      ['0', true],
+      ['+0', true],
+      ['+3m', true],
+      ['1.s', true],
+      ['.5s', true],
+      ['1.5h', true],
+      ['1us', true],
+      ['1µs', true],
+      ['1μs', true],
+      ['1h1h', true],
+      ['2562047h', true],
+      ['2562048h', false],
+      ['3000000h', false],
+      ['2d', false],
+      ['5 minutes', false],
+      ['{{ .query.t }}', false],
+      ['5', false],
+      ['s', false],
+      ['.s', false],
+      ['5m ', false],
+      ['1e3s', false],
+      ['1_000s', false],
+      ['-', false],
+    ] as const) {
+      expect(parseGoDuration(value) !== null, JSON.stringify(value)).toBe(ok);
+    }
+  });
+
+  it('warns on each unparseable value, with the reference message verbatim', () => {
+    for (const value of ['2d', '5 minutes', '{{ .query.timeout }}', '5']) {
+      const r = validateFlowObject(withStep({ executor: 'mock://x/y', max_duration: value }));
+      expect(r.valid).toBe(true);
+      const w = ignored(r);
+      expect(w, value).toHaveLength(1);
+      expect(w[0]?.field).toBe('steps.a.max_duration');
+      // The reference sets no StepID on this warning.
+      expect(w[0]?.stepId).toBeUndefined();
+      expect(w[0]?.message).toBe(unparseableMessage(value, 'a'));
+    }
+  });
+
+  it('reads a YAML number as its text, as the reference string field does', () => {
+    const r = validateFlow(
+      'aigentflow_version: "2.0.0"\nname: n\nstart: a\nsteps:\n  a:\n    executor: mock://x/y\n    max_duration: 90\n',
+    );
+    expect(ignored(r)[0]?.message).toBe(unparseableMessage('90', 'a'));
+  });
+
+  it('warns on a valid max_duration on a loop step', () => {
+    const r = validateFlowObject(
+      withStep({
+        max_duration: '5m',
+        loop: {
+          while: '{{ true }}',
+          max_iterations: 2,
+          steps: [{ id: 's', executor: 'mock://x/y' }],
+        },
+      }),
+    );
+    const w = ignored(r);
+    expect(w).toHaveLength(1);
+    expect(w[0]?.message).toBe(loopMessage('5m', 'a'));
+  });
+
+  it('reports an unparseable value on a loop step once, as unparseable', () => {
+    const r = validateFlowObject(
+      withStep({ max_duration: '2d', loop: { while: '{{ true }}', max_iterations: 2, steps: [] } }),
+    );
+    const w = ignored(r);
+    expect(w).toHaveLength(1);
+    expect(w[0]?.message).toBe(unparseableMessage('2d', 'a'));
+  });
+
+  it('does not warn on applied values, no-bound spellings, or an absent key', () => {
+    for (const value of ['90s', '1h30m', '0s', '-5s', 'none', 'never', 'infinite', '', undefined]) {
+      const step: Record<string, unknown> = { executor: 'mock://x/y' };
+      if (value !== undefined) step.max_duration = value;
+      const r = validateFlowObject(withStep(step));
+      expect(warnCodes(r), String(value)).not.toContain('step_max_duration_ignored');
+    }
+  });
+
+  it('does not walk the flow-level max_duration', () => {
+    const r = validateFlowObject({ ...MINIMAL, max_duration: '2d' });
+    expect(warnCodes(r)).not.toContain('step_max_duration_ignored');
+  });
+});
+
+describe('retired limit keys (AIF DC-FORGE-150, v2.721.0)', () => {
+  const retired = (r: ValidationResult) => r.errors.filter((e) => e.code === 'unknown_yaml_key');
+
+  it('refuses a flow-level budget, whatever its value (0 and null included)', () => {
+    for (const budget of [0.000001, 0, null, 'ten']) {
+      const r = validateFlowObject({ ...MINIMAL, budget });
+      expect(r.valid, `budget: ${String(budget)}`).toBe(false);
+      const hits = retired(r);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]?.field).toBe('budget');
+      expect(hits[0]?.message).toContain('v2.721.0');
+      expect(hits[0]?.message).toContain('refuses to save');
+      expect(hits[0]?.suggestion).toContain('billing: { max_credits: N }');
+      expect(hits[0]?.suggestion).toContain('flow:// sub-flows are not checked');
+    }
+  });
+
+  it('refuses a flow-level max_retries, 0 included', () => {
+    for (const max_retries of [3, 0]) {
+      const r = validateFlowObject({ ...MINIMAL, max_retries });
+      const hits = retired(r);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]?.field).toBe('max_retries');
+      expect(hits[0]?.suggestion).toContain('error_strategy: { action: "retry", max_retries: N }');
+    }
+  });
+
+  it('refuses max_retries directly on a step, one finding per step', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: { executor: 'function://text/noop', max_retries: 0, next: { default: 'b' } },
+        b: { executor: 'function://text/noop', max_retries: 3 },
+      },
+    });
+    expect(retired(r).map((e) => [e.field, e.stepId])).toEqual([
+      ['steps.a.max_retries', 'a'],
+      ['steps.b.max_retries', 'b'],
+    ]);
+  });
+
+  it('refuses max_retries on a loop sub-step (the reference type never had it)', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ lt .loop.index 3 }}',
+            max_iterations: 3,
+            steps: [{ id: 'inner', executor: 'function://text/noop', max_retries: 2 }],
+          },
+        },
+      },
+    });
+    expect(retired(r).map((e) => e.field)).toEqual(['steps.a.loop.steps[0].max_retries']);
+  });
+
+  it('never reports the working keys one level down', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      currency: 'USD',
+      max_duration: '10m',
+      billing: { max_credits: 500 },
+      error_strategy: { action: 'retry', max_retries: 2 },
+      steps: {
+        a: {
+          executor: 'function://text/noop',
+          error_strategy: { action: 'retry', max_retries: 0 },
+          quality_gate: { rubric: 'ok', threshold: 0.5, on_fail: 'retry', max_retries: 1 },
+          query: { budget: 5, max_retries: 4 },
+        },
+      },
+    });
+    expect(retired(r)).toHaveLength(0);
+  });
+});
+
+describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
+  const orchFlow = (extra: Record<string, unknown>, campaign?: Record<string, unknown>) => ({
+    ...MINIMAL,
+    orchestrator: {
+      mode: 'monitor',
+      agentic: true,
+      exons:
+        '---\nname: monitor\ndescription: observe only\ntype: agent\nexecution:\n  provider: anthropic\n  model: m\n---\n{~exons.message role="system"~}observe{~/exons.message~}\n',
+      ...extra,
+    },
+    ...(campaign ? { campaign } : {}),
+  });
+
+  it('treats an empty or null human_question_timeout as absent, like the reference', () => {
+    for (const value of ['', null]) {
+      const r = validateFlowObject(orchFlow({ human_question_timeout: value }));
+      expect(codes(r), String(value)).not.toContain('orchestrator_human_question_timeout_invalid');
+    }
+    for (const value of ['0s', '-5m', '30', 'soon']) {
+      const r = validateFlowObject(orchFlow({ human_question_timeout: value }));
+      expect(codes(r), value).toContain('orchestrator_human_question_timeout_invalid');
+    }
+  });
+
+  it('warns on a loop sub-step id that is one of the loop result summary fields', () => {
+    for (const id of ['iterations', 'break', 'vars', 'duration_ms']) {
+      const r = validateFlowObject({
+        ...MINIMAL,
+        start: 'looper',
+        steps: {
+          looper: {
+            loop: {
+              while: 'true',
+              max_iterations: 2,
+              steps: [{ id, executor: 'function://text/noop' }],
+            },
+          },
+        },
+      });
+      expect(r.valid, id).toBe(true);
+      const hit = r.warnings.find((w) => w.code === 'loop_sub_step_id_reserved');
+      expect(hit?.field, id).toBe('steps.looper.loop.steps');
+      expect(hit?.stepId, id).toBe('looper');
+    }
+    const clean = validateFlowObject({
+      ...MINIMAL,
+      start: 'looper',
+      steps: {
+        looper: {
+          loop: {
+            while: 'true',
+            max_iterations: 2,
+            steps: [{ id: 'iteration', executor: 'function://text/noop' }],
+          },
+        },
+      },
+    });
+    expect(warnCodes(clean)).not.toContain('loop_sub_step_id_reserved');
+  });
+
+  it('refuses the retired campaign.budget_max_per_child, whatever its value', () => {
+    for (const value of [1.0, 0, null]) {
+      const r = validateFlowObject(
+        orchFlow({}, { child_flows: [{ flow_name: 'x' }], budget_max_per_child: value }),
+      );
+      expect(
+        r.errors.some(
+          (e) => e.code === 'unknown_yaml_key' && e.field === 'campaign.budget_max_per_child',
+        ),
+        String(value),
+      ).toBe(true);
+    }
+  });
+
+  it('checks campaign.max_credits_per_child the way the reference decodes and validates it', () => {
+    const run = (value: unknown) =>
+      validateFlowObject(
+        orchFlow({}, { child_flows: [{ flow_name: 'x' }], max_credits_per_child: value }),
+      );
+    for (const ok of [0, 500, null]) {
+      const r = run(ok);
+      expect(codes(r), String(ok)).not.toContain('campaign_invalid_max_credits_per_child');
+      expect(
+        r.errors.filter((e) => e.field === 'campaign.max_credits_per_child'),
+        String(ok),
+      ).toHaveLength(0);
+    }
+    expect(codes(run(-1))).toContain('campaign_invalid_max_credits_per_child');
+    for (const bad of [1.5, '5']) {
+      expect(
+        run(bad).errors.some(
+          (e) => e.code === 'invalid_type' && e.field === 'campaign.max_credits_per_child',
+        ),
+        String(bad),
+      ).toBe(true);
+    }
+  });
+});
+
+describe('unknown template functions by default (PARITY.md divergence #4)', () => {
+  const flow = {
+    ...MINIMAL,
+    steps: { a: { executor: 'function://text/noop', query: { m: '{{query.source_text}}' } } },
+  };
+
+  it('warns by default and keeps the verdict valid', () => {
+    const r = validateFlowObject(flow);
+    expect(r.valid).toBe(true);
+    expect(warnCodes(r)).toContain('template_function_unknown');
+  });
+
+  it('refuses under strictRegistries, as the reference does', () => {
+    const r = validateFlowObject(flow, { strictRegistries: true });
+    expect(r.valid).toBe(false);
+    expect(codes(r)).toContain('template_function_unknown');
+  });
+
+  it('says nothing about a registered function', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: 'function://text/noop', query: { m: '{{ addf 1.5 2 }}' } } },
+    });
+    expect(warnCodes(r)).not.toContain('template_function_unknown');
   });
 });

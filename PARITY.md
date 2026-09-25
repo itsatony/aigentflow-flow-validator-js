@@ -4,7 +4,389 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.642.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.738.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+
+> v2.738.0 — **merge train (package 0.12.0).** The ten open parity PRs (#6–#12,
+> #14–#16) landed together, and `specVersion` moved from `2.642.0` straight to
+> `2.738.0`. Several of those PRs recorded a `specVersion` that deliberately
+> understated, because each was cut from a `main` that lacked the others. That
+> reconciliation is now done, and those notes are removed. The per-version notes
+> below keep their original "no grammar change" wording as history.
+>
+> `2.738.0` is claimed because every grammar change between `v2.642.0` and
+> `v2.738.0` that affects a static verdict was audited against the reference and
+> is now ported, apart from the documented divergences. Three gaps turned up in
+> review and are closed in the same train:
+>
+> 1. **`loop_sub_step_id_reserved`** (v2.648.0, warning). A loop sub-step whose
+>    id is `iterations`, `break`, `vars` or `duration_ms` collides with the loop
+>    result's own summary field, so `{{ .data.<loop>.<id> }}` reads the summary.
+>    Field `steps.<id>.loop.steps`, attributed to the parent step, as upstream.
+>    Like the rest of the loop-body walk, this validator checks every step, where
+>    the reference only walks steps reachable from `start`. It is a warning either
+>    way, so no verdict changes.
+> 2. **`campaign.budget_max_per_child`** (v2.728.0, error). Retired for
+>    `max_credits_per_child`. The strict decoder refuses it and
+>    `retiredGrammarKeys` attaches advice, so it is reported as
+>    `unknown_yaml_key`, like the other retired keys in `retiredKeys.ts`.
+> 3. **`campaign.max_credits_per_child`** (v2.728.0, error). It is a Go `int64`,
+>    so a non-integer fails to decode (`invalid_type`), and `CampaignConfig.Validate`
+>    refuses a negative value (`campaign_invalid_max_credits_per_child`). Absent,
+>    `null` and `0` mean "no per-child cap".
+>
+> One false positive was also fixed: `orchestrator.human_question_timeout: ""`
+> (or `null`) was refused here, but the reference treats both as absent.
+>
+> The corpus cross-check then found two older defects, both fixed here:
+>
+> - **Seven orchestrator tool names were missing** from `orchestrator.tools`:
+>   `aif_memory_recall`, `aif_memory_reflect` and the five `aif_e2b_*` tools.
+>   The reference's `IsValidOrchestratorToolName` accepts all of them, so under
+>   `strictRegistries` this validator refused eight bundled flows the reference
+>   saves.
+> - **Divergence #4 was not true for template functions.** By default the
+>   function lookup was skipped, so an unknown function produced no finding at
+>   all. It is now a `template_function_unknown` warning by default and an error
+>   under `strictRegistries`, as #4 says.
+>
+> Cross-check over the reference's `example_flows/` (216 YAML files, the reference
+> run through `ValidateFlowWithDetails`): `unreachable_step` 25 = 25 and
+> `potential_infinite_loop` 1 = 1, with identical `(file, field)` pairs. With
+> `strictRegistries`, the valid/invalid verdict matches on all 216 files (206
+> valid on both sides). In default mode the 10 files the reference refuses for an
+> undefined template function are valid here and carry the warning instead.
+>
+> Still not ported, and older than this window: the rest of
+> `CampaignConfig.Validate` (`child_flows` must be non-empty, each entry needs a
+> `flow_id` or `flow_name`, and `max_concurrent` / `max_depth` /
+> `max_total_children` must each be at least 1 after defaults).
+
+> v2.648.0 — **the loop body is walked.** ⛔ The reference's `validateStepsInOrder`
+> iterates `flow.steps`, and a `loop:` step's sub-steps live in a SECOND step table
+> — so until v2.648.0 **no template and no operation shape inside a loop sub-step
+> had been examined by either implementation.** This validator inherited the same
+> blind spot and recorded it as a scope note, which is what that note was for.
+>
+> ⚠️ **Read it as a capability statement about the defects it PERMITS.** Turning
+> the walk on in the reference produced ten syntax findings across five of its own
+> shipped example flows, behind which sat five engine defects — including three
+> template functions (`atoi`, `mod`, `int`) that five bundled flows used and the
+> registry did not have. Those three are now in `templateFunctions`.
+>
+> 1. **Every loop-body finding is a WARNING, never an error.** ⛔ The reference
+>    consults this validator at its RUN door over flows stored long before the
+>    walk existed. ⚠️ The "the run already died anyway" licence that would make an
+>    Error safe requires the failing path to be UNCONDITIONAL, and inside a loop
+>    body four of the six evaluation sites SWALLOW a template failure and carry on
+>    with the raw string. The CODE survives the demotion; only the severity
+>    changes — dropping the finding would be worse than raising it.
+> 2. **The dispatch set is a PARTITION, never a union.** `loop.set` / `loop.break`
+>    are dispatched by `executeLoopPostProcessing` and are legal ONLY on a loop
+>    sub-step; at the top level they remain undispatchable, and a merged set would
+>    silently accept a flow that fails at run time. `dispatchableOperationTypes`
+>    takes the scope as a parameter for exactly that reason, and both halves have
+>    their own fixture.
+> 3. **Findings are attributed to the PARENT step id** — the id every other
+>    surface knows this work by — with the sub-step named by its index in the
+>    field path (`steps.<id>.loop.steps[i].…`), matching the reference.
+>
+> v2.647.0 — **a processing operation's SHAPE is now checked: the operation type,
+> and the config keys its handler reads.** Both verdicts are **warnings** in the
+> reference and here, which is the point of them: a flow carrying either mistake
+> saves and runs. An operation type the engine has no dispatch case for fails at
+> run time with "unsupported operation type"; a config key the handler never reads
+> is simply ignored, so `transformation:` written where the handler reads
+> `transformer:` produces a step that succeeds and does nothing. Ported into
+> [`src/validators/processingOperations.ts`](./src/validators/processingOperations.ts),
+> which also now owns the ONE decomposition of a processing operation —
+> `templates.ts` shares it, so the `if:` guard is recognised in a single place.
+>
+> 1. **`unknown_processing_operation`.** The dispatchable set in a top-level
+>    step's `pre_processing:` / `post_processing:` is `data.set`,
+>    `conversation.append`, `output.set`, `binary.store`, `binary.get`,
+>    `binary.update`, `binary.delete`, `binary.transform`, `parse`. `loop.set` and
+>    `loop.break` are handled by a loop sub-step's post-processing before it
+>    delegates, so they are dispatchable **only there** — and are correctly
+>    reported as undispatchable at the top level. The two scopes are kept apart
+>    rather than merged for the same reason the key sets are (below): a name in
+>    the wrong half is the failure mode, and no merged set can see it.
+>
+>    The operation type is the YAML **map key** (`- data.set: { … }`), not a
+>    field, so the finding addresses the operation itself
+>    (`steps.<id>.post_processing[0]`). Naming an `operation_type` field would
+>    send an author looking for something the grammar does not have. An unknown
+>    type also suppresses the key verdict beneath it: one verdict per defect.
+>
+> 2. **`unknown_processing_config_key`**, for the operations with a **closed** key
+>    set — `parse`, `binary.store`, `binary.get`, `binary.update`,
+>    `binary.delete`, `binary.transform`, `loop.break`. The sets are **per
+>    operation and are never unioned**: `asset_id` is read by
+>    `binary.get`/`binary.update`/`binary.delete` and is **not** read by
+>    `binary.transform`, which reads `source_asset_id`. A union over the
+>    operations accepts that key in the wrong half, which is precisely the
+>    mistake the rule exists to catch, so the spec models each operation
+>    separately and a conformance fixture pins the wrong-half case.
+>
+>    `data.set`, `output.set`, `conversation.append` and `loop.set` have **open**
+>    key sets — every key is a name the author chose (a data key, an output key, a
+>    conversation id, a loop variable) — so "unknown key" is not a notion that
+>    applies to them and they can never produce this warning. That half is what
+>    makes the rule safe; asking them for a known key set would accuse every
+>    correct flow. The `if:` guard is a **sibling** of the operation key rather
+>    than a config key, except on `loop.break`, where `if` IS its config key.
+>
+>    Scope, stated so it is not mistaken for more: **top-level config keys only**.
+>    Sub-keys of `metadata:` (forwarded to the asset store, which has its own
+>    vocabulary) and of `parameters:` (the transformer's, which varies per
+>    transformer) are out of scope in both implementations.
+>
+> Verified by running the reference validator over the new fixtures: identical
+> codes and identical field paths, and the all-correct fixture produces neither
+> code on either side.
+>
+> New conformance fixtures: `valid-processing-operation-unknown-type-warns.yaml`,
+> `valid-processing-config-key-wrong-half-warns.yaml`,
+> `valid-processing-config-keys-accepted.yaml`. The third needed a new
+> `forbidWarningCodes` assertion in the conformance harness: a rule whose whole
+> risk is a false positive needs a fixture that goes **red** when it fires, and
+> `valid: true` does not say that, because a warning never changes the verdict.
+
+> v2.652.0 (DC-FORGE-82; no grammar change, so `specVersion` stays `2.642.0`) —
+> **one new static rule ported: `loop_substep_error_goto_ignored`.** A loop BODY is
+> a second step table, and the walk that raises `unreachable_error_goto` never
+> entered it — **on either side**; this validator had the same blind spot as the
+> reference, for the same reason, which is why the finding ports rather than
+> diverges.
+>
+> ⛔ **It is a DIFFERENT finding from `unreachable_error_goto`, and collapsing the
+> two would be wrong.** That one is about a `goto_step` beside the wrong action,
+> and its remedy is to write `action: "goto"`. Inside a loop body there is no
+> action that helps: `executeLoopStep`'s failure switch has exactly two arms —
+> `continue` (skip to the next sub-step) and a default that ABORTS the whole loop
+> step — so `goto` lands in the default and the loop fails. **The strategy the
+> author chose in order to avoid failing is the one that fails.** The message names
+> the real remedy: put the `goto_step` on the LOOP step, whose own `error_strategy`
+> is what the abort routes through.
+>
+> ⚠️ **Only the new warning is emitted over loop sub-steps — deliberately.** The
+> reference's parser does not run its `error_strategy` checks (action enum, goto
+> target existence, duration and backoff validation) over a loop body at all, so
+> routing sub-steps through `validateOne` would make this oracle refuse shapes its
+> door accepts — wrong in the more damaging direction.
+>
+> The fixture pair follows the `forbidWarningCodes` discipline established below.
+> The counter-fixture puts a `goto_step` on the LOOP step beside `action: goto` —
+> the exact shape the warning's own advice produces — so a rule that fired on any
+> `goto_step` near a loop would make its own remedy warn. Both directions are
+> mutation-verified: deleting the emission fails the positive fixture, dropping the
+> `goto_step` presence guard fails the counter-fixture.
+>
+> The rest of v2.652.0 is out of scope: a composite step's `*StepError`, the
+> one-hop `.step.error` carry into a for_each/loop handler, the loop sub-step
+> strategy resolver and the unchecked `map[string]any` assertion are all engine
+> runtime behaviour (divergence #3), not static grammar.
+
+> v2.651.0 (DC-FORGE-81; no grammar change, so `specVersion` stays `2.642.0`) —
+> **one new static rule ported: `unreachable_error_goto`.** The reference's engine
+> switches on `error_strategy.action` and reads `goto_step` in the `goto` branch
+> **only**; `retry`, `fail` and an absent action all fall through to failing the
+> mission. Its parser has always checked that a `goto_step` names an existing step
+> — but only once the action already was `goto`, so the one combination that
+> silently does nothing was the one combination nothing asked about. ⛔ **Both of
+> the reference's bundled example flows declared `action: "retry"` beside a
+> `goto_step:` naming an error handler**, so neither handler was reachable, which
+> is also why several broken `.step.error` reads inside those handlers had never
+> been noticed — the steps containing them never ran.
+>
+> It is a **warning** on both sides, for the same reason: the reference consults
+> this validator at its RUN door over flows that are already stored, and the
+> declaration is INERT rather than fatal.
+>
+> ⭐ **The fixture pair is the point, and `forbidWarningCodes` is new here because
+> of it.** This rule's entire risk is a FALSE POSITIVE, and neither `valid` nor
+> `expectWarningCodes` can express that: a warning never changes the verdict, so an
+> all-correct fixture stays green no matter how indiscriminately the rule fires.
+> `valid-reachable-error-goto.yaml` forbids the code; without that assertion the
+> suite passes with the rule's guard deleted. Both directions are mutation-verified.
+>
+> The rest of v2.649.0–v2.651.0 is out of scope: v2.649.0 is SPA styling, and
+> v2.651.0's other five findings are runtime template-context behaviour
+> (divergence #3), engine routing, or documentation surface.
+
+> v2.672.0 (DC-FORGE-102, aigentflow#116; no grammar change, so `specVersion`
+> stays `2.642.0`) — **three new static rules ported: a loop sub-step's `next:`
+> targets are now checked.** A `loop:` sub-step may carry its own `next:` block,
+> and its targets — `next.default` and every `next.conditions[].goto` — resolve
+> ONLY against the sub-step ids of the SAME loop.
+>
+> ⛔ **Nothing checked them, on either side.** `validateNextLogic`,
+> `validateOrchestratorNext` and this validator's connectivity pass all walk
+> `flow.steps` only, and **a loop body is a SECOND step table** — the distinction
+> this family of defects keeps being about. So `goto: pol` for a sub-step called
+> `poll` saved clean, stored, and surfaced at run time as a WARN followed by a
+> silent sequential advance: the branch the author wrote simply never happened,
+> in the one construct whose entire purpose is branching.
+>
+> Three refusals, each with its own code, each a shape the runtime cannot act on:
+>
+> 1. **`loop_substep_next_target_not_found`** — the target names no sub-step of
+>    that loop. ⭐ **The interesting miss is a target that names a real TOP-LEVEL
+>    step**, which looks correct to every reader and to every previous check, and
+>    which the loop driver cannot see.
+> 2. **`loop_substep_next_sentinel`** — the target is `null` or `orchestrator`.
+>    The reference's `resolveLoopSubStepNext` has no sentinel awareness at all, so
+>    `null` cannot end a mission from a loop body and `orchestrator` cannot yield;
+>    both take the same miss path as a typo. (This is also why the reference's
+>    `flowHasOrchestratorYieldEdge` skipping loop bodies is correct rather than a
+>    bug: the edge is unreachable, so the fix is to refuse WRITING it.)
+> 3. **`loop_substep_next_parallel`** — the sub-step declares `next.parallel`. The
+>    loop driver reads conditions and default only, so the block never fans out
+>    and its rendezvous never runs.
+>
+> **Both jump directions stay legal** — the runtime sub-step index covers the
+> whole loop, not only the sub-steps declared earlier — which is why the check
+> runs as a SECOND pass over the already-collected id set, and why the valid
+> fixture carries a forward jump AND a backward one. **An empty target is the
+> documented "advance sequentially" and is left alone.**
+>
+> ⚠️ **`end` is reported as a missing target, not as a sentinel.** The reference
+> names only `null` and `orchestrator` and lets everything else fall through to
+> the existence check, and that is the honest answer inside a loop body, where
+> nothing reads `end` either. **Divergence #2 is about TOP-LEVEL next targets and
+> is deliberately not extended into a loop body.**
+>
+> **Severity: all three are `error` here.** Upstream they are hard refusals at the
+> SAVE door and downgraded to a warning on the stored-flow LOAD door, so a flow
+> written before the rule keeps running exactly as degraded as it already was.
+> This validator has no notion of doors and answers **"would this save"** — the
+> same choice already made for the executor-URL shape and expression-function
+> catalog rules. **No new severity was invented, and a refusal here does not imply
+> a broken running flow.**
+>
+> ⭐ **`forbidErrorCodes` is new in the conformance harness.** `valid: true`
+> already fails on any spurious error, so this is not the verdict-shaped hole
+> `forbidWarningCodes` fills for a warning rule — it NAMES the rule under test, so
+> a regression reads as "the loop-target rule fired on a legal backward jump"
+> instead of as an anonymous count mismatch. All five mutants (drop the existence
+> check, make an empty target illegal, drop the sentinel set, drop the parallel
+> check, judge targets single-pass so a forward jump is refused) are killed by
+> both a unit test and a conformance fixture.
+>
+> New conformance fixtures: `valid-loop-substep-next.yaml`,
+> `invalid-loop-substep-next-unknown-target.yaml`,
+> `invalid-loop-substep-next-sentinel.yaml`,
+> `invalid-loop-substep-next-parallel.yaml`.
+
+> DC-FORGE-145 (the release after v2.715.0; no grammar change, so `specVersion`
+> stays `2.642.0`) — **one new static rule ported: `response_expectation_unread`.**
+> The reference's engine reads a step's `response_expectation` only when
+> `response_evaluation` is set; with no evaluation mode it returns the raw response
+> untouched, so the expectation's `required`, `type` and `fallback` are never
+> consulted. The reference measured **21 such steps in 9 of its own bundled flows**,
+> including a requirement meant to fail an answer that had not searched.
+> `async://` is exempt because its respond route validates the posted output
+> against the expectation on its own. Loop sub-steps cannot declare an
+> expectation, so — unlike `unreachable_error_goto` — there is no loop-body walk.
+>
+> It is a **warning** on both sides: the reference consults it at its RUN door over
+> flows that are already stored, and the declaration is inert rather than fatal.
+> The message text is the reference's `WARN_MSG_RESPONSE_EXPECTATION_UNREAD`
+> verbatim, with Go's `%q` rendered as `JSON.stringify` (identical for printable
+> ASCII, which is all a step id holds).
+>
+> Parity was measured, not assumed: over the reference's bundled corpus **before**
+> its fix, this validator and the reference emit the **identical** 21
+> `(flow, step)` findings; after it, both emit zero. Three counter-fixtures
+> (`raw-text`, `async://`, absent/empty expectation) carry `forbidWarningCodes`, and
+> each of the rule's four guards is mutation-verified against them.
+
+> DC-FORGE-147 (no grammar change, so `specVersion` stays `2.642.0`) — **one new
+> static rule ported, a warning: `step_max_duration_ignored`.** The reference now
+> bounds each executor invocation of a step by its `max_duration`. Two
+> declarations fall outside that, each warned on at `steps.<id>.max_duration`:
+>
+> - a value that is not `none`/`never`/`infinite` and does not parse as a Go
+>   `time.ParseDuration` string (`2d`, `5 minutes`, a `{{ template }}`, a bare
+>   `90`) — the engine runs that step with **no** time limit rather than fail a
+>   stored flow at its run door;
+> - a parseable value on a `loop:` step, which makes no executor call of its own.
+>
+> Only top-level steps are walked: loop sub-steps have no `max_duration` field in
+> the reference. `0s` and negative values parse (the engine treats them as no
+> bound) and do not warn. Both messages are the reference's
+> `WARN_MSG_STEP_MAX_DURATION_UNPARSEABLE` / `_LOOP` verbatim, with `%q` rendered
+> as `JSON.stringify`. The reference sets no `StepID` on this warning, so neither
+> does this port.
+>
+> The shared `parseGoDuration` helper was brought into line with Go on two edges
+> it got wrong: `1.s` (digits on one side of the point suffice) now parses, and a
+> value overflowing int64 nanoseconds (`2562048h`) no longer does. The unit test
+> pins 28 strings against `go run` output. This also tightens `invalid_duration`
+> on throttle `delay`/`batch_delay` and error-strategy delays, toward Go.
+>
+> Divergences, none of which changes a verdict: the reference's field is a Go
+> `string`, so YAML decodes any scalar into it; this port reads a string or a
+> finite number (as its decimal text) and ignores booleans/mappings. A YAML
+> number's original spelling (`0x10`) is lost at parse here, so its text may
+> differ in the message. The overflow boundary is float-approximate to within a
+> few ns of 2^63.
+
+> AIF DC-FORGE-150 (v2.721.0) — **three grammar keys deleted because nothing read them: the top-level
+> `budget:`, the top-level `max_retries:`, and a `max_retries:` directly on a
+> top-level step.** Measured inert on the reference's real engine before the
+> deletion: a sub-cent `budget` completed a step that cost 2.0, and step
+> `max_retries: 0` still made two attempts. The reference's save door parses with
+> `KnownFields(true)`, so a flow declaring any of them is now **refused at save**,
+> with migration advice from its `retiredGrammarKeys` table (parser.go); stored
+> flows still load leniently and run.
+>
+> Ported as an **error** with the code this validator already uses for the other
+> key the reference refuses specifically, `unknown_yaml_key` (the
+> `next.conditions[].goto_step` case below) — new module
+> [`src/validators/retiredKeys.ts`](./src/validators/retiredKeys.ts). Fields:
+> `budget`, `max_retries`, `steps.<id>.max_retries`. The check is on key
+> **presence**, not value: the strict decoder refuses the key whatever it holds, so
+> `budget: 0`, `max_retries: 0` and `budget: null` are all refused. The message
+> names the version, says AIgentFlow refuses to save it, and the suggestion names
+> the replacement — `billing: { max_credits: N }` with its reach (it caps the
+> credit reservation and refuses further agentic turns: agentic `ai://`,
+> `exons://`, the orchestrator; plain chat steps and `flow://` sub-flows are not
+> checked against it), or `error_strategy: { action: "retry", max_retries: N }`
+> (N counts attempts, including the first).
+>
+> **Loop sub-steps are included** (`steps.<id>.loop.steps[<i>].max_retries`). The
+> reference's loop sub-step type never had a `max_retries` field, so it was always
+> refused there as an unknown key, independently of this deletion — and because
+> the advice table matches the key NAME in the decoder error, not the type, the
+> reference now attaches this same advice to it. Reporting it is therefore parity
+> with "would this save", not an extension; it is the one location where this
+> validator reports a generic unknown key, and it does so only because the
+> reference names it.
+>
+> The false positive to guard is the working key one level down:
+> `error_strategy.max_retries` (flow and step), `quality_gate.max_retries`,
+> `billing.max_credits`, and the surviving `currency` / `max_duration`. The
+> counter-fixture `valid-limit-keys-one-level-down.yaml` carries all of them;
+> because this is an ERROR rule, `valid: true` (zero errors) is the proof and no
+> `forbid*Codes` harness extension is needed. Four mutants were run and each was
+> killed: presence→truthiness (skips `0`/`null`; 5 tests fail), the step rule also
+> reading `error_strategy.max_retries` (2 fail), the budget rule also firing on a
+> `billing:` block (2 fail), and not walking loop sub-steps (1 fails).
+>
+> `budget` and the flow-level `max_retries` are also removed from the exported
+> `Flow` type (they were never on `StepDefinition`). `ErrorStrategyDefinition.
+max_retries` and `QualityGateDefinition.max_retries` are unchanged. Removing
+> public type fields is why the package version is a minor bump.
+>
+> **Supersedes the DC-FORGE-146 warnings** (`flow_budget_unenforced`,
+> `max_retries_unread`) proposed in an open PR for the same three keys: the keys no
+> longer exist, so there is nothing left to warn about.
+>
+> Divergence, none of which changes a verdict on a flow the reference would save:
+> the reference refuses a `budget` or `max_retries` key at ANY depth where the
+> containing type has no such field (the generic unknown-key rule, still not ported
+> — see "Unknown-key rejection" below); this validator reports only the four
+> locations above.
 
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
@@ -183,7 +565,8 @@ discipline for keeping the two in sync.
 >   Porting it means a full field inventory of `Flow`/`StepDefinition` and
 >   interacts with divergence #8. **A decision to make, not a delta.** The one
 >   case that mattered in practice — `goto_step` inside a condition — is now
->   reported specifically.
+>   reported specifically, as are the keys AIgentFlow v2.721.0 deleted from the
+>   grammar (`budget`, `max_retries` — see DC-FORGE-150 above).
 > - Everything else in the window is runtime field resolution (divergence #3),
 >   credentials/compliance (#5, #6) or documentation surface: AIF 2.526.0's
 >   `DeploymentQueryOption` rename, 2.580.0/2.582.0/2.585.0's
@@ -211,6 +594,11 @@ discipline for keeping the two in sync.
 > is engine behaviour and out of scope for static validation. New conformance
 > fixtures: `valid-orchestrator-monitor.yaml`, `invalid-orchestrator-owner-no-yield.yaml`.
 >
+> v2.735.0 (DC-FORGE-162, aigentflow#149): added Sprig's float names `addf`, `subf`,
+> `mulf`, `divf` and `float64` to `templateFunctions`. `ternary` also accepts Sprig's
+> condition-last order at runtime; that changes no name, so the allow-list is unaffected.
+> Allow-list only.
+>
 > v2.478.0: added the `htmlDocument` template function (sanitises LLM chat output
 > destined for public hosting — slices `<!doctype>`…`</html>`, dropping markdown
 > fences + conversational preamble/postamble). Allow-list only; runtime behaviour
@@ -227,25 +615,32 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 
 ## Rule map
 
-| Area                                                                          | Go source                                                                                         | JS module                                                | Tested by                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------- |
-| Required fields, start-step existence, per-step executor, reserved `.` in IDs | `validateBasicStructure`, `ValidateFlow` head                                                     | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
-| Executor URI shape (the ONE parser) + scheme                                  | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                            | `validators/executors.ts`                                | `validate.test.ts`                          |
-| Query/property/array-item schema + array constraints                          | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints` | `validators/querySchema.ts`                              | `validate.test.ts`                          |
-| Response-expectation types + array items + `required`                         | `ValidateFlow` (response block), `validateSemantics`                                              | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
-| Error strategy (action, goto, max_delay, backoff, retry_on)                   | `validateErrorStrategy`                                                                           | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
-| `next` references, reachability, cycles                                       | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                | `validators/connectivity.ts`                             | `validate.test.ts`                          |
-| `next.parallel` + orchestrator-next requirement                               | `validateNextLogic`, `validateOrchestratorNext`                                                   | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
-| Expression functions (XOR package/function)                                   | `validateExpressionFunctions`                                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
-| Expression-function catalog (`package:` refused, unknown `function:` refused) | `validateExpressionFunctionCatalog` (parser.go)                                                   | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)    | `validateExpressionFunctionUsage` (parser.go)                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Loop / for_each / throttle                                                    | `validateLoop`, `validateForEach`, `validateThrottle`                                             | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
-| Orchestrator structure + campaign requires orchestrator                       | `validateOrchestrator`, `validateAndNormalizeCampaign`                                            | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
-| Credential bindings (`stored/...`, inject_as, exclusivity)                    | `validateStepCredentialBindings`                                                                  | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
-| `input_schema` definition + ordering lint                                     | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                   | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
-| Step `output_schema` definition (reuses the input-schema subset)              | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                               | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
-| `quality_gate:` block (rubric/threshold/on_fail/goto)                         | `FlowParser.validateQualityGate` (parser.go)                                                      | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
-| Go-template syntax                                                            | `validateTemplateExpression` (Parse step)                                                         | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
+| Area                                                                                                                    | Go source                                                                                              | JS module                                                | Tested by                                   |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------- |
+| Required fields, start-step existence, per-step executor, reserved `.` in IDs                                           | `validateBasicStructure`, `ValidateFlow` head                                                          | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
+| Executor URI shape (the ONE parser) + scheme                                                                            | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                                 | `validators/executors.ts`                                | `validate.test.ts`                          |
+| Query/property/array-item schema + array constraints                                                                    | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints`      | `validators/querySchema.ts`                              | `validate.test.ts`                          |
+| Response-expectation types + array items + `required`                                                                   | `ValidateFlow` (response block), `validateSemantics`                                                   | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
+| Response expectation nothing reads (`response_expectation_unread`, warning)                                             | `validateResponseExpectationIsRead` (validation.go)                                                    | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Error strategy (action, goto, max_delay, backoff, retry_on)                                                             | `validateErrorStrategy`                                                                                | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
+| Retired `budget:` / `max_retries:` (flow, step, loop sub-step) and `campaign.budget_max_per_child` → `unknown_yaml_key` | `retiredGrammarKeys` + `KnownFields(true)` (parser.go)                                                 | `validators/retiredKeys.ts`                              | `validate.test.ts`, `conformance.test.ts`   |
+| `next` references, reachability, cycles                                                                                 | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                     | `validators/connectivity.ts`                             | `validate.test.ts`                          |
+| `next.parallel` + orchestrator-next requirement                                                                         | `validateNextLogic`, `validateOrchestratorNext`                                                        | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
+| Expression functions (XOR package/function)                                                                             | `validateExpressionFunctions`                                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
+| Expression-function catalog (`package:` refused, unknown `function:` refused)                                           | `validateExpressionFunctionCatalog` (parser.go)                                                        | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)                                              | `validateExpressionFunctionUsage` (parser.go)                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Loop / for_each / throttle                                                                                              | `validateLoop`, `validateForEach`, `validateThrottle`                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
+| Loop sub-step id that shadows a loop-result summary field (`loop_sub_step_id_reserved`, warning)                        | `validateLoopSubStepIDCollision` (validation.loopbody.go)                                              | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Loop sub-step `next:` targets (same-loop only, sentinels, no parallel)                                                  | `validateLoopSubStepNext` (parser.go)                                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Orchestrator structure + campaign requires orchestrator                                                                 | `validateOrchestrator`, `validateAndNormalizeCampaign`                                                 | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
+| Campaign `max_credits_per_child` (integer, >= 0)                                                                        | `CampaignConfig.Validate` (domain.campaign.go)                                                         | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
+| Credential bindings (`stored/...`, inject_as, exclusivity)                                                              | `validateStepCredentialBindings`                                                                       | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
+| `input_schema` definition + ordering lint                                                                               | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                        | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
+| Step `output_schema` definition (reuses the input-schema subset)                                                        | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                                    | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
+| `quality_gate:` block (rubric/threshold/on_fail/goto)                                                                   | `FlowParser.validateQualityGate` (parser.go)                                                           | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
+| Processing-operation type + per-operation config keys                                                                   | `validateProcessingOperationShape`                                                                     | `validators/processingOperations.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
+| Step `max_duration` the engine cannot apply (`step_max_duration_ignored`, warning)                                      | `validateStepMaxDurationIsApplied` (validation.go), `parseStepMaxDuration` (flowengine.steptimeout.go) | `validators/stepMaxDuration.ts`                          | `validate.test.ts`, `conformance.test.ts`   |
+| Go-template syntax                                                                                                      | `validateTemplateExpression` (Parse step)                                                              | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
 
 ---
 
@@ -321,6 +716,38 @@ validator useful and low-false-positive while staying offline.
     `error` — the choice already made for the executor-URL shape rule. That is parity
     with the save door, not a divergence, but it means a refusal here does **not** imply
     a broken running flow.
+
+11. **A malformed processing-operation entry produces no shape verdict (v2.647.0).**
+    The reference's custom unmarshaller refuses an entry that is not a map, that
+    carries more than one non-`if` key, or whose config is not a mapping — those
+    flows never reach the rules above, because they fail to parse at all. This
+    validator has no typed unmarshal, so such an entry simply yields no
+    operation to have an opinion about and both rules stay silent; the
+    structural pass keeps whatever it already said. Same family as divergence
+    #8, in the lenient direction.
+
+    Scope note, resolved in v2.648.0: both implementations now walk the loop body
+    as well, with `loop.set` / `loop.break` dispatchable there and undispatchable
+    at the top level.
+
+12. **`orchestrator.human_question_timeout` — the refusal is ported, the WARNING is not.**
+    AIF v2.695.0 (DC-FORGE-125, aigentflow#124) adds an opt-in per-question HITL deadline. The
+    reference refuses an unparseable **or non-positive** duration, and this validator does the same
+    — note the positivity half: `-5m` is a well-formed Go duration, so a bare `isValidGoDuration`
+    check would accept what the door refuses, and an oracle **looser** than its door is wrong in the
+    more damaging direction.
+
+    The reference ALSO logs a server-side warning (a log line, not a validation warning) when the declared timeout exceeds `ORCH_MAX_MISSION_DURATION` (the
+    orchestrator's 60-minute runaway guard), because a deadline the mission clock outlives can never
+    fire. That is **not** ported: the threshold is a deployment-side constant this package cannot
+    observe, and hard-coding it here would put a second copy of an AIgentFlow number in another
+    repository — the drift this file exists to prevent. A flow that declares an over-long timeout is
+    therefore `valid` on both sides; only the reference's server log mentions it.
+
+    ⚠️ Absent means **no deadline**, in both — and an empty string or YAML `null` counts as absent, because
+    the reference's field is a Go string and its check runs only on a non-empty value. This validator must never infer a default: the
+    reference treats a default here as a policy nobody chose, and inventing one would make the
+    oracle refuse or accept on a premise the door does not hold.
 
 ---
 

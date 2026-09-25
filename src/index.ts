@@ -23,6 +23,9 @@ import { validateInputSchema } from './validators/inputSchema.js';
 import { validateOutputSchemas } from './validators/outputSchema.js';
 import { validateQualityGates } from './validators/qualityGate.js';
 import { validateTemplates } from './validators/templates.js';
+import { validateProcessingOperations } from './validators/processingOperations.js';
+import { validateStepMaxDuration } from './validators/stepMaxDuration.js';
+import { validateRetiredKeys } from './validators/retiredKeys.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
 export { parseFlow } from './parse.js';
@@ -76,6 +79,7 @@ export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): V
   const f = flow as Flow;
 
   validateBasicStructure(f, issues);
+  validateRetiredKeys(f, issues);
   validateExecutors(f, issues);
   validateQuerySchema(f, issues);
   validateResponseExpectations(f, issues);
@@ -89,6 +93,8 @@ export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): V
   validateInputSchema(f, issues);
   validateOutputSchemas(f, issues);
   validateQualityGates(f, issues);
+  validateProcessingOperations(f, issues);
+  validateStepMaxDuration(f, issues);
   const templateStats = validateTemplates(f, issues, opts);
 
   const totalSteps =
