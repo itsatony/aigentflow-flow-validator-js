@@ -302,6 +302,68 @@ discipline for keeping the two in sync.
 > `forbidWarningCodes` is added here too because it is not yet on `main`; it is
 > byte-identical to #8's, #12's and #13's.
 
+> AIF DC-FORGE-150 (v2.721.0; `specVersion` deliberately stays `2.642.0`, see
+> below) — **three grammar keys deleted because nothing read them: the top-level
+> `budget:`, the top-level `max_retries:`, and a `max_retries:` directly on a
+> top-level step.** Measured inert on the reference's real engine before the
+> deletion: a sub-cent `budget` completed a step that cost 2.0, and step
+> `max_retries: 0` still made two attempts. The reference's save door parses with
+> `KnownFields(true)`, so a flow declaring any of them is now **refused at save**,
+> with migration advice from its `retiredGrammarKeys` table (parser.go); stored
+> flows still load leniently and run.
+>
+> Ported as an **error** with the code this validator already uses for the other
+> key the reference refuses specifically, `unknown_yaml_key` (the
+> `next.conditions[].goto_step` case below) — new module
+> [`src/validators/retiredKeys.ts`](./src/validators/retiredKeys.ts). Fields:
+> `budget`, `max_retries`, `steps.<id>.max_retries`. The check is on key
+> **presence**, not value: the strict decoder refuses the key whatever it holds, so
+> `budget: 0`, `max_retries: 0` and `budget: null` are all refused. The message
+> names the version, says AIgentFlow refuses to save it, and the suggestion names
+> the replacement — `billing: { max_credits: N }` with its reach (it caps the
+> credit reservation and refuses further agentic turns: agentic `ai://`,
+> `exons://`, the orchestrator; plain chat steps and `flow://` sub-flows are not
+> checked against it), or `error_strategy: { action: "retry", max_retries: N }`
+> (N counts attempts, including the first).
+>
+> **Loop sub-steps are included** (`steps.<id>.loop.steps[<i>].max_retries`). The
+> reference's loop sub-step type never had a `max_retries` field, so it was always
+> refused there as an unknown key, independently of this deletion — and because
+> the advice table matches the key NAME in the decoder error, not the type, the
+> reference now attaches this same advice to it. Reporting it is therefore parity
+> with "would this save", not an extension; it is the one location where this
+> validator reports a generic unknown key, and it does so only because the
+> reference names it.
+>
+> The false positive to guard is the working key one level down:
+> `error_strategy.max_retries` (flow and step), `quality_gate.max_retries`,
+> `billing.max_credits`, and the surviving `currency` / `max_duration`. The
+> counter-fixture `valid-limit-keys-one-level-down.yaml` carries all of them;
+> because this is an ERROR rule, `valid: true` (zero errors) is the proof and no
+> `forbid*Codes` harness extension is needed. Four mutants were run and each was
+> killed: presence→truthiness (skips `0`/`null`; 5 tests fail), the step rule also
+> reading `error_strategy.max_retries` (2 fail), the budget rule also firing on a
+> `billing:` block (2 fail), and not walking loop sub-steps (1 fails).
+>
+> `budget` and the flow-level `max_retries` are also removed from the exported
+> `Flow` type (they were never on `StepDefinition`). `ErrorStrategyDefinition.
+max_retries` and `QualityGateDefinition.max_retries` are unchanged. Removing
+> public type fields is why the package version is a minor bump.
+>
+> **Supersedes the DC-FORGE-146 warnings** (`flow_budget_unenforced`,
+> `max_retries_unread`) proposed in an open PR for the same three keys: the keys no
+> longer exist, so there is nothing left to warn about.
+>
+> Divergence, none of which changes a verdict on a flow the reference would save:
+> the reference refuses a `budget` or `max_retries` key at ANY depth where the
+> containing type has no such field (the generic unknown-key rule, still not ported
+> — see "Unknown-key rejection" below); this validator reports only the four
+> locations above.
+>
+> ⚠️ **`specVersion` deliberately understates**, as in the open PRs cut from
+> `main`: claiming `2.721.0` here would assert the rules sitting unmerged in them.
+> Reconcile on merge.
+
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
 > `validateProcessingOperation` took `operation any` and asserted `map[string]any`
@@ -479,7 +541,8 @@ discipline for keeping the two in sync.
 >   Porting it means a full field inventory of `Flow`/`StepDefinition` and
 >   interacts with divergence #8. **A decision to make, not a delta.** The one
 >   case that mattered in practice — `goto_step` inside a condition — is now
->   reported specifically.
+>   reported specifically, as are the keys AIgentFlow v2.721.0 deleted from the
+>   grammar (`budget`, `max_retries` — see DC-FORGE-150 above).
 > - Everything else in the window is runtime field resolution (divergence #3),
 >   credentials/compliance (#5, #6) or documentation surface: AIF 2.526.0's
 >   `DeploymentQueryOption` rename, 2.580.0/2.582.0/2.585.0's
@@ -523,29 +586,30 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 
 ## Rule map
 
-| Area                                                                               | Go source                                                                                              | JS module                                                | Tested by                                   |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------- |
-| Required fields, start-step existence, per-step executor, reserved `.` in IDs      | `validateBasicStructure`, `ValidateFlow` head                                                          | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
-| Executor URI shape (the ONE parser) + scheme                                       | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                                 | `validators/executors.ts`                                | `validate.test.ts`                          |
-| Query/property/array-item schema + array constraints                               | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints`      | `validators/querySchema.ts`                              | `validate.test.ts`                          |
-| Response-expectation types + array items + `required`                              | `ValidateFlow` (response block), `validateSemantics`                                                   | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
-| Response expectation nothing reads (`response_expectation_unread`, warning)        | `validateResponseExpectationIsRead` (validation.go)                                                    | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Error strategy (action, goto, max_delay, backoff, retry_on)                        | `validateErrorStrategy`                                                                                | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
-| `next` references, reachability, cycles                                            | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                     | `validators/connectivity.ts`                             | `validate.test.ts`                          |
-| `next.parallel` + orchestrator-next requirement                                    | `validateNextLogic`, `validateOrchestratorNext`                                                        | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
-| Expression functions (XOR package/function)                                        | `validateExpressionFunctions`                                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
-| Expression-function catalog (`package:` refused, unknown `function:` refused)      | `validateExpressionFunctionCatalog` (parser.go)                                                        | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)         | `validateExpressionFunctionUsage` (parser.go)                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Loop / for_each / throttle                                                         | `validateLoop`, `validateForEach`, `validateThrottle`                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
-| Loop sub-step `next:` targets (same-loop only, sentinels, no parallel)             | `validateLoopSubStepNext` (parser.go)                                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Orchestrator structure + campaign requires orchestrator                            | `validateOrchestrator`, `validateAndNormalizeCampaign`                                                 | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
-| Credential bindings (`stored/...`, inject_as, exclusivity)                         | `validateStepCredentialBindings`                                                                       | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
-| `input_schema` definition + ordering lint                                          | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                        | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
-| Step `output_schema` definition (reuses the input-schema subset)                   | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                                    | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
-| `quality_gate:` block (rubric/threshold/on_fail/goto)                              | `FlowParser.validateQualityGate` (parser.go)                                                           | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
-| Processing-operation type + per-operation config keys                              | `validateProcessingOperationShape`                                                                     | `validators/processingOperations.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
-| Step `max_duration` the engine cannot apply (`step_max_duration_ignored`, warning) | `validateStepMaxDurationIsApplied` (validation.go), `parseStepMaxDuration` (flowengine.steptimeout.go) | `validators/stepMaxDuration.ts`                          | `validate.test.ts`, `conformance.test.ts`   |
-| Go-template syntax                                                                 | `validateTemplateExpression` (Parse step)                                                              | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
+| Area                                                                                | Go source                                                                                              | JS module                                                | Tested by                                   |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------- |
+| Required fields, start-step existence, per-step executor, reserved `.` in IDs       | `validateBasicStructure`, `ValidateFlow` head                                                          | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
+| Executor URI shape (the ONE parser) + scheme                                        | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                                 | `validators/executors.ts`                                | `validate.test.ts`                          |
+| Query/property/array-item schema + array constraints                                | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints`      | `validators/querySchema.ts`                              | `validate.test.ts`                          |
+| Response-expectation types + array items + `required`                               | `ValidateFlow` (response block), `validateSemantics`                                                   | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
+| Response expectation nothing reads (`response_expectation_unread`, warning)         | `validateResponseExpectationIsRead` (validation.go)                                                    | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Error strategy (action, goto, max_delay, backoff, retry_on)                         | `validateErrorStrategy`                                                                                | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
+| Retired `budget:` / `max_retries:` (flow, step, loop sub-step) → `unknown_yaml_key` | `retiredGrammarKeys` + `KnownFields(true)` (parser.go)                                                 | `validators/retiredKeys.ts`                              | `validate.test.ts`, `conformance.test.ts`   |
+| `next` references, reachability, cycles                                             | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                     | `validators/connectivity.ts`                             | `validate.test.ts`                          |
+| `next.parallel` + orchestrator-next requirement                                     | `validateNextLogic`, `validateOrchestratorNext`                                                        | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
+| Expression functions (XOR package/function)                                         | `validateExpressionFunctions`                                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
+| Expression-function catalog (`package:` refused, unknown `function:` refused)       | `validateExpressionFunctionCatalog` (parser.go)                                                        | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)          | `validateExpressionFunctionUsage` (parser.go)                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Loop / for_each / throttle                                                          | `validateLoop`, `validateForEach`, `validateThrottle`                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
+| Loop sub-step `next:` targets (same-loop only, sentinels, no parallel)              | `validateLoopSubStepNext` (parser.go)                                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Orchestrator structure + campaign requires orchestrator                             | `validateOrchestrator`, `validateAndNormalizeCampaign`                                                 | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
+| Credential bindings (`stored/...`, inject_as, exclusivity)                          | `validateStepCredentialBindings`                                                                       | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
+| `input_schema` definition + ordering lint                                           | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                        | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
+| Step `output_schema` definition (reuses the input-schema subset)                    | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                                    | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
+| `quality_gate:` block (rubric/threshold/on_fail/goto)                               | `FlowParser.validateQualityGate` (parser.go)                                                           | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
+| Processing-operation type + per-operation config keys                               | `validateProcessingOperationShape`                                                                     | `validators/processingOperations.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
+| Step `max_duration` the engine cannot apply (`step_max_duration_ignored`, warning)  | `validateStepMaxDurationIsApplied` (validation.go), `parseStepMaxDuration` (flowengine.steptimeout.go) | `validators/stepMaxDuration.ts`                          | `validate.test.ts`, `conformance.test.ts`   |
+| Go-template syntax                                                                  | `validateTemplateExpression` (Parse step)                                                              | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
 
 ---
 
