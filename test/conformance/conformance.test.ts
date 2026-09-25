@@ -147,6 +147,32 @@ const CASES: Case[] = [
     expectErrorCodes: ['loop_substep_next_parallel'],
   },
   {
+    // AIF DC-FORGE-145: `response_expectation` is read ONLY when
+    // `response_evaluation` is set. Without one, required/type/fallback are
+    // inert — the reference found 25 such steps in its own bundled flows.
+    file: 'warn-response-expectation-unread.yaml',
+    valid: true,
+    expectWarningCodes: ['response_expectation_unread'],
+  },
+  {
+    // The counter-fixtures. Each is a way the rule could over-fire: an
+    // evaluation mode that DOES read the expectation, an async:// step whose
+    // respond route enforces it on its own, and no (or an empty) expectation.
+    file: 'valid-response-expectation-raw-text.yaml',
+    valid: true,
+    forbidWarningCodes: ['response_expectation_unread'],
+  },
+  {
+    file: 'valid-response-expectation-async.yaml',
+    valid: true,
+    forbidWarningCodes: ['response_expectation_unread'],
+  },
+  {
+    file: 'valid-response-expectation-absent.yaml',
+    valid: true,
+    forbidWarningCodes: ['response_expectation_unread'],
+  },
+  {
     // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
     // Reading `goto_step` here disabled every conditional-branch check in this
     // validator AND made every conditionally-reached step look unreachable.

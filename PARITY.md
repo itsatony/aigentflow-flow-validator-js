@@ -237,6 +237,36 @@ discipline for keeping the two in sync.
 > `invalid-loop-substep-next-sentinel.yaml`,
 > `invalid-loop-substep-next-parallel.yaml`.
 
+> DC-FORGE-145 (the release after v2.715.0; no grammar change, so `specVersion`
+> stays `2.642.0`) — **one new static rule ported: `response_expectation_unread`.**
+> The reference's engine reads a step's `response_expectation` only when
+> `response_evaluation` is set; with no evaluation mode it returns the raw response
+> untouched, so the expectation's `required`, `type` and `fallback` are never
+> consulted. The reference measured **21 such steps in 9 of its own bundled flows**,
+> including a requirement meant to fail an answer that had not searched.
+> `async://` is exempt because its respond route validates the posted output
+> against the expectation on its own. Loop sub-steps cannot declare an
+> expectation, so — unlike `unreachable_error_goto` — there is no loop-body walk.
+>
+> It is a **warning** on both sides: the reference consults it at its RUN door over
+> flows that are already stored, and the declaration is inert rather than fatal.
+> The message text is the reference's `WARN_MSG_RESPONSE_EXPECTATION_UNREAD`
+> verbatim, with Go's `%q` rendered as `JSON.stringify` (identical for printable
+> ASCII, which is all a step id holds).
+>
+> Parity was measured, not assumed: over the reference's bundled corpus **before**
+> its fix, this validator and the reference emit the **identical** 21
+> `(flow, step)` findings; after it, both emit zero. Three counter-fixtures
+> (`raw-text`, `async://`, absent/empty expectation) carry `forbidWarningCodes`, and
+> each of the rule's four guards is mutation-verified against them.
+>
+> ⚠️ **`specVersion` deliberately understates**, for the reason recorded under
+> `unreachable_error_goto` in #8: this branch is cut from `main`, which does not
+> carry the rules sitting in the open PRs, so claiming a newer spec version would
+> assert rules this branch does not have. `forbidWarningCodes` is added here too
+> because it is not yet on `main`; it is byte-identical to #8's, so the merge is
+> trivial in either order.
+
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
 > `validateProcessingOperation` took `operation any` and asserted `map[string]any`
@@ -464,6 +494,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | Executor URI shape (the ONE parser) + scheme                                  | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                            | `validators/executors.ts`                                | `validate.test.ts`                          |
 | Query/property/array-item schema + array constraints                          | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints` | `validators/querySchema.ts`                              | `validate.test.ts`                          |
 | Response-expectation types + array items + `required`                         | `ValidateFlow` (response block), `validateSemantics`                                              | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
+| Response expectation nothing reads (`response_expectation_unread`, warning)   | `validateResponseExpectationIsRead` (validation.go)                                               | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
 | Error strategy (action, goto, max_delay, backoff, retry_on)                   | `validateErrorStrategy`                                                                           | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
 | `next` references, reachability, cycles                                       | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                | `validators/connectivity.ts`                             | `validate.test.ts`                          |
 | `next.parallel` + orchestrator-next requirement                               | `validateNextLogic`, `validateOrchestratorNext`                                                   | `validators/nextLogic.ts`                                | `validate.test.ts`                          |

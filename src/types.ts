@@ -192,6 +192,8 @@ export interface StepDefinition {
   pre_processing?: unknown[];
   post_processing?: unknown[];
   response_expectation?: Record<string, ResponseExpectationField>;
+  /** Evaluation mode (e.g. `raw-text`). `response_expectation` is read only when this is set. */
+  response_evaluation?: string;
   next?: NextLogicDefinition;
   error_strategy?: ErrorStrategyDefinition;
   for_each?: ForEachDefinition;

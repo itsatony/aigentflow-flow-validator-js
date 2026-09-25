@@ -3,12 +3,61 @@
 // Union of the detailed validator (`validateSemantics` → type must be a known
 // data type) and the parser (`ValidateFlow` → array fields require `items`;
 // `required` must be a boolean or a string template). See PARITY.md.
+//
+// Plus `response_expectation_unread` (validation.go
+// `validateResponseExpectationIsRead`, AIF DC-FORGE-145): an expectation that
+// no evaluation mode will ever read.
 
 import type { Flow, ResponseExpectationField } from '../types.js';
 import { DATA_TYPES } from '../spec/index.js';
 import { Issues, isRecord, isString } from './util.js';
 
 const TYPE_ARRAY = 'array';
+const ASYNC_EXECUTOR_PREFIX = 'async://';
+const CODE_RESPONSE_EXPECTATION_UNREAD = 'response_expectation_unread';
+
+/**
+ * Go's `%q` for the identifiers a step id can hold. `JSON.stringify` produces
+ * the same double-quoted, backslash-escaped form for printable ASCII; the two
+ * differ only on non-ASCII and control characters, which no step id carries.
+ */
+function goQuote(s: string): string {
+  return JSON.stringify(s);
+}
+
+/**
+ * The engine reads `response_expectation` ONLY when `response_evaluation` is
+ * set: with no evaluation mode it returns the raw response untouched, so the
+ * expectation's `required`, `type` and `fallback` are never consulted. The
+ * reference found 25 such steps across 10 of its own bundled flows — among
+ * them a requirement meant to fail an answer that had not searched, which
+ * would have passed silently.
+ *
+ * `async://` is exempt: its respond route validates the posted output against
+ * the expectation on its own, without any evaluation mode.
+ *
+ * WARNING, not error, matching the reference: it is consulted at the RUN door
+ * over flows that are already stored, and the declaration is INERT — the run
+ * does not die. Loop sub-steps cannot declare an expectation, so there is no
+ * second step table to walk.
+ */
+function warnIfUnread(
+  stepID: string,
+  step: Record<string, unknown>,
+  re: Record<string, unknown>,
+  issues: Issues,
+): void {
+  if (Object.keys(re).length === 0) return;
+  const evaluation = step.response_evaluation;
+  if (evaluation !== undefined && evaluation !== null && evaluation !== '') return;
+  if (isString(step.executor) && step.executor.startsWith(ASYNC_EXECUTOR_PREFIX)) return;
+  issues.warn({
+    field: `steps.${stepID}.response_expectation`,
+    message: `response_expectation on step ${goQuote(stepID)} is never checked: the engine reads it only when response_evaluation is set, and this step sets none, so required, type and fallback do nothing. Add response_evaluation: "raw-text" to check these fields against the executor's response unchanged, or remove response_expectation.`,
+    code: CODE_RESPONSE_EXPECTATION_UNREAD,
+    stepId: stepID,
+  });
+}
 
 export function validateResponseExpectations(flow: Flow, issues: Issues): void {
   const steps = flow.steps;
@@ -27,6 +76,8 @@ export function validateResponseExpectations(flow: Flow, issues: Issues): void {
       });
       continue;
     }
+
+    warnIfUnread(stepID, rawStep, re, issues);
 
     for (const [fieldName, rawField] of Object.entries(re)) {
       const base = `steps.${stepID}.response_expectation.${fieldName}`;
