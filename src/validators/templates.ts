@@ -49,7 +49,11 @@ function checkTemplateString(
   stats.found += 1;
   const errors = checkGoTemplateSyntax(value, {
     knownFunctions: TEMPLATE_FUNCTIONS,
-    strictFunctions: opts.strictRegistries === true,
+    // Always look up function names. PARITY.md divergence #4 promises a WARNING
+    // for an unknown function by default and an error only under
+    // strictRegistries; skipping the lookup entirely (as this did) said nothing
+    // at all, while the reference refuses the flow.
+    strictFunctions: true,
   });
   // DC-FORGE-78: a finding from inside a LOOP BODY is a warning, never an error.
   //
@@ -64,7 +68,8 @@ function checkTemplateString(
   const report = demote ? issues.warn.bind(issues) : issues.error.bind(issues);
   for (const err of errors) {
     if (err.isFunctionError) {
-      report({
+      const reportFunction = opts.strictRegistries === true ? report : issues.warn.bind(issues);
+      reportFunction({
         field,
         message: `Template ${err.message}`,
         code: 'template_function_unknown',

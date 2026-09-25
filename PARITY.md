@@ -37,6 +37,25 @@ discipline for keeping the two in sync.
 > One false positive was also fixed: `orchestrator.human_question_timeout: ""`
 > (or `null`) was refused here, but the reference treats both as absent.
 >
+> The corpus cross-check then found two older defects, both fixed here:
+>
+> - **Seven orchestrator tool names were missing** from `orchestrator.tools`:
+>   `aif_memory_recall`, `aif_memory_reflect` and the five `aif_e2b_*` tools.
+>   The reference's `IsValidOrchestratorToolName` accepts all of them, so under
+>   `strictRegistries` this validator refused eight bundled flows the reference
+>   saves.
+> - **Divergence #4 was not true for template functions.** By default the
+>   function lookup was skipped, so an unknown function produced no finding at
+>   all. It is now a `template_function_unknown` warning by default and an error
+>   under `strictRegistries`, as #4 says.
+>
+> Cross-check over the reference's `example_flows/` (216 YAML files, the reference
+> run through `ValidateFlowWithDetails`): `unreachable_step` 25 = 25 and
+> `potential_infinite_loop` 1 = 1, with identical `(file, field)` pairs. With
+> `strictRegistries`, the valid/invalid verdict matches on all 216 files (206
+> valid on both sides). In default mode the 10 files the reference refuses for an
+> undefined template function are valid here and carry the warning instead.
+>
 > Still not ported, and older than this window: the rest of
 > `CampaignConfig.Validate` (`child_flows` must be non-empty, each entry needs a
 > `flow_id` or `flow_name`, and `max_concurrent` / `max_depth` /

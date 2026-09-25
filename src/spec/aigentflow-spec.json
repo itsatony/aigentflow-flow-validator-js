@@ -133,12 +133,19 @@
       "aif_campaign_cancel",
       "aif_memory_plan",
       "aif_memory_record",
+      "aif_memory_recall",
+      "aif_memory_reflect",
       "aif_tool_discover",
       "aif_tool_execute",
       "aif_trove_upload",
       "aif_trove_download",
       "aif_trove_list",
-      "aif_trove_delete"
+      "aif_trove_delete",
+      "aif_e2b_sandbox_create",
+      "aif_e2b_sandbox_execute",
+      "aif_e2b_sandbox_files",
+      "aif_e2b_desktop_screenshot",
+      "aif_e2b_desktop_interact"
     ]
   },
   "expressionFunctions": {

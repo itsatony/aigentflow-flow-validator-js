@@ -1476,3 +1476,30 @@ describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
     }
   });
 });
+
+describe('unknown template functions by default (PARITY.md divergence #4)', () => {
+  const flow = {
+    ...MINIMAL,
+    steps: { a: { executor: 'function://text/noop', query: { m: '{{query.source_text}}' } } },
+  };
+
+  it('warns by default and keeps the verdict valid', () => {
+    const r = validateFlowObject(flow);
+    expect(r.valid).toBe(true);
+    expect(warnCodes(r)).toContain('template_function_unknown');
+  });
+
+  it('refuses under strictRegistries, as the reference does', () => {
+    const r = validateFlowObject(flow, { strictRegistries: true });
+    expect(r.valid).toBe(false);
+    expect(codes(r)).toContain('template_function_unknown');
+  });
+
+  it('says nothing about a registered function', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: 'function://text/noop', query: { m: '{{ addf 1.5 2 }}' } } },
+    });
+    expect(warnCodes(r)).not.toContain('template_function_unknown');
+  });
+});
