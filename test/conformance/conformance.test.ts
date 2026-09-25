@@ -330,6 +330,20 @@ const CASES: Case[] = [
     forbidWarningCodes: ['unknown_processing_operation', 'unknown_processing_config_key'],
   },
   {
+    // AIF v2.728.0 (DC-FORGE-155): the campaign's per-child USD cap was deleted
+    // for `max_credits_per_child`. The strict decoder refuses the old key.
+    file: 'invalid-retired-campaign-budget-max-per-child.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    // AIF v2.648.0 (DC-FORGE-78): a sub-step id that is also a loop-result
+    // summary field. A warning — the verdict stays valid.
+    file: 'warn-loop-sub-step-id-reserved.yaml',
+    valid: true,
+    expectWarningCodes: ['loop_sub_step_id_reserved'],
+  },
+  {
     // AIF v2.721.0 (DC-FORGE-150): the flow-level `budget:` was deleted from the
     // grammar — nothing read it. The save door refuses it, `0` included.
     file: 'invalid-retired-flow-budget.yaml',

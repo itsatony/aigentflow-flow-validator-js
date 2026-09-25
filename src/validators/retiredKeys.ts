@@ -1,6 +1,7 @@
 // Grammar keys AIgentFlow deleted because nothing read them (AIF DC-FORGE-150,
 // v2.721.0): the top-level `budget:`, the top-level `max_retries:`, and a
-// `max_retries:` directly on a step.
+// `max_retries:` directly on a step. Plus `campaign.budget_max_per_child`
+// (AIF DC-FORGE-155, v2.728.0).
 //
 // The reference's save door (create / update / `POST /flows/validate`) parses
 // with yaml `KnownFields(true)`, so a flow declaring any of them is REFUSED, and
@@ -21,6 +22,16 @@ const CODE_UNKNOWN_YAML_KEY = 'unknown_yaml_key';
 const KEY_BUDGET = 'budget';
 const KEY_MAX_RETRIES = 'max_retries';
 const REMOVED_IN = 'v2.721.0';
+const KEY_BUDGET_MAX_PER_CHILD = 'budget_max_per_child';
+const BUDGET_MAX_PER_CHILD_REMOVED_IN = 'v2.728.0';
+
+const BUDGET_MAX_PER_CHILD_MESSAGE =
+  `\`campaign.budget_max_per_child\` (USD) was removed from the grammar in AIgentFlow ` +
+  `${BUDGET_MAX_PER_CHILD_REMOVED_IN} because it capped nothing, and AIgentFlow refuses to ` +
+  'save a flow that declares it.';
+const BUDGET_MAX_PER_CHILD_SUGGESTION =
+  'Use `campaign.max_credits_per_child: N` (a whole number of credits) — it is checked ' +
+  'before each agentic turn of a child, and a spawn may lower it with `max_credits`.';
 
 const BUDGET_MESSAGE =
   `The flow-level \`budget:\` key was removed from the grammar in AIgentFlow ${REMOVED_IN} ` +
@@ -66,6 +77,19 @@ export function validateRetiredKeys(flow: Flow, issues: Issues): void {
       message: maxRetriesMessage('the flow'),
       code: CODE_UNKNOWN_YAML_KEY,
       suggestion: MAX_RETRIES_SUGGESTION,
+    });
+  }
+
+  // AIF v2.728.0 (DC-FORGE-155): the campaign's per-child USD cap, replaced by
+  // `max_credits_per_child`. Same mechanism as the keys above: the strict
+  // decoder refuses it and `retiredGrammarKeys` attaches the advice.
+  const campaign = root.campaign;
+  if (isRecord(campaign) && declares(campaign, KEY_BUDGET_MAX_PER_CHILD)) {
+    issues.error({
+      field: `campaign.${KEY_BUDGET_MAX_PER_CHILD}`,
+      message: BUDGET_MAX_PER_CHILD_MESSAGE,
+      code: CODE_UNKNOWN_YAML_KEY,
+      suggestion: BUDGET_MAX_PER_CHILD_SUGGESTION,
     });
   }
 

@@ -1377,3 +1377,102 @@ describe('retired limit keys (AIF DC-FORGE-150, v2.721.0)', () => {
     expect(retired(r)).toHaveLength(0);
   });
 });
+
+describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
+  const orchFlow = (extra: Record<string, unknown>, campaign?: Record<string, unknown>) => ({
+    ...MINIMAL,
+    orchestrator: {
+      mode: 'monitor',
+      agentic: true,
+      exons:
+        '---\nname: monitor\ndescription: observe only\ntype: agent\nexecution:\n  provider: anthropic\n  model: m\n---\n{~exons.message role="system"~}observe{~/exons.message~}\n',
+      ...extra,
+    },
+    ...(campaign ? { campaign } : {}),
+  });
+
+  it('treats an empty or null human_question_timeout as absent, like the reference', () => {
+    for (const value of ['', null]) {
+      const r = validateFlowObject(orchFlow({ human_question_timeout: value }));
+      expect(codes(r), String(value)).not.toContain('orchestrator_human_question_timeout_invalid');
+    }
+    for (const value of ['0s', '-5m', '30', 'soon']) {
+      const r = validateFlowObject(orchFlow({ human_question_timeout: value }));
+      expect(codes(r), value).toContain('orchestrator_human_question_timeout_invalid');
+    }
+  });
+
+  it('warns on a loop sub-step id that is one of the loop result summary fields', () => {
+    for (const id of ['iterations', 'break', 'vars', 'duration_ms']) {
+      const r = validateFlowObject({
+        ...MINIMAL,
+        start: 'looper',
+        steps: {
+          looper: {
+            loop: {
+              while: 'true',
+              max_iterations: 2,
+              steps: [{ id, executor: 'function://text/noop' }],
+            },
+          },
+        },
+      });
+      expect(r.valid, id).toBe(true);
+      const hit = r.warnings.find((w) => w.code === 'loop_sub_step_id_reserved');
+      expect(hit?.field, id).toBe('steps.looper.loop.steps');
+      expect(hit?.stepId, id).toBe('looper');
+    }
+    const clean = validateFlowObject({
+      ...MINIMAL,
+      start: 'looper',
+      steps: {
+        looper: {
+          loop: {
+            while: 'true',
+            max_iterations: 2,
+            steps: [{ id: 'iteration', executor: 'function://text/noop' }],
+          },
+        },
+      },
+    });
+    expect(warnCodes(clean)).not.toContain('loop_sub_step_id_reserved');
+  });
+
+  it('refuses the retired campaign.budget_max_per_child, whatever its value', () => {
+    for (const value of [1.0, 0, null]) {
+      const r = validateFlowObject(
+        orchFlow({}, { child_flows: [{ flow_name: 'x' }], budget_max_per_child: value }),
+      );
+      expect(
+        r.errors.some(
+          (e) => e.code === 'unknown_yaml_key' && e.field === 'campaign.budget_max_per_child',
+        ),
+        String(value),
+      ).toBe(true);
+    }
+  });
+
+  it('checks campaign.max_credits_per_child the way the reference decodes and validates it', () => {
+    const run = (value: unknown) =>
+      validateFlowObject(
+        orchFlow({}, { child_flows: [{ flow_name: 'x' }], max_credits_per_child: value }),
+      );
+    for (const ok of [0, 500, null]) {
+      const r = run(ok);
+      expect(codes(r), String(ok)).not.toContain('campaign_invalid_max_credits_per_child');
+      expect(
+        r.errors.filter((e) => e.field === 'campaign.max_credits_per_child'),
+        String(ok),
+      ).toHaveLength(0);
+    }
+    expect(codes(run(-1))).toContain('campaign_invalid_max_credits_per_child');
+    for (const bad of [1.5, '5']) {
+      expect(
+        run(bad).errors.some(
+          (e) => e.code === 'invalid_type' && e.field === 'campaign.max_credits_per_child',
+        ),
+        String(bad),
+      ).toBe(true);
+    }
+  });
+});

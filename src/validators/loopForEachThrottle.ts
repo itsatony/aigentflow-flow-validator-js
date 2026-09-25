@@ -21,6 +21,19 @@ const MAX_BATCH_DELAY_NS = 30 * 60 * 1e9;
 const RESERVED_STEP_ID_CHAR = '.';
 
 /**
+ * The loop result's own summary fields (reference: `LoopResultSummaryFields`,
+ * AIF v2.648.0 / DC-FORGE-78). The loop step's committed result carries these
+ * AND one entry per sub-step under its id, so a sub-step named `vars` is
+ * unreadable through `{{ .data.<loop>.vars }}` — the summary field wins.
+ */
+const LOOP_RESULT_SUMMARY_FIELDS: readonly string[] = [
+  'iterations',
+  'break',
+  'vars',
+  'duration_ms',
+];
+
+/**
  * The two top-level `next:` sentinels. Neither carries any meaning inside a
  * loop body: the reference's `resolveLoopSubStepNext` has no sentinel awareness
  * at all, so `null` cannot end a mission from there and `orchestrator` cannot
@@ -326,6 +339,19 @@ function validateLoop(step: Record<string, unknown>, stepID: string, issues: Iss
           });
         }
         seen.add(id);
+        // A WARNING in the reference, not an error: the sub-step still runs, and
+        // its result stays reachable through the flat `index .data "<loop>.<sub>"`
+        // key. The reference reports it on the `loop.steps` field and names the
+        // parent step, so this does too.
+        if (LOOP_RESULT_SUMMARY_FIELDS.includes(id)) {
+          issues.warn({
+            field: `${base}.steps`,
+            message: `loop sub-step id '${id}' is also a field of the loop's own result, so {{ .data.${stepID}.${id} }} reads the loop's ${id} instead of this sub-step's output`,
+            code: 'loop_sub_step_id_reserved',
+            stepId: stepID,
+            suggestion: `rename the sub-step; ids reserved by the loop result: ${[...LOOP_RESULT_SUMMARY_FIELDS].sort().join(', ')}`,
+          });
+        }
       }
       if (!isString(sub.executor) || sub.executor === '') {
         issues.error({
