@@ -96,6 +96,46 @@ discipline for keeping the two in sync.
 > risk is a false positive needs a fixture that goes **red** when it fires, and
 > `valid: true` does not say that, because a warning never changes the verdict.
 
+> v2.652.0 (DC-FORGE-82; no grammar change, so `specVersion` stays `2.642.0`) —
+> **one new static rule ported: `loop_substep_error_goto_ignored`.** A loop BODY is
+> a second step table, and the walk that raises `unreachable_error_goto` never
+> entered it — **on either side**; this validator had the same blind spot as the
+> reference, for the same reason, which is why the finding ports rather than
+> diverges.
+>
+> ⛔ **It is a DIFFERENT finding from `unreachable_error_goto`, and collapsing the
+> two would be wrong.** That one is about a `goto_step` beside the wrong action,
+> and its remedy is to write `action: "goto"`. Inside a loop body there is no
+> action that helps: `executeLoopStep`'s failure switch has exactly two arms —
+> `continue` (skip to the next sub-step) and a default that ABORTS the whole loop
+> step — so `goto` lands in the default and the loop fails. **The strategy the
+> author chose in order to avoid failing is the one that fails.** The message names
+> the real remedy: put the `goto_step` on the LOOP step, whose own `error_strategy`
+> is what the abort routes through.
+>
+> ⚠️ **Only the new warning is emitted over loop sub-steps — deliberately.** The
+> reference's parser does not run its `error_strategy` checks (action enum, goto
+> target existence, duration and backoff validation) over a loop body at all, so
+> routing sub-steps through `validateOne` would make this oracle refuse shapes its
+> door accepts — wrong in the more damaging direction.
+>
+> The fixture pair follows the `forbidWarningCodes` discipline established below.
+> The counter-fixture puts a `goto_step` on the LOOP step beside `action: goto` —
+> the exact shape the warning's own advice produces — so a rule that fired on any
+> `goto_step` near a loop would make its own remedy warn. Both directions are
+> mutation-verified: deleting the emission fails the positive fixture, dropping the
+> `goto_step` presence guard fails the counter-fixture.
+>
+> ⚠️ **`specVersion` stays `2.642.0` for the same reason as the entry below** —
+> this branch is stacked on `feat/unreachable-error-goto`, which is itself cut from
+> `main`, and `main` does not carry the v2.646.0–v2.648.0 rules in the two other
+> open PRs. Reconcile on merge.
+>
+> The rest of v2.652.0 is out of scope: a composite step's `*StepError`, the
+> one-hop `.step.error` carry into a for_each/loop handler, the loop sub-step
+> strategy resolver and the unchecked `map[string]any` assertion are all engine
+> runtime behaviour (divergence #3), not static grammar.
+
 > v2.651.0 (DC-FORGE-81; no grammar change, so `specVersion` stays `2.642.0`) —
 > **one new static rule ported: `unreachable_error_goto`.** The reference's engine
 > switches on `error_strategy.action` and reads `goto_step` in the `goto` branch

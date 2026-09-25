@@ -80,6 +80,28 @@ const CASES: Case[] = [
     forbidWarningCodes: ['unreachable_error_goto'],
   },
   {
+    // AIF v2.652.0 (DC-FORGE-82): a loop BODY is a second step table, and the
+    // walk for unreachable_error_goto never entered it — the same blind spot the
+    // reference had. Inside one, goto_step is unreachable under EVERY action, so
+    // the remedy that fixes unreachable_error_goto (`action: goto`) is already
+    // what this fixture says and changes nothing. Both codes are declared: the
+    // new one must fire, and the older one must NOT, because following its
+    // advice here is a dead end.
+    file: 'warn-loop-substep-error-goto.yaml',
+    valid: true,
+    expectWarningCodes: ['loop_substep_error_goto_ignored'],
+    forbidWarningCodes: ['unreachable_error_goto'],
+  },
+  {
+    // The counter-fixture. The loop STEP's own error_strategy names a goto_step
+    // beside `action: goto` — which is precisely where the warning's remedy
+    // sends an author — so a rule that fired on any goto_step near a loop would
+    // make its own advice warn.
+    file: 'valid-loop-substep-error-continue.yaml',
+    valid: true,
+    forbidWarningCodes: ['loop_substep_error_goto_ignored', 'unreachable_error_goto'],
+  },
+  {
     // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
     // Reading `goto_step` here disabled every conditional-branch check in this
     // validator AND made every conditionally-reached step look unreachable.
