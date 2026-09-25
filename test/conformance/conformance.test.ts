@@ -21,6 +21,12 @@ interface Case {
   expectErrorCodes?: string[];
   /** Warning codes that MUST be present. */
   expectWarningCodes?: string[];
+  /**
+   * Warning codes that must NOT be present. A rule whose whole risk is a false
+   * positive needs a fixture that goes red when it fires, and "valid: true" does
+   * not say that — a warning never changes the verdict.
+   */
+  forbidWarningCodes?: string[];
 }
 
 const CASES: Case[] = [
@@ -136,6 +142,32 @@ const CASES: Case[] = [
     valid: true,
   },
   {
+    // A processing operation type the standard handler cannot dispatch: a
+    // misspelling, and `loop.set`, which only a loop sub-step handles. Both are
+    // warnings — the flow saves and runs, and fails at the operation.
+    file: 'valid-processing-operation-unknown-type-warns.yaml',
+    valid: true,
+    expectWarningCodes: ['unknown_processing_operation'],
+    // An unknown type has no key set, so its keys must not warn as well.
+    forbidWarningCodes: ['unknown_processing_config_key'],
+  },
+  {
+    // Config keys the handler never reads, including `asset_id` under
+    // `binary.transform` — real for binary.get/update/delete, wrong here. A
+    // union of the key sets across operations would accept it.
+    file: 'valid-processing-config-key-wrong-half-warns.yaml',
+    valid: true,
+    expectWarningCodes: ['unknown_processing_config_key'],
+  },
+  {
+    // The other half of the partition: closed key sets used correctly, and the
+    // open-key operations whose keys are author-chosen names. Neither rule may
+    // say anything here.
+    file: 'valid-processing-config-keys-accepted.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_processing_operation', 'unknown_processing_config_key'],
+  },
+  {
     file: 'invalid-references-and-templates.yaml',
     valid: false,
     expectErrorCodes: [
@@ -164,6 +196,15 @@ describe('conformance fixtures', () => {
       }
       for (const code of c.expectWarningCodes ?? []) {
         expect(warningCodes, `expected warning code '${code}'`).toContain(code);
+      }
+      for (const code of c.forbidWarningCodes ?? []) {
+        expect(
+          warningCodes,
+          `unexpected warning code '${code}': ${result.warnings
+            .filter((w) => w.code === code)
+            .map((w) => `${w.field}: ${w.message}`)
+            .join(' | ')}`,
+        ).not.toContain(code);
       }
     });
   }

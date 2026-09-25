@@ -110,3 +110,54 @@ export const EXPRESSION_FUNCTION_CATALOG: ReadonlySet<string> = new Set(
 
 /** Mandatory namespace prefix carried by every catalog entry. */
 export const EXPRESSION_FUNCTION_NAME_PREFIX: string = spec.expressionFunctions.namePrefix;
+
+/**
+ * Pre/post-processing operation dispatch set and per-operation config keys.
+ *
+ * Two things are modelled here and neither may be flattened into the other:
+ *
+ * - **Scope.** The standard handler (every top-level step's pre/post-processing)
+ *   dispatches {@link PROCESSING_OPERATIONS.standardTypes}. A loop sub-step's
+ *   post-processing handles `loop.set` / `loop.break` itself before delegating,
+ *   so those two are legal only there. Keeping them apart is the point: a name
+ *   in the wrong half is exactly the mistake a merged set cannot see.
+ * - **Key sets are PER OPERATION, never a union.** `asset_id` is read by
+ *   `binary.get`/`binary.update`/`binary.delete` and is NOT read by
+ *   `binary.transform`, which reads `source_asset_id`. A union-based check would
+ *   pass the wrong-half key, which is the defect class this rule exists for.
+ *
+ * `openKeyTypes` are the operations whose config keys are chosen by the AUTHOR
+ * (`data.set` writes every key into `.data`, `output.set` into `.output`,
+ * `conversation.append` treats every key as a conversation id, `loop.set` as a
+ * loop variable), so "unknown key" is not a notion that applies to them at all.
+ *
+ * Scope note: only TOP-LEVEL config keys are modelled. Sub-keys of `metadata:`
+ * (the asset store's vocabulary) and `parameters:` (the transformer's) are not.
+ */
+export const PROCESSING_OPERATIONS = {
+  /** The optional guard key, a sibling of the operation key rather than a config key. */
+  guardKey: spec.processingOperations.guardKey,
+  /** Operation types the standard (top-level step) handler dispatches. */
+  standardTypes: new Set(spec.processingOperations.standardTypes) as ReadonlySet<string>,
+  /** Operation types dispatchable ONLY in a loop sub-step's post_processing. */
+  loopSubStepTypes: new Set(spec.processingOperations.loopSubStepTypes) as ReadonlySet<string>,
+  /** Operations whose config keys are author-chosen; they have no unknown-key notion. */
+  openKeyTypes: new Set(spec.processingOperations.openKeyTypes) as ReadonlySet<string>,
+  /** Per-operation top-level config keys, for the operations with a CLOSED key set. */
+  closedConfigKeys: spec.processingOperations.closedConfigKeys as Readonly<
+    Record<string, readonly string[]>
+  >,
+} as const;
+
+/**
+ * The top-level config keys an operation reads, and whether that set is CLOSED.
+ *
+ * A `false` second element means there is no basis for a verdict about a key —
+ * either the operation chooses its own key names, or the type is not
+ * dispatchable at all. Callers must check the flag rather than the array length.
+ */
+export function processingOperationConfigKeys(operationType: string): [readonly string[], boolean] {
+  if (PROCESSING_OPERATIONS.openKeyTypes.has(operationType)) return [[], false];
+  const keys = PROCESSING_OPERATIONS.closedConfigKeys[operationType];
+  return keys === undefined ? [[], false] : [keys, true];
+}

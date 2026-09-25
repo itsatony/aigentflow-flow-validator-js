@@ -17,9 +17,11 @@ import type {
 import { TEMPLATE_FUNCTIONS } from '../spec/index.js';
 import { checkGoTemplateSyntax } from '../template/gotmpl-syntax.js';
 import { Issues, isArray, isRecord, isString } from './util.js';
-
-/** The optional guard key on a processing operation; every other key is the op name. */
-const PROCESSING_OP_GUARD_KEY = 'if';
+import {
+  PROCESSING_OP_GUARD_KEY,
+  processingOperationsOfStep,
+  type ProcessingOperationRef,
+} from './processingOperations.js';
 
 function isTemplate(value: string): boolean {
   return value.includes('{{');
@@ -110,39 +112,33 @@ function walkStrings(
  * (`…post_processing[0].data.set.<configKey>`), which is the same finding under a
  * different address.
  *
- * DC-FORGE-76 note: until AIgentFlow v2.646.0 the reference validated these blocks
- * not at all — `validateProcessingOperation` asserted a type neither call site
- * passed and returned silently — so this walker was stricter than the reference
- * it ports for its whole life. It is now the same check, and this alignment makes
- * it the same address too.
+ * The decomposition itself lives in `processingOperations.ts` and is shared with
+ * the operation-shape rules, so the guard key is recognised in exactly one place.
  */
 function walkProcessingOperation(
-  basePath: string,
-  op: unknown,
-  stepID: string,
+  ref: ProcessingOperationRef,
   issues: Issues,
   stats: TemplateStats,
   opts: ValidateOptions,
 ): void {
-  if (!isRecord(op)) {
-    walkStrings(basePath, op, stepID, issues, stats, opts, true);
+  if (!isRecord(ref.raw)) {
+    walkStrings(ref.basePath, ref.raw, ref.stepId, issues, stats, opts, true);
     return;
   }
-  for (const [key, value] of Object.entries(op)) {
-    if (key === PROCESSING_OP_GUARD_KEY) {
-      walkStrings(
-        `${basePath}.${PROCESSING_OP_GUARD_KEY}`,
-        value,
-        stepID,
-        issues,
-        stats,
-        opts,
-        true,
-      );
-      continue;
-    }
+  if (ref.guard !== undefined) {
+    walkStrings(
+      `${ref.basePath}.${PROCESSING_OP_GUARD_KEY}`,
+      ref.guard,
+      ref.stepId,
+      issues,
+      stats,
+      opts,
+      true,
+    );
+  }
+  for (const [, value] of ref.entries) {
     // The operation name is absorbed into OperationType; its body is inline.
-    walkStrings(basePath, value, stepID, issues, stats, opts, true);
+    walkStrings(ref.basePath, value, ref.stepId, issues, stats, opts, true);
   }
 }
 
@@ -162,29 +158,8 @@ export function validateTemplates(
     if (step.query !== undefined) {
       walkStrings(`steps.${stepID}.query`, step.query, stepID, issues, stats, opts, true);
     }
-    if (isArray(step.pre_processing)) {
-      step.pre_processing.forEach((op, i) => {
-        walkProcessingOperation(
-          `steps.${stepID}.pre_processing[${i}]`,
-          op,
-          stepID,
-          issues,
-          stats,
-          opts,
-        );
-      });
-    }
-    if (isArray(step.post_processing)) {
-      step.post_processing.forEach((op, i) => {
-        walkProcessingOperation(
-          `steps.${stepID}.post_processing[${i}]`,
-          op,
-          stepID,
-          issues,
-          stats,
-          opts,
-        );
-      });
+    for (const ref of processingOperationsOfStep(stepID, step)) {
+      walkProcessingOperation(ref, issues, stats, opts);
     }
     // response_expectation templates are counted (matching countTemplates) but
     // not syntax-checked (matching validateStepTemplates).

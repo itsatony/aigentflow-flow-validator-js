@@ -1,6 +1,6 @@
 {
   "$comment": "Vendored enum surface mirrored from the AIgentFlow Go reference implementation. Regenerate / review on every flow-YAML schema change. See PARITY.md. Values here are public protocol/type names only.",
-  "specVersion": "2.642.0",
+  "specVersion": "2.647.0",
   "inputSchemaVersion": 1,
   "executorSchemes": [
     "a2a",
@@ -165,6 +165,38 @@
       "fn_uniq",
       "fn_urldecode"
     ]
+  },
+  "processingOperations": {
+    "$comment": "Pre/post-processing operation dispatch set and per-operation config keys. The key sets are PER OPERATION and must never be unioned: `asset_id` is read by binary.get/update/delete and is NOT read by binary.transform, which reads `source_asset_id`.",
+    "guardKey": "if",
+    "standardTypes": [
+      "data.set",
+      "conversation.append",
+      "output.set",
+      "binary.store",
+      "binary.get",
+      "binary.update",
+      "binary.delete",
+      "binary.transform",
+      "parse"
+    ],
+    "loopSubStepTypes": ["loop.set", "loop.break"],
+    "openKeyTypes": ["data.set", "output.set", "conversation.append", "loop.set"],
+    "closedConfigKeys": {
+      "parse": ["source", "format", "target", "on_error"],
+      "binary.store": ["data", "metadata", "result_key"],
+      "binary.get": ["asset_id", "include_data", "result_key"],
+      "binary.update": ["asset_id", "data", "metadata"],
+      "binary.delete": ["asset_id"],
+      "binary.transform": [
+        "source_asset_id",
+        "transformer",
+        "parameters",
+        "metadata",
+        "result_key"
+      ],
+      "loop.break": ["if"]
+    }
   },
   "templateFunctions": [
     "and",
