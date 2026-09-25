@@ -661,6 +661,29 @@ describe('input_schema', () => {
 });
 
 describe('templates + summary', () => {
+  // aigentflow v2.735.0 (DC-FORGE-162, aigentflow#149): Sprig's float names are
+  // registered. Under strictRegistries an unknown function is an error, so this
+  // is the only setting in which the allow-list is actually exercised.
+  it('knows the Sprig float names under strictRegistries', () => {
+    const r = validateFlowObject(
+      {
+        ...MINIMAL,
+        steps: {
+          a: {
+            executor: 'function://text/noop',
+            query: { v: '{{ divf (addf (mulf 2 0.5) 1) (float64 "2") }} {{ subf 3 1 }}' },
+          },
+        },
+      },
+      { strictRegistries: true },
+    );
+    expect(codes(r)).not.toContain('template_function_unknown');
+    const control = validateFlowObject(
+      { ...MINIMAL, steps: { a: { executor: 'function://text/noop', query: { v: '{{ addg 1 2 }}' } } } },
+      { strictRegistries: true },
+    );
+    expect(codes(control)).toContain('template_function_unknown');
+  });
   it('reports a template syntax error and counts templates', () => {
     const r = validateFlow(
       'aigentflow_version: "2.0.0"\nname: t\nstart: a\nsteps:\n  a:\n    executor: mock://x/y\n    query:\n      v: "{{ if .x }}oops"\n',
