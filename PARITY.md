@@ -570,6 +570,11 @@ max_retries` and `QualityGateDefinition.max_retries` are unchanged. Removing
 > is engine behaviour and out of scope for static validation. New conformance
 > fixtures: `valid-orchestrator-monitor.yaml`, `invalid-orchestrator-owner-no-yield.yaml`.
 >
+> v2.735.0 (DC-FORGE-162, aigentflow#149): added Sprig's float names `addf`, `subf`,
+> `mulf`, `divf` and `float64` to `templateFunctions`. `ternary` also accepts Sprig's
+> condition-last order at runtime; that changes no name, so the allow-list is unaffected.
+> Allow-list only. `specVersion` deliberately stays where `main` has it, for PR #8's reason.
+>
 > v2.478.0: added the `htmlDocument` template function (sanitises LLM chat output
 > destined for public hosting — slices `<!doctype>`…`</html>`, dropping markdown
 > fences + conversational preamble/postamble). Allow-list only; runtime behaviour
