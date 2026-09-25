@@ -267,6 +267,41 @@ discipline for keeping the two in sync.
 > because it is not yet on `main`; it is byte-identical to #8's, so the merge is
 > trivial in either order.
 
+> DC-FORGE-147 (no grammar change, so `specVersion` stays `2.642.0`) — **one new
+> static rule ported, a warning: `step_max_duration_ignored`.** The reference now
+> bounds each executor invocation of a step by its `max_duration`. Two
+> declarations fall outside that, each warned on at `steps.<id>.max_duration`:
+>
+> - a value that is not `none`/`never`/`infinite` and does not parse as a Go
+>   `time.ParseDuration` string (`2d`, `5 minutes`, a `{{ template }}`, a bare
+>   `90`) — the engine runs that step with **no** time limit rather than fail a
+>   stored flow at its run door;
+> - a parseable value on a `loop:` step, which makes no executor call of its own.
+>
+> Only top-level steps are walked: loop sub-steps have no `max_duration` field in
+> the reference. `0s` and negative values parse (the engine treats them as no
+> bound) and do not warn. Both messages are the reference's
+> `WARN_MSG_STEP_MAX_DURATION_UNPARSEABLE` / `_LOOP` verbatim, with `%q` rendered
+> as `JSON.stringify`. The reference sets no `StepID` on this warning, so neither
+> does this port.
+>
+> The shared `parseGoDuration` helper was brought into line with Go on two edges
+> it got wrong: `1.s` (digits on one side of the point suffice) now parses, and a
+> value overflowing int64 nanoseconds (`2562048h`) no longer does. The unit test
+> pins 28 strings against `go run` output. This also tightens `invalid_duration`
+> on throttle `delay`/`batch_delay` and error-strategy delays, toward Go.
+>
+> Divergences, none of which changes a verdict: the reference's field is a Go
+> `string`, so YAML decodes any scalar into it; this port reads a string or a
+> finite number (as its decimal text) and ignores booleans/mappings. A YAML
+> number's original spelling (`0x10`) is lost at parse here, so its text may
+> differ in the message. The overflow boundary is float-approximate to within a
+> few ns of 2^63.
+>
+> ⚠️ **`specVersion` deliberately understates**, as in #8, #12 and #13.
+> `forbidWarningCodes` is added here too because it is not yet on `main`; it is
+> byte-identical to #8's, #12's and #13's.
+
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
 > `validateProcessingOperation` took `operation any` and asserted `map[string]any`
@@ -488,28 +523,29 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 
 ## Rule map
 
-| Area                                                                          | Go source                                                                                         | JS module                                                | Tested by                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------- |
-| Required fields, start-step existence, per-step executor, reserved `.` in IDs | `validateBasicStructure`, `ValidateFlow` head                                                     | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
-| Executor URI shape (the ONE parser) + scheme                                  | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                            | `validators/executors.ts`                                | `validate.test.ts`                          |
-| Query/property/array-item schema + array constraints                          | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints` | `validators/querySchema.ts`                              | `validate.test.ts`                          |
-| Response-expectation types + array items + `required`                         | `ValidateFlow` (response block), `validateSemantics`                                              | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
-| Response expectation nothing reads (`response_expectation_unread`, warning)   | `validateResponseExpectationIsRead` (validation.go)                                               | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Error strategy (action, goto, max_delay, backoff, retry_on)                   | `validateErrorStrategy`                                                                           | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
-| `next` references, reachability, cycles                                       | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                | `validators/connectivity.ts`                             | `validate.test.ts`                          |
-| `next.parallel` + orchestrator-next requirement                               | `validateNextLogic`, `validateOrchestratorNext`                                                   | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
-| Expression functions (XOR package/function)                                   | `validateExpressionFunctions`                                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
-| Expression-function catalog (`package:` refused, unknown `function:` refused) | `validateExpressionFunctionCatalog` (parser.go)                                                   | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)    | `validateExpressionFunctionUsage` (parser.go)                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Loop / for_each / throttle                                                    | `validateLoop`, `validateForEach`, `validateThrottle`                                             | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
-| Loop sub-step `next:` targets (same-loop only, sentinels, no parallel)        | `validateLoopSubStepNext` (parser.go)                                                             | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
-| Orchestrator structure + campaign requires orchestrator                       | `validateOrchestrator`, `validateAndNormalizeCampaign`                                            | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
-| Credential bindings (`stored/...`, inject_as, exclusivity)                    | `validateStepCredentialBindings`                                                                  | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
-| `input_schema` definition + ordering lint                                     | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                   | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
-| Step `output_schema` definition (reuses the input-schema subset)              | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                               | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
-| `quality_gate:` block (rubric/threshold/on_fail/goto)                         | `FlowParser.validateQualityGate` (parser.go)                                                      | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
-| Processing-operation type + per-operation config keys                         | `validateProcessingOperationShape`                                                                | `validators/processingOperations.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
-| Go-template syntax                                                            | `validateTemplateExpression` (Parse step)                                                         | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
+| Area                                                                               | Go source                                                                                              | JS module                                                | Tested by                                   |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------- |
+| Required fields, start-step existence, per-step executor, reserved `.` in IDs      | `validateBasicStructure`, `ValidateFlow` head                                                          | `validators/basicStructure.ts`                           | `validate.test.ts`                          |
+| Executor URI shape (the ONE parser) + scheme                                       | `ValidateFlow` executor-URL rule (parser.go), `ParseExecutorURLString`                                 | `validators/executors.ts`                                | `validate.test.ts`                          |
+| Query/property/array-item schema + array constraints                               | `validateQueryParameters`, `validateProperties`, `validateArrayItems`, `validateArrayConstraints`      | `validators/querySchema.ts`                              | `validate.test.ts`                          |
+| Response-expectation types + array items + `required`                              | `ValidateFlow` (response block), `validateSemantics`                                                   | `validators/responseExpectation.ts`                      | `validate.test.ts`                          |
+| Response expectation nothing reads (`response_expectation_unread`, warning)        | `validateResponseExpectationIsRead` (validation.go)                                                    | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Error strategy (action, goto, max_delay, backoff, retry_on)                        | `validateErrorStrategy`                                                                                | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
+| `next` references, reachability, cycles                                            | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                     | `validators/connectivity.ts`                             | `validate.test.ts`                          |
+| `next.parallel` + orchestrator-next requirement                                    | `validateNextLogic`, `validateOrchestratorNext`                                                        | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
+| Expression functions (XOR package/function)                                        | `validateExpressionFunctions`                                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
+| Expression-function catalog (`package:` refused, unknown `function:` refused)      | `validateExpressionFunctionCatalog` (parser.go)                                                        | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)         | `validateExpressionFunctionUsage` (parser.go)                                                          | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Loop / for_each / throttle                                                         | `validateLoop`, `validateForEach`, `validateThrottle`                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
+| Loop sub-step `next:` targets (same-loop only, sentinels, no parallel)             | `validateLoopSubStepNext` (parser.go)                                                                  | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
+| Orchestrator structure + campaign requires orchestrator                            | `validateOrchestrator`, `validateAndNormalizeCampaign`                                                 | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
+| Credential bindings (`stored/...`, inject_as, exclusivity)                         | `validateStepCredentialBindings`                                                                       | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
+| `input_schema` definition + ordering lint                                          | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                        | `validators/inputSchema.ts`                              | `validate.test.ts`                          |
+| Step `output_schema` definition (reuses the input-schema subset)                   | `ValidateInputSchemaDefinition` (on `step.OutputSchema`, parser.go)                                    | `validators/outputSchema.ts` (+ shared `inputSchema.ts`) | `validate.test.ts`                          |
+| `quality_gate:` block (rubric/threshold/on_fail/goto)                              | `FlowParser.validateQualityGate` (parser.go)                                                           | `validators/qualityGate.ts`                              | `validate.test.ts`                          |
+| Processing-operation type + per-operation config keys                              | `validateProcessingOperationShape`                                                                     | `validators/processingOperations.ts`                     | `validate.test.ts`, `conformance.test.ts`   |
+| Step `max_duration` the engine cannot apply (`step_max_duration_ignored`, warning) | `validateStepMaxDurationIsApplied` (validation.go), `parseStepMaxDuration` (flowengine.steptimeout.go) | `validators/stepMaxDuration.ts`                          | `validate.test.ts`, `conformance.test.ts`   |
+| Go-template syntax                                                                 | `validateTemplateExpression` (Parse step)                                                              | `template/gotmpl-syntax.ts` + `validators/templates.ts`  | `gotmpl-syntax.test.ts`, `validate.test.ts` |
 
 ---
 

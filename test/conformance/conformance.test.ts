@@ -339,6 +339,21 @@ const CASES: Case[] = [
       'invalid_error_strategy_action',
     ],
   },
+  {
+    // AIF DC-FORGE-147: the engine bounds each executor invocation by the
+    // step's max_duration. An unparseable value ("2d", "5 minutes", a template)
+    // bounds nothing, and neither does one on a loop step.
+    file: 'warn-step-max-duration-ignored.yaml',
+    valid: true,
+    expectWarningCodes: ['step_max_duration_ignored'],
+  },
+  {
+    // The counter-fixture: Go durations (incl. compound), the three no-bound
+    // spellings, and a bounded step beside a loop step with no max_duration.
+    file: 'valid-step-max-duration-applied.yaml',
+    valid: true,
+    forbidWarningCodes: ['step_max_duration_ignored'],
+  },
 ];
 
 describe('conformance fixtures', () => {

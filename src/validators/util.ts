@@ -64,6 +64,9 @@ const GO_DURATION_UNITS: Record<string, number> = {
   h: 36e11,
 };
 
+/** 2^63 ns: Go's time.Duration is an int64. */
+const GO_DURATION_MAX_NS = 2 ** 63;
+
 export function parseGoDuration(input: string): number | null {
   let s = input;
   if (s === '') return null;
@@ -78,7 +81,9 @@ export function parseGoDuration(input: string): number | null {
 
   let total = 0;
   let matchedAny = false;
-  const re = /^(\d*\.?\d+)(ns|us|µs|μs|ms|s|m|h)/;
+  // Go accepts "1.5s", ".5s" AND "1.s" — digits on at least one side of the
+  // point. `\d*\.?\d+` rejected "1.s".
+  const re = /^(\d+\.?\d*|\.\d+)(ns|us|µs|μs|ms|s|m|h)/;
   while (s.length > 0) {
     const m = re.exec(s);
     if (!m) return null;
@@ -89,7 +94,12 @@ export function parseGoDuration(input: string): number | null {
     s = s.slice(m[0].length);
     matchedAny = true;
   }
-  return matchedAny ? sign * total : null;
+  if (!matchedAny) return null;
+  // Go refuses a duration that overflows int64 nanoseconds (~2562047h). The
+  // float boundary is approximate to within a few ns of 2^63, which no author
+  // writes.
+  if (sign > 0 ? total >= GO_DURATION_MAX_NS : total > GO_DURATION_MAX_NS) return null;
+  return sign * total;
 }
 
 export function isValidGoDuration(input: string): boolean {

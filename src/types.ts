@@ -198,6 +198,12 @@ export interface StepDefinition {
   error_strategy?: ErrorStrategyDefinition;
   for_each?: ForEachDefinition;
   loop?: LoopDefinition;
+  /**
+   * Bounds each executor invocation of the step (a Go duration, or
+   * "none"/"never"/"infinite"). Unparseable, or on a `loop:` step, it bounds
+   * nothing — see `step_max_duration_ignored`.
+   */
+  max_duration?: string;
   credential?: string;
   credentials?: Record<string, CredentialBinding | null>;
   output_schema?: InputSchema;
