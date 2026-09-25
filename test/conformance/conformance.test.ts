@@ -62,6 +62,22 @@ const CASES: Case[] = [
     file: 'valid-loop-only-op-at-top-level-warns.yaml',
     valid: true,
     expectWarningCodes: ['unknown_processing_operation'],
+    // AIF v2.651.0 (DC-FORGE-81): `goto_step` is read ONLY when the same
+    // strategy's action is `goto`. Beside any other action the engine never
+    // looks at it and the handler is unreachable — which is what BOTH of AIF's
+    // bundled example flows shipped. Both levels are checked independently, so
+    // both are declared here.
+    file: 'warn-unreachable-error-goto.yaml',
+    valid: true,
+    expectWarningCodes: ['unreachable_error_goto'],
+  },
+  {
+    // The counter-fixture, and the one that matters: every goto_step here IS
+    // reachable. Without forbidWarningCodes this file is green even if the rule
+    // fires on every error_strategy it sees.
+    file: 'valid-reachable-error-goto.yaml',
+    valid: true,
+    forbidWarningCodes: ['unreachable_error_goto'],
   },
   {
     // v2.608.0: the ONE grammar key spelled `goto` (aigentflow.domain.step.go:134).
