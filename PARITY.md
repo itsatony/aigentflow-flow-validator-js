@@ -168,6 +168,75 @@ discipline for keeping the two in sync.
 > v2.651.0's other five findings are runtime template-context behaviour
 > (divergence #3), engine routing, or documentation surface.
 
+> v2.672.0 (DC-FORGE-102, aigentflow#116; no grammar change, so `specVersion`
+> stays `2.642.0`) — **three new static rules ported: a loop sub-step's `next:`
+> targets are now checked.** A `loop:` sub-step may carry its own `next:` block,
+> and its targets — `next.default` and every `next.conditions[].goto` — resolve
+> ONLY against the sub-step ids of the SAME loop.
+>
+> ⛔ **Nothing checked them, on either side.** `validateNextLogic`,
+> `validateOrchestratorNext` and this validator's connectivity pass all walk
+> `flow.steps` only, and **a loop body is a SECOND step table** — the distinction
+> this family of defects keeps being about. So `goto: pol` for a sub-step called
+> `poll` saved clean, stored, and surfaced at run time as a WARN followed by a
+> silent sequential advance: the branch the author wrote simply never happened,
+> in the one construct whose entire purpose is branching.
+>
+> Three refusals, each with its own code, each a shape the runtime cannot act on:
+>
+> 1. **`loop_substep_next_target_not_found`** — the target names no sub-step of
+>    that loop. ⭐ **The interesting miss is a target that names a real TOP-LEVEL
+>    step**, which looks correct to every reader and to every previous check, and
+>    which the loop driver cannot see.
+> 2. **`loop_substep_next_sentinel`** — the target is `null` or `orchestrator`.
+>    The reference's `resolveLoopSubStepNext` has no sentinel awareness at all, so
+>    `null` cannot end a mission from a loop body and `orchestrator` cannot yield;
+>    both take the same miss path as a typo. (This is also why the reference's
+>    `flowHasOrchestratorYieldEdge` skipping loop bodies is correct rather than a
+>    bug: the edge is unreachable, so the fix is to refuse WRITING it.)
+> 3. **`loop_substep_next_parallel`** — the sub-step declares `next.parallel`. The
+>    loop driver reads conditions and default only, so the block never fans out
+>    and its rendezvous never runs.
+>
+> **Both jump directions stay legal** — the runtime sub-step index covers the
+> whole loop, not only the sub-steps declared earlier — which is why the check
+> runs as a SECOND pass over the already-collected id set, and why the valid
+> fixture carries a forward jump AND a backward one. **An empty target is the
+> documented "advance sequentially" and is left alone.**
+>
+> ⚠️ **`end` is reported as a missing target, not as a sentinel.** The reference
+> names only `null` and `orchestrator` and lets everything else fall through to
+> the existence check, and that is the honest answer inside a loop body, where
+> nothing reads `end` either. **Divergence #2 is about TOP-LEVEL next targets and
+> is deliberately not extended into a loop body.**
+>
+> **Severity: all three are `error` here.** Upstream they are hard refusals at the
+> SAVE door and downgraded to a warning on the stored-flow LOAD door, so a flow
+> written before the rule keeps running exactly as degraded as it already was.
+> This validator has no notion of doors and answers **"would this save"** — the
+> same choice already made for the executor-URL shape and expression-function
+> catalog rules. **No new severity was invented, and a refusal here does not imply
+> a broken running flow.**
+>
+> ⭐ **`forbidErrorCodes` is new in the conformance harness.** `valid: true`
+> already fails on any spurious error, so this is not the verdict-shaped hole
+> `forbidWarningCodes` fills for a warning rule — it NAMES the rule under test, so
+> a regression reads as "the loop-target rule fired on a legal backward jump"
+> instead of as an anonymous count mismatch. All five mutants (drop the existence
+> check, make an empty target illegal, drop the sentinel set, drop the parallel
+> check, judge targets single-pass so a forward jump is refused) are killed by
+> both a unit test and a conformance fixture.
+>
+> ⚠️ **`specVersion` deliberately understates, for PR #8's reason.** This branch is
+> cut from `main`, which does not carry the v2.646.0–v2.651.0 work sitting in the
+> open stacked PRs. Claiming `2.672.0` here would assert rules this branch does
+> not have. Reconcile on merge, in whatever order those land.
+>
+> New conformance fixtures: `valid-loop-substep-next.yaml`,
+> `invalid-loop-substep-next-unknown-target.yaml`,
+> `invalid-loop-substep-next-sentinel.yaml`,
+> `invalid-loop-substep-next-parallel.yaml`.
+
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
 > `validateProcessingOperation` took `operation any` and asserted `map[string]any`
@@ -402,6 +471,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | Expression-function catalog (`package:` refused, unknown `function:` refused) | `validateExpressionFunctionCatalog` (parser.go)                                                   | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
 | Expression-function USE (`{{ fn_* }}` must be in the catalog AND declared)    | `validateExpressionFunctionUsage` (parser.go)                                                     | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
 | Loop / for_each / throttle                                                    | `validateLoop`, `validateForEach`, `validateThrottle`                                             | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`                          |
+| Loop sub-step `next:` targets (same-loop only, sentinels, no parallel)        | `validateLoopSubStepNext` (parser.go)                                                             | `validators/loopForEachThrottle.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
 | Orchestrator structure + campaign requires orchestrator                       | `validateOrchestrator`, `validateAndNormalizeCampaign`                                            | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`                          |
 | Credential bindings (`stored/...`, inject_as, exclusivity)                    | `validateStepCredentialBindings`                                                                  | `validators/credentialBindings.ts`                       | `validate.test.ts`                          |
 | `input_schema` definition + ordering lint                                     | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                   | `validators/inputSchema.ts`                              | `validate.test.ts`                          |

@@ -508,6 +508,103 @@ describe('loop / for_each / throttle', () => {
     });
     expect(r.valid).toBe(true);
   });
+  it('accepts a loop sub-step next: that jumps forward and backward', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 3,
+            steps: [
+              { id: 's1', executor: 'mock://x/y', next: { default: 's3' } },
+              { id: 's2', executor: 'mock://x/y', next: { default: '' } },
+              {
+                id: 's3',
+                executor: 'mock://x/y',
+                next: { conditions: [{ if: '{{ true }}', goto: 's1' }] },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(r.valid).toBe(true);
+  });
+  it('rejects a loop sub-step next: naming a TOP-LEVEL step', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 3,
+            steps: [{ id: 's1', executor: 'mock://x/y', next: { default: 'b' } }],
+          },
+          next: { default: 'b' },
+        },
+        b: { executor: 'mock://x/y' },
+      },
+    });
+    expect(codes(r)).toContain('loop_substep_next_target_not_found');
+  });
+  it('rejects the top-level next: sentinels inside a loop body', () => {
+    for (const marker of ['null', 'orchestrator']) {
+      const r = validateFlowObject({
+        ...MINIMAL,
+        steps: {
+          a: {
+            loop: {
+              while: '{{ true }}',
+              max_iterations: 3,
+              steps: [{ id: 's1', executor: 'mock://x/y', next: { default: marker } }],
+            },
+          },
+        },
+      });
+      expect(codes(r), marker).toContain('loop_substep_next_sentinel');
+    }
+  });
+  it('reports `end` in a loop body as a missing target, not as a sentinel', () => {
+    // Divergence #2 is about TOP-LEVEL targets. Inside a loop body nothing
+    // reads `end`, and the reference refuses only `null`/`orchestrator` by name.
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 3,
+            steps: [{ id: 's1', executor: 'mock://x/y', next: { default: 'end' } }],
+          },
+        },
+      },
+    });
+    expect(codes(r)).toContain('loop_substep_next_target_not_found');
+    expect(codes(r)).not.toContain('loop_substep_next_sentinel');
+  });
+  it('rejects next.parallel inside a loop body', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 3,
+            steps: [
+              {
+                id: 's1',
+                executor: 'mock://x/y',
+                next: { parallel: { steps: ['s2'], rendezvous: 's2' } },
+              },
+              { id: 's2', executor: 'mock://x/y' },
+            ],
+          },
+        },
+      },
+    });
+    expect(codes(r)).toContain('loop_substep_next_parallel');
+  });
   it('rejects a loop over the iteration limit', () => {
     const r = validateFlowObject({
       ...MINIMAL,
