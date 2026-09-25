@@ -202,6 +202,27 @@ const CASES: Case[] = [
     valid: true,
   },
   {
+    // AIF v2.695.0 (DC-FORGE-125, aigentflow#124): the per-question HITL
+    // deadline. A NEGATIVE duration is well-formed Go, so a bare
+    // isValidGoDuration check accepts it and the reference parser does not —
+    // an oracle looser than its door, in the damaging direction.
+    file: 'invalid-orchestrator-human-question-timeout.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_human_question_timeout_invalid'],
+  },
+  {
+    // The other side of the same rule: a declared deadline with its response is
+    // legal.
+    //
+    // NOTE no `forbidErrorCodes` here, deliberately. `valid: true` already
+    // fails on ANY error, so a rule that misfired on this fixture is caught
+    // either way — unlike a WARNING rule, whose false positive leaves `valid`
+    // untouched and needs the explicit forbid list. Adding the machinery for an
+    // error rule would buy a nicer failure message and no coverage.
+    file: 'valid-orchestrator-human-question-timeout.yaml',
+    valid: true,
+  },
+  {
     // DC-COND-2: monitor-mode campaign with on_children_complete → a real step.
     file: 'valid-campaign-handoff.yaml',
     valid: true,

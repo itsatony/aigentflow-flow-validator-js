@@ -13,7 +13,7 @@ import type {
   ValidateOptions,
 } from '../types.js';
 import { ORCHESTRATOR_MODES, ORCHESTRATOR_TOOLS, ORCHESTRATOR_TRIGGERS } from '../spec/index.js';
-import { Issues, isRecord, isString, isValidGoDuration } from './util.js';
+import { Issues, isRecord, isString, isValidGoDuration, parseGoDuration } from './util.js';
 
 const TRIGGER_TIMER = 'timer';
 const MODE_OWNER = 'owner';
@@ -55,6 +55,34 @@ export function validateOrchestratorCampaign(
         message: 'orchestrator requires an exons specification',
         code: 'orchestrator_exons_required',
       });
+    }
+
+    // AIF v2.695.0 (DC-FORGE-125, aigentflow#124): the per-question HITL
+    // deadline. The reference REFUSES an unparseable or non-positive duration
+    // (parser.go, beside the timer trigger's interval), so this oracle refuses
+    // it too.
+    //
+    // NOTE the positivity check. `isValidGoDuration('-5m')` is true — it is a
+    // well-formed Go duration — and the reference still refuses it, because a
+    // deadline in the past is not a deadline. An oracle that accepted it would
+    // be LOOSER than the door it predicts, which is the more damaging direction
+    // for a "would this save?" answer.
+    //
+    // NOT ported, deliberately: the reference also WARNS when the declared
+    // timeout exceeds ORCH_MAX_MISSION_DURATION. That threshold is a server
+    // constant this package cannot observe, and hard-coding 60m here would put
+    // a second copy of a deployment-side number in another repository. See
+    // PARITY.md divergence #12.
+    if (orch.human_question_timeout !== undefined) {
+      const declared = orch.human_question_timeout;
+      const parsed = isString(declared) ? parseGoDuration(declared) : null;
+      if (parsed === null || parsed <= 0) {
+        issues.error({
+          field: 'orchestrator.human_question_timeout',
+          message: `human_question_timeout '${String(declared)}' is not a valid positive duration`,
+          code: 'orchestrator_human_question_timeout_invalid',
+        });
+      }
     }
 
     // DC-COND-1: termination-authority mode. Empty defaults to monitor (valid).
