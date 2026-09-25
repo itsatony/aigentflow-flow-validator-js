@@ -1,5 +1,5 @@
 // Required top-level fields, step-map shape, per-step executor requirement,
-// and the reserved-character rule on step IDs.
+// and the two reserved step-ID rules (the `.` character, the id `orchestrator`).
 //
 // Mirrors `validateBasicStructure` (validation.go) and the structural head of
 // `FlowParser.ValidateFlow` (parser.go). Because YAML can produce any shape,
@@ -12,6 +12,7 @@ import { Issues, isRecord, isString, stepNames } from './util.js';
 // Reserved in step IDs: the engine uses "parent.child" as the composite ID for
 // loop sub-steps, so a literal "." in a top-level step ID is rejected.
 const RESERVED_STEP_ID_CHAR = '.';
+const RESERVED_STEP_ID_ORCHESTRATOR = 'orchestrator';
 
 export function validateBasicStructure(flow: Flow, issues: Issues): void {
   if (!isString(flow.aigentflow_version) || flow.aigentflow_version === '') {
@@ -90,6 +91,20 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
         message: `Step ID '${stepID}' must not contain '${RESERVED_STEP_ID_CHAR}' (reserved for loop sub-step IDs)`,
         code: 'reserved_step_id_char',
         stepId: stepID,
+      });
+    }
+
+    // AIF v2.484.0 (DC-COND-1): `orchestrator` is the engine's own step id for
+    // orchestrator-originated signals and a reserved `next:` marker. A worker
+    // step with that id could have its soft completion signal read as the
+    // mission-complete key. Case-sensitive, top-level steps only, as upstream.
+    if (stepID === RESERVED_STEP_ID_ORCHESTRATOR) {
+      issues.error({
+        field: `steps.${stepID}`,
+        message: `Step ID '${stepID}' is reserved (the orchestrator's signal namespace and a next: marker)`,
+        code: 'reserved_step_id_orchestrator',
+        stepId: stepID,
+        suggestion: 'Rename the step',
       });
     }
 

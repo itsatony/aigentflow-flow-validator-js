@@ -26,6 +26,7 @@ import { validateTemplates } from './validators/templates.js';
 import { validateProcessingOperations } from './validators/processingOperations.js';
 import { validateStepMaxDuration } from './validators/stepMaxDuration.js';
 import { validateRetiredKeys } from './validators/retiredKeys.js';
+import { validateSaveDoorExtras } from './validators/saveDoor.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
 export { parseFlow } from './parse.js';
@@ -95,6 +96,7 @@ export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): V
   validateQualityGates(f, issues);
   validateProcessingOperations(f, issues);
   validateStepMaxDuration(f, issues);
+  validateSaveDoorExtras(f, issues);
   const templateStats = validateTemplates(f, issues, opts);
 
   const totalSteps =

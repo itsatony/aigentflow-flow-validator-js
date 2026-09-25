@@ -395,6 +395,75 @@ const CASES: Case[] = [
     valid: true,
     forbidWarningCodes: ['step_max_duration_ignored'],
   },
+  // Reference save-door refusals first carried by the Go port. Each invalid
+  // fixture was checked against the reference's strict save parser, AND a copy
+  // with only the offending value corrected was checked to SAVE — so the
+  // refusal is the rule under test and nothing else.
+  {
+    file: 'invalid-reserved-step-id-orchestrator.yaml',
+    valid: false,
+    expectErrorCodes: ['reserved_step_id_orchestrator'],
+  },
+  {
+    // All three surfaces: the flow root, the orchestrator (where the number 5
+    // is the string "5"), and a step query.
+    file: 'invalid-tool-discovery-vocabulary.yaml',
+    valid: false,
+    expectErrorCodes: ['tool_discovery_invalid'],
+  },
+  {
+    // The counter-fixture: the three modes, empty, templated, and a non-string
+    // step query value, which is not judged.
+    file: 'valid-tool-discovery-vocabulary.yaml',
+    valid: true,
+    forbidErrorCodes: ['tool_discovery_invalid'],
+  },
+  {
+    file: 'invalid-mock-scenario-delay.yaml',
+    valid: false,
+    expectErrorCodes: ['mock_delay_invalid'],
+  },
+  {
+    // A bare 0, compound, '.5s', '1.s', a sign, the micro sign, empty and null.
+    file: 'valid-mock-scenario-delay.yaml',
+    valid: true,
+    forbidErrorCodes: ['mock_delay_invalid'],
+  },
+  {
+    file: 'invalid-output-param-empty.yaml',
+    valid: false,
+    expectErrorCodes: ['output_param_empty'],
+  },
+  {
+    // yaml.v3 drops a null list entry, so the reference saves this.
+    file: 'valid-output-null-entry.yaml',
+    valid: true,
+    forbidErrorCodes: ['output_param_empty'],
+  },
+  {
+    // A list of nothing but nulls is empty after decoding.
+    file: 'invalid-campaign-no-child-flows.yaml',
+    valid: false,
+    expectErrorCodes: ['campaign_no_child_flows'],
+  },
+  {
+    file: 'invalid-campaign-child-flow-no-id.yaml',
+    valid: false,
+    expectErrorCodes: ['campaign_child_flow_no_id'],
+  },
+  {
+    // ⚠️ The false positive this cycle removed: max_credits_per_child 1.5 is
+    // truncated into the int64 field and SAVES. Also a null child entry, a
+    // numeric flow_id, and a max_depth that defaults.
+    file: 'valid-campaign-decoded-shapes.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'invalid_type',
+      'campaign_invalid_max_credits_per_child',
+      'campaign_no_child_flows',
+      'campaign_child_flow_no_id',
+    ],
+  },
 ];
 
 describe('conformance fixtures', () => {
