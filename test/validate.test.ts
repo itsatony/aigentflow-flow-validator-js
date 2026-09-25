@@ -679,7 +679,10 @@ describe('templates + summary', () => {
     );
     expect(codes(r)).not.toContain('template_function_unknown');
     const control = validateFlowObject(
-      { ...MINIMAL, steps: { a: { executor: 'function://text/noop', query: { v: '{{ addg 1 2 }}' } } } },
+      {
+        ...MINIMAL,
+        steps: { a: { executor: 'function://text/noop', query: { v: '{{ addg 1 2 }}' } } },
+      },
       { strictRegistries: true },
     );
     expect(codes(control)).toContain('template_function_unknown');
