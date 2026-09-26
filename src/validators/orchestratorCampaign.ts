@@ -20,6 +20,8 @@ import {
   isValidGoDuration,
   parseGoDuration,
   scalarText,
+  scalarTextAt,
+  type ScalarSources,
 } from './util.js';
 
 const TRIGGER_TIMER = 'timer';
@@ -115,6 +117,7 @@ export function validateOrchestratorCampaign(
   flow: Flow,
   issues: Issues,
   opts: ValidateOptions,
+  sources?: ScalarSources,
 ): void {
   const hasOrchestrator = isRecord(flow.orchestrator);
 
@@ -195,16 +198,20 @@ export function validateOrchestratorCampaign(
           return;
         }
         if (trigger.type === TRIGGER_TIMER) {
-          if (!isString(trigger.interval) || trigger.interval === '') {
+          // A Go `string` field, filled from ANY scalar by its source text:
+          // `interval: 0` is "0" and saves, `interval: 100` is "100" (no unit).
+          // A number used to read as "no interval" here.
+          const interval = scalarTextAt(trigger.interval, `${base}.interval`, sources);
+          if (interval === null || interval === '') {
             issues.error({
               field: `${base}.interval`,
               message: 'timer trigger requires an interval',
               code: 'orchestrator_timer_no_interval',
             });
-          } else if (!isValidGoDuration(trigger.interval)) {
+          } else if (!isValidGoDuration(interval)) {
             issues.error({
               field: `${base}.interval`,
-              message: `timer trigger interval '${trigger.interval}' is not a valid duration`,
+              message: `timer trigger interval '${interval}' is not a valid duration`,
               code: 'orchestrator_timer_bad_interval',
             });
           }

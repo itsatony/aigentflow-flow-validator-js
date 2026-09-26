@@ -464,6 +464,61 @@ const CASES: Case[] = [
       'campaign_child_flow_no_id',
     ],
   },
+  {
+    // 0.14.0: `end` is looked up as a STEP by the reference's save door
+    // (validateNextLogic accepts only null / orchestrator without one). Both a
+    // default and a condition's goto route to it here, and no step is `end`.
+    file: 'invalid-next-end-without-step.yaml',
+    valid: false,
+    expectErrorCodes: ['step_not_found'],
+  },
+  {
+    // A real step named `end` saves. The reference's reachability walk still
+    // stops at `end`, so that step is unreachable — on both sides.
+    file: 'valid-next-end-names-a-step.yaml',
+    valid: true,
+    expectWarningCodes: ['unreachable_step'],
+    forbidErrorCodes: ['step_not_found'],
+  },
+  {
+    // KnownFields(true) at every depth: root, step, error_strategy, next, a
+    // query parameter definition and a mock scenario step. Seven keys, seven
+    // findings (the unit test pins the fields).
+    file: 'invalid-unknown-keys.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    // `next: end` is a scalar where a mapping is required; `tags:` must be a list.
+    file: 'invalid-value-kind.yaml',
+    valid: false,
+    expectErrorCodes: ['invalid_type'],
+  },
+  {
+    // ⚠️ The false-positive guard for the unknown-key rule: author-chosen maps,
+    // interfaces, inlined constraint keys, nulls, a merge key, a numeric step id.
+    file: 'valid-open-key-sets.yaml',
+    valid: true,
+    forbidErrorCodes: ['unknown_yaml_key', 'invalid_type'],
+  },
+  {
+    // A number in a Go `string` duration field is its SOURCE text: 0.0, 00, 0x0,
+    // 100 and 1.5 have no unit. Mock delay, throttle delay / batch_delay, max_delay.
+    file: 'invalid-duration-numeric-spellings.yaml',
+    valid: false,
+    expectErrorCodes: ['mock_delay_invalid', 'invalid_duration'],
+  },
+  {
+    // The numbers that DO save there: 0, +0, -0 — and a timer interval of 0.
+    file: 'valid-duration-numeric-zero.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'mock_delay_invalid',
+      'invalid_duration',
+      'orchestrator_timer_no_interval',
+      'orchestrator_timer_bad_interval',
+    ],
+  },
 ];
 
 describe('conformance fixtures', () => {
