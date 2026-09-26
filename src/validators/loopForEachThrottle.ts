@@ -12,7 +12,15 @@ import type {
 } from '../types.js';
 import type { Flow } from '../types.js';
 import { FOR_EACH_RESOLUTIONS, LOOP_MAX_ITERATIONS_LIMIT } from '../spec/index.js';
-import { Issues, isInteger, isRecord, isString, parseGoDuration } from './util.js';
+import {
+  Issues,
+  isInteger,
+  isRecord,
+  isString,
+  parseGoDuration,
+  scalarTextAt,
+  type ScalarSources,
+} from './util.js';
 
 // Throttle ceilings (Go: FOR_EACH_MAX_THROTTLE_DELAY = 5m, FOR_EACH_MAX_BATCH_DELAY = 30m), in nanoseconds.
 const MAX_THROTTLE_DELAY_NS = 5 * 60 * 1e9;
@@ -157,20 +165,26 @@ function validateThrottle(
   field: string,
   stepID: string,
   issues: Issues,
+  sources: ScalarSources | undefined,
 ): void {
-  if (isString(throttle.delay) && throttle.delay !== '') {
-    const ns = parseGoDuration(throttle.delay);
+  // Both delays are Go `string` fields, which yaml.v3 fills from ANY scalar by
+  // its source text: `delay: 100` is "100" (no unit, refused), `delay: 0` is
+  // "0" (saves) and `delay: 0.0` is "0.0" (refused). A number used to be
+  // skipped here, which accepted all three.
+  const delay = scalarTextAt(throttle.delay, `${field}.delay`, sources);
+  if (delay !== null && delay !== '') {
+    const ns = parseGoDuration(delay);
     if (ns === null) {
       issues.error({
         field: `${field}.delay`,
-        message: `Invalid throttle delay '${throttle.delay}'`,
+        message: `Invalid throttle delay '${delay}'`,
         code: 'invalid_duration',
         stepId: stepID,
       });
     } else if (ns > MAX_THROTTLE_DELAY_NS) {
       issues.error({
         field: `${field}.delay`,
-        message: `throttle delay '${throttle.delay}' exceeds the 5m maximum`,
+        message: `throttle delay '${delay}' exceeds the 5m maximum`,
         code: 'throttle_delay_exceeds_max',
         stepId: stepID,
       });
@@ -178,7 +192,8 @@ function validateThrottle(
   }
 
   const batchSize = throttle.batch_size;
-  const hasBatchDelay = isString(throttle.batch_delay) && throttle.batch_delay !== '';
+  const batchDelay = scalarTextAt(throttle.batch_delay, `${field}.batch_delay`, sources);
+  const hasBatchDelay = batchDelay !== null && batchDelay !== '';
   if (batchSize !== undefined && isInteger(batchSize) && batchSize < 0) {
     issues.error({
       field: `${field}.batch_size`,
@@ -196,18 +211,18 @@ function validateThrottle(
   }
 
   if (hasBatchDelay) {
-    const ns = parseGoDuration(throttle.batch_delay as string);
+    const ns = parseGoDuration(batchDelay as string);
     if (ns === null) {
       issues.error({
         field: `${field}.batch_delay`,
-        message: `Invalid throttle batch_delay '${throttle.batch_delay}'`,
+        message: `Invalid throttle batch_delay '${batchDelay}'`,
         code: 'invalid_duration',
         stepId: stepID,
       });
     } else if (ns > MAX_BATCH_DELAY_NS) {
       issues.error({
         field: `${field}.batch_delay`,
-        message: `throttle batch_delay '${throttle.batch_delay}' exceeds the 30m maximum`,
+        message: `throttle batch_delay '${batchDelay}' exceeds the 30m maximum`,
         code: 'throttle_batch_delay_exceeds_max',
         stepId: stepID,
       });
@@ -215,7 +230,12 @@ function validateThrottle(
   }
 }
 
-function validateForEach(step: Record<string, unknown>, stepID: string, issues: Issues): void {
+function validateForEach(
+  step: Record<string, unknown>,
+  stepID: string,
+  issues: Issues,
+  sources: ScalarSources | undefined,
+): void {
   const fe = step.for_each as ForEachDefinition;
   const base = `steps.${stepID}.for_each`;
 
@@ -258,7 +278,13 @@ function validateForEach(step: Record<string, unknown>, stepID: string, issues: 
   }
 
   if (isRecord(fe.throttle)) {
-    validateThrottle(fe.throttle as ThrottleDefinition, `${base}.throttle`, stepID, issues);
+    validateThrottle(
+      fe.throttle as ThrottleDefinition,
+      `${base}.throttle`,
+      stepID,
+      issues,
+      sources,
+    );
   }
 }
 
@@ -390,14 +416,18 @@ function validateLoop(step: Record<string, unknown>, stepID: string, issues: Iss
   }
 }
 
-export function validateLoopForEachThrottle(flow: Flow, issues: Issues): void {
+export function validateLoopForEachThrottle(
+  flow: Flow,
+  issues: Issues,
+  sources?: ScalarSources,
+): void {
   const steps = flow.steps;
   if (!isRecord(steps)) return;
 
   for (const [stepID, step] of Object.entries(steps)) {
     if (!isRecord(step)) continue;
     if (step.for_each !== undefined && step.for_each !== null && isRecord(step.for_each)) {
-      validateForEach(step, stepID, issues);
+      validateForEach(step, stepID, issues, sources);
     }
     if (step.loop !== undefined && step.loop !== null && isRecord(step.loop)) {
       validateLoop(step, stepID, issues);

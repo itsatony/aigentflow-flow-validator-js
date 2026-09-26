@@ -345,18 +345,59 @@ describe('connectivity', () => {
     });
     expect(codes(r)).toContain('step_not_found');
   });
-  it('treats end/null/orchestrator as terminal markers', () => {
-    const r = validateFlowObject({
+  it('treats null (string or YAML null) and an empty default as terminal', () => {
+    for (const target of ['null', null, '']) {
+      const r = validateFlowObject({
+        ...MINIMAL,
+        steps: { a: { executor: 'mock://x/y', next: { default: target } } },
+      });
+      expect(r.valid, String(target)).toBe(true);
+    }
+  });
+
+  // Measured on the reference's save door (strict parser + validateNextLogic):
+  // `end` is looked up as a step and refused when none exists, in the default
+  // and in a condition's goto alike. It was a terminal marker here until 0.14.0.
+  it('refuses end as a next target when no step is called end', () => {
+    const viaDefault = validateFlowObject({
       ...MINIMAL,
       steps: { a: { executor: 'mock://x/y', next: { default: 'end' } } },
     });
+    expect(codes(viaDefault)).toContain('step_not_found');
+    expect(viaDefault.errors.map((e) => e.field)).toContain('steps.a.next.default');
+
+    const viaCondition = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: {
+          executor: 'mock://x/y',
+          next: { conditions: [{ if: '{{ true }}', goto: 'end' }], default: 'null' },
+        },
+      },
+    });
+    expect(viaCondition.errors.map((e) => e.field)).toContain('steps.a.next.conditions[0].goto');
+  });
+
+  // The reference's reachability walk still skips `end`, so a real step named
+  // `end` saves, and is reported unreachable when only `end` routes to it.
+  it('accepts end when a step of that name exists, and warns it unreachable as the reference does', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: { executor: 'mock://x/y', next: { default: 'end' } },
+        end: { executor: 'mock://x/y', next: { default: 'null' } },
+      },
+    });
     expect(r.valid).toBe(true);
+    expect(r.warnings.filter((w) => w.code === 'unreachable_step').map((w) => w.stepId)).toEqual([
+      'end',
+    ]);
   });
   it('warns about unreachable steps', () => {
     const r = validateFlowObject({
       ...MINIMAL,
       steps: {
-        a: { executor: 'mock://x/y', next: { default: 'end' } },
+        a: { executor: 'mock://x/y', next: { default: 'null' } },
         orphan: { executor: 'mock://x/y' },
       },
     });
@@ -494,7 +535,7 @@ describe('expression_functions usage', () => {
         fn_build: {
           executor: 'mock://x/y',
           query: { v: '{{ .data.fn_build.value }}' },
-          next: { default: 'end' },
+          next: { default: 'null' },
         },
       },
     });
@@ -1697,5 +1738,255 @@ describe('parseGoDuration is a faithful port of time.ParseDuration', () => {
     ]) {
       expect(parseGoDuration(bad), JSON.stringify(bad)).toBeNull();
     }
+  });
+});
+
+// Generic unknown-key rejection and value-KIND checks (0.14.0). Every expected
+// verdict here was measured on the reference's strict save parser.
+describe('unknown keys and value kinds (KnownFields parity)', () => {
+  const fields = (r: ValidationResult, code: string): string[] =>
+    r.errors.filter((e) => e.code === code).map((e) => e.field);
+
+  it('refuses an unknown key at the root, on a step and at every nested struct level', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      constraints: { currency: 'USD' },
+      steps: {
+        a: {
+          executor: 'mock://x/y',
+          output: ['body'],
+          error_strategy: { action: 'fail', retries: 3 },
+          next: { default: 'null', otherwise: 'b' },
+          for_each: { items: '{{ .query.l }}', throttle: { rate: 2 } },
+          quality_gate: { rubric: 'r', threshold: 0.5, on_fail: 'retry', judge: 'x' },
+          credentials: { k: { source: 'stored/openai/x', scope: 'x' } },
+          response_expectation: { f: { type: 'string', zz: 1 } },
+          loop: {
+            while: '{{ true }}',
+            max_iterations: 2,
+            until: 'x',
+            steps: [{ id: 's', executor: 'mock://x/y', timeout: 5 }],
+          },
+        },
+      },
+      query: { q: { type: 'string', label: 'Q' } },
+      input_schema: { version: 1, fields: [{ name: 'q', type: 'string', placeholder: 'x' }] },
+      mock_scenarios: { s: { a: { delay: '5ms', latency: 3 } } },
+      billing: { max_credits: 5, currency: 'EUR' },
+      executor_config: { openai: { api_key: 'x', region: 'eu' } },
+      orchestrator: { exons: 'x', triggers: [{ type: 'step_completed', zz: 1 }], zz: 1 },
+    });
+    expect(fields(r, 'unknown_yaml_key').sort()).toEqual(
+      [
+        'constraints',
+        'steps.a.output',
+        'steps.a.error_strategy.retries',
+        'steps.a.next.otherwise',
+        'steps.a.for_each.throttle.rate',
+        'steps.a.quality_gate.judge',
+        'steps.a.credentials.k.scope',
+        'steps.a.response_expectation.f.zz',
+        'steps.a.loop.until',
+        'steps.a.loop.steps[0].timeout',
+        'query.q.label',
+        'input_schema.fields[0].placeholder',
+        'mock_scenarios.s.a.latency',
+        'billing.currency',
+        'executor_config.openai.region',
+        'orchestrator.triggers[0].zz',
+        'orchestrator.zz',
+      ].sort(),
+    );
+    // A step-scoped finding carries its step id, so the summary counts it.
+    expect(r.errors.find((e) => e.field === 'steps.a.output')?.stepId).toBe('a');
+  });
+
+  it('refuses a key whose value is null: the decoder refuses the key, not the value', () => {
+    expect(fields(validateFlowObject({ ...MINIMAL, zz: null }), 'unknown_yaml_key')).toEqual([
+      'zz',
+    ]);
+  });
+
+  it('reports a location another rule already named only once', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      budget: 5,
+      steps: {
+        a: {
+          executor: 'mock://x/y',
+          max_retries: 2,
+          next: { conditions: [{ if: '{{ true }}', goto_step: 'a' }], default: 'null' },
+        },
+      },
+    });
+    const found = fields(r, 'unknown_yaml_key');
+    expect(found.sort()).toEqual(
+      ['budget', 'steps.a.max_retries', 'steps.a.next.conditions[0].goto_step'].sort(),
+    );
+  });
+
+  it('names a retired key as retired wherever it appears', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      steps: { a: { executor: 'mock://x/y', for_each: { items: 'x', max_retries: 1 } } },
+    });
+    const finding = r.errors.find((e) => e.field === 'steps.a.for_each.max_retries');
+    expect(finding?.code).toBe('unknown_yaml_key');
+    expect(finding?.message).toContain('removed from the grammar');
+  });
+
+  it('leaves author-chosen key sets alone: maps, interfaces, processing operations', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      currency: 'USD',
+      max_duration: '10m',
+      data: { anything: { nested: [1, 2] } },
+      executor_config: { openai: { extra: { region: 'eu' } } },
+      steps: {
+        a: {
+          executor: 'mock://x/y',
+          query: { any_key: 1, nested: { deeper: { x: true } } },
+          post_processing: [{ 'data.set': { author_chosen: '{{ .step.response }}' } }],
+          next: { default: 'null' },
+        },
+      },
+      mock_scenarios: { s: { a: { content: { any: { shape: [1] } } } } },
+    });
+    expect(r.errors).toEqual([]);
+  });
+
+  it('accepts null for every struct, list and scalar key', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      description: null,
+      error_strategy: null,
+      tags: null,
+      steps: { a: { executor: 'mock://x/y', for_each: null, next: null, error_strategy: null } },
+    });
+    expect(fields(r, 'invalid_type')).toEqual([]);
+    expect(fields(r, 'unknown_yaml_key')).toEqual([]);
+  });
+
+  it('refuses a value of the wrong kind, as the decoder does', () => {
+    const r = validateFlowObject({
+      ...MINIMAL,
+      tags: 'research',
+      output: { a: 1 },
+      steps: {
+        a: { executor: 'mock://x/y', next: 'end', error_strategy: 'fail' },
+        b: { executor: { url: 'mock://x/y' }, next: { conditions: { if: 'x' } } },
+      },
+    });
+    expect(fields(r, 'invalid_type')).toEqual(
+      expect.arrayContaining([
+        'tags',
+        'output',
+        'steps.a.next',
+        'steps.a.error_strategy',
+        'steps.b.executor',
+        'steps.b.next.conditions',
+      ]),
+    );
+  });
+
+  it('honours a YAML merge key and a numeric step id, as the reference does', () => {
+    const yaml = [
+      "aigentflow_version: '2.0.0'",
+      'name: merge',
+      "start: '1'",
+      'data:',
+      '  shared: &shared',
+      '    executor: mock://x/y',
+      'steps:',
+      '  1:',
+      '    <<: *shared',
+      '    next:',
+      "      default: 'null'",
+      '',
+    ].join('\n');
+    const r = validateFlow(yaml);
+    expect(r.errors).toEqual([]);
+  });
+
+  it('ships a spec whose every shape resolves', async () => {
+    const { unresolvedKnownKeyShapes } = await import('../src/validators/unknownKeys.js');
+    expect(unresolvedKnownKeyShapes()).toEqual([]);
+  });
+});
+
+// A Go `string` duration field is filled from a YAML number by its SOURCE text
+// (0.14.0). Measured on the reference: 0, +0 and -0 save; 0.0, 00, 0x0, .0, -0.0,
+// 0., 0o0, 0_0, 1.5 and 100 are refused.
+describe('duration fields judged by the source spelling of a number', () => {
+  const doc = (lines: string[]): string =>
+    ["aigentflow_version: '2.0.0'", 'name: d', 'start: a', ...lines, ''].join('\n');
+  const mockDelay = (spelling: string): string =>
+    doc([
+      'steps:',
+      '  a:',
+      '    executor: mock://x/y',
+      'mock_scenarios:',
+      '  s:',
+      '    a:',
+      `      delay: ${spelling}`,
+    ]);
+
+  it('refuses a mock delay spelled as a zero with no unit', () => {
+    for (const bad of ['0.0', '00', '0x0', '.0', '-0.0', '0.', '0o0', '0_0', '1.5', '100']) {
+      const r = validateFlow(mockDelay(bad));
+      expect(r.errors.find((e) => e.code === 'mock_delay_invalid')?.field, `delay: ${bad}`).toBe(
+        'mock_scenarios.s.a.delay',
+      );
+    }
+    for (const ok of ['0', '+0', '-0', '100ms', '"0"']) {
+      expect(validateFlow(mockDelay(ok)).valid, `delay: ${ok}`).toBe(true);
+    }
+  });
+
+  it('judges throttle delays, max_delay and a timer interval the same way', () => {
+    const fan = (throttle: string, maxDelay: string): string =>
+      doc([
+        'steps:',
+        '  a:',
+        '    executor: mock://x/y',
+        '    for_each:',
+        "      items: '{{ .query.l }}'",
+        '      throttle:',
+        `        delay: ${throttle}`,
+        '        batch_size: 2',
+        `        batch_delay: ${throttle}`,
+        '    error_strategy:',
+        '      action: retry',
+        `      max_delay: ${maxDelay}`,
+      ]);
+    const bad = validateFlow(fan('0.0', '100'));
+    expect(bad.errors.filter((e) => e.code === 'invalid_duration').map((e) => e.field)).toEqual([
+      'steps.a.error_strategy.max_delay',
+      'steps.a.for_each.throttle.delay',
+      'steps.a.for_each.throttle.batch_delay',
+    ]);
+    expect(validateFlow(fan('0', '0')).valid).toBe(true);
+
+    const timer = (interval: string): string =>
+      doc([
+        'steps:',
+        '  a:',
+        '    executor: mock://x/y',
+        'orchestrator:',
+        '  exons: x',
+        '  triggers:',
+        '    - type: timer',
+        `      interval: ${interval}`,
+      ]);
+    expect(codes(validateFlow(timer('0')))).not.toContain('orchestrator_timer_no_interval');
+    expect(codes(validateFlow(timer('0')))).not.toContain('orchestrator_timer_bad_interval');
+    expect(codes(validateFlow(timer('100')))).toContain('orchestrator_timer_bad_interval');
+  });
+
+  it('falls back to the parsed value for an object with no source text', () => {
+    // Documented (PARITY.md divergence #13): validateFlowObject never saw the
+    // spelling, so the number 0 is "0" and saves.
+    const r = validateFlowObject({ ...MINIMAL, mock_scenarios: { s: { a: { delay: 0 } } } });
+    expect(r.valid).toBe(true);
   });
 });
