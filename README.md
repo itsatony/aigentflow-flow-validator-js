@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.738.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.753.0"`).
 
 ### Options
 
@@ -161,12 +161,13 @@ interface ValidationIssue {
 ## What it checks
 
 - **Required fields** — `aigentflow_version`, `name`, `start`, at least one step.
+- **Unknown keys and value kinds** — any key a flow type does not declare, at every level (`unknown_yaml_key`), and a value of the wrong kind such as `next: end` (`invalid_type`). AIgentFlow refuses both at save, because the key would be silently dropped.
 - **Steps** — `start` resolves to a real step; every non-loop step has an `executor`; loop steps don't; reserved `.` in step IDs and the reserved step ID `orchestrator` are rejected.
 - **Executors** — `scheme://path` shape (error on malformed); unknown scheme (warning).
 - **Query schema** — parameter types, `array` requires `items`, item-type validity, `min_items`/`max_items`, nested `object`/`array` recursion.
 - **Response expectations** — valid data types; `array` requires `items`; `required` is boolean or template.
 - **Error strategy** — action enum (`retry`/`fail`/`goto`/`continue`), `goto_step` existence, `max_delay` duration, `backoff_multiplier`, `retry_on` categories.
-- **Connectivity** — `next.default` / `next.conditions[].goto_step` references (error); unreachable steps (warning); cycles (warning).
+- **Connectivity** — `next.default` / `next.conditions[].goto` references (error; only `null` and `orchestrator` need no step, so `end` must name one); unreachable steps (warning); cycles (warning).
 - **Parallel + orchestrator routing** — `next.parallel` rendezvous/steps; `orchestrator` next requires an orchestrator block.
 - **Loop / for_each / throttle** — required fields, iteration limits, mutual exclusions, throttle ceilings.
 - **Orchestrator / campaign** — exons presence, trigger types, timer intervals, tool names; campaign requires an orchestrator and at least one child flow, each naming a `flow_id` or `flow_name`; `max_credits_per_child` >= 0.
@@ -176,7 +177,7 @@ interface ValidationIssue {
 - **Step `output_schema`** — the same JSON-Schema subset as `input_schema`, validated at step scope (and on loop sub-steps).
 - **`quality_gate:`** — `rubric` required, `threshold` in `[0,1]`, `on_fail` enum (`fail`/`goto`/`retry`; `human` is rejected as not-yet-supported), `goto_step` existence + no self-goto when `on_fail=goto`, and the composite/parallel-member scope guards.
 - **`tool_discovery`** — `eager`/`lazy`/`off` on the flow, the orchestrator, and a step `query` (empty and templated values skipped).
-- **Mock scenarios** — each `delay` must be a Go duration (`100ms`, not `100`).
+- **Mock scenarios** — each `delay` must be a Go duration (`100ms`, not `100`), judged by its written spelling: `0` saves, `0.0` does not.
 - **`output:`** — no empty-string entries.
 - **Templates** — Go `text/template` **syntax** across query, processing, and conditions.
 

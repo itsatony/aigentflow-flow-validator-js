@@ -27,6 +27,8 @@ import { validateProcessingOperations } from './validators/processingOperations.
 import { validateStepMaxDuration } from './validators/stepMaxDuration.js';
 import { validateRetiredKeys } from './validators/retiredKeys.js';
 import { validateSaveDoorExtras } from './validators/saveDoor.js';
+import { validateUnknownKeys } from './validators/unknownKeys.js';
+import type { ScalarSources } from './validators/util.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
 export { parseFlow } from './parse.js';
@@ -54,6 +56,17 @@ function countStepsWithErrors(errors: ValidationIssue[]): number {
  * parse YAML text and validate in one step.
  */
 export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): ValidationResult {
+  return validateParsed(flow, opts, undefined);
+}
+
+// `sources` carries the source spelling of number/boolean scalars, which only a
+// YAML text has. Without it (validateFlowObject) a number is judged by its
+// JavaScript rendering — see PARITY.md divergence #13.
+function validateParsed(
+  flow: unknown,
+  opts: ValidateOptions,
+  sources: ScalarSources | undefined,
+): ValidationResult {
   const issues = new Issues();
 
   if (flow === null || typeof flow !== 'object' || Array.isArray(flow)) {
@@ -84,19 +97,22 @@ export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): V
   validateExecutors(f, issues);
   validateQuerySchema(f, issues);
   validateResponseExpectations(f, issues);
-  validateErrorStrategies(f, issues);
+  validateErrorStrategies(f, issues, sources);
   validateConnectivity(f, issues);
   validateNextLogic(f, issues);
   validateExpressionFunctions(f, issues);
-  validateLoopForEachThrottle(f, issues);
-  validateOrchestratorCampaign(f, issues, opts);
+  validateLoopForEachThrottle(f, issues, sources);
+  validateOrchestratorCampaign(f, issues, opts, sources);
   validateCredentialBindings(f, issues);
   validateInputSchema(f, issues);
   validateOutputSchemas(f, issues);
   validateQualityGates(f, issues);
   validateProcessingOperations(f, issues);
   validateStepMaxDuration(f, issues);
-  validateSaveDoorExtras(f, issues);
+  validateSaveDoorExtras(f, issues, sources);
+  // Last among the structural rules: it skips a location another rule has
+  // already reported with more specific advice.
+  validateUnknownKeys(f, issues);
   const templateStats = validateTemplates(f, issues, opts);
 
   const totalSteps =
@@ -144,7 +160,7 @@ export function validateFlow(yamlText: string, opts: ValidateOptions = {}): Vali
     };
   }
 
-  const result = validateFlowObject(parsed.flow, opts);
+  const result = validateParsed(parsed.flow, opts, parsed.scalarSources);
   // Surface any non-fatal YAML warnings alongside the validation warnings.
   if (parsed.parseWarnings.length > 0) {
     result.warnings.unshift(...parsed.parseWarnings);

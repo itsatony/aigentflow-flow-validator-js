@@ -24,8 +24,23 @@ export const ERROR_STRATEGY_ACTIONS: ReadonlySet<string> = new Set(spec.errorStr
 /** Valid `error_strategy.retry_on` error categories. */
 export const RETRY_ON_CATEGORIES: ReadonlySet<string> = new Set(spec.retryOnCategories);
 
-/** Non-step `next` markers that are always valid targets. */
+/**
+ * `next` targets the reference's SAVE door accepts without a step of that name:
+ * `null` and `orchestrator`. `end` is not one of them — `validateNextLogic`
+ * (parser.go) looks `end` up as a step and refuses the flow when none exists.
+ */
 export const NEXT_MARKERS: ReadonlySet<string> = new Set(spec.nextMarkers);
+
+/**
+ * Targets the reachability and cycle walks treat as "control leaves the graph".
+ * This set is WIDER than {@link NEXT_MARKERS}: the reference's structured
+ * validator still skips `end` there, so a flow that routes to a real step named
+ * `end` saves, and that step is then reported `unreachable_step`. Two sets
+ * because the reference has two answers; merging them changes a verdict.
+ */
+export const REACHABILITY_TERMINAL_MARKERS: ReadonlySet<string> = new Set(
+  spec.reachabilityTerminalMarkers,
+);
 
 /** Valid `next.parallel.resolution` values. */
 export const PARALLEL_RESOLUTIONS: ReadonlySet<string> = new Set(spec.parallelResolutions);
@@ -161,3 +176,13 @@ export function processingOperationConfigKeys(operationType: string): [readonly 
   const keys = PROCESSING_OPERATIONS.closedConfigKeys[operationType];
   return keys === undefined ? [[], false] : [keys, true];
 }
+
+/**
+ * The key set the reference's strict save parser enforces at every level of a
+ * flow document, derived from its own types (see the `$comment` in the JSON).
+ * `types[T]` maps each key a struct type declares to the SHAPE of its value.
+ */
+export const KNOWN_KEYS = spec.knownKeys as {
+  readonly root: string;
+  readonly types: Readonly<Record<string, Readonly<Record<string, string>>>>;
+};

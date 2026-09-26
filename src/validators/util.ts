@@ -59,6 +59,28 @@ export function scalarText(v: unknown): string | null {
   return null;
 }
 
+/** Source spellings of number/boolean scalars by field path (see parse.ts). */
+export type ScalarSources = ReadonlyMap<string, string>;
+
+/**
+ * {@link scalarText}, but a number or boolean is rendered by its SOURCE
+ * spelling when the document was parsed from text — which is exactly what the
+ * reference's `string` field receives. `delay: 0.0` is "0.0" here (no unit, so
+ * not a Go duration), not "0". Without `sources` it falls back to the parsed
+ * value's rendering.
+ */
+export function scalarTextAt(
+  v: unknown,
+  path: string,
+  sources: ScalarSources | undefined,
+): string | null {
+  if ((typeof v === 'number' || typeof v === 'boolean') && sources !== undefined) {
+    const source = sources.get(path);
+    if (source !== undefined) return source;
+  }
+  return scalarText(v);
+}
+
 /**
  * Parse a Go `time.ParseDuration` string. Returns the duration in nanoseconds
  * or null when the string is not a valid Go duration.

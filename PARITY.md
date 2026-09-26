@@ -4,7 +4,65 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.738.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.753.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+
+> v2.753.0 — **the three gaps that were looser than the reference in both ports
+> are closed (package 0.14.0).** The reference's parser, validator, flow, step,
+> orchestrator, campaign, input-schema and template-registry sources have a
+> **zero** diff from `v2.738.0` to `v2.753.0`, so `specVersion` moves to
+> `2.753.0` with no other rule change. Every verdict below was measured on the
+> reference's save door (`NewStrictFlowParser().ParseFromYAMLBytes`, then
+> `ValidateFlowWithDetails`) over a 133-shape probe matrix. Both ports now match
+> the reference on all 133, and on all 65 conformance fixtures.
+>
+> 1. **`end` is not a sentinel at the save door.** `validateNextLogic` accepts
+>    only `null` and `orchestrator` without a step of that name, so
+>    `next: { default: end }` and a condition's `goto: end` are refused
+>    ("step_id (end) … not found") unless a step is called `end`. `End`, a
+>    rendezvous `end`, a parallel member `end`, an `error_strategy.goto_step: end`
+>    and a `quality_gate.goto_step: end` were already refused on both sides.
+>    `next: end` (a scalar) fails to decode. **Divergence #2 is closed**, and it
+>    was hiding a real problem: 15 fixtures this suite called valid routed to
+>    `end`, and the reference refused all 15 (14 on `end` itself, one first on
+>    an unknown key). They now say `'null'`, as do the 8 invalid fixtures that
+>    used it (three loop-body fixtures were refused by the reference on `end`
+>    before it reached the rule they test).
+>
+>    The reference's reachability and cycle walks still skip `end`, so a flow
+>    that routes to a real step named `end` saves, and that step is reported
+>    `unreachable_step`. That is reproduced: the spec now carries two sets,
+>    `nextMarkers` (`null`, `orchestrator`: the save door) and
+>    `reachabilityTerminalMarkers` (`null`, `end`, `orchestrator`: the walks).
+>
+> 2. **Unknown keys are refused at every level (`unknown_yaml_key`), and a value
+>    of the wrong kind is `invalid_type`.** See [Unknown keys and value
+>    kinds](#unknown-keys-and-value-kinds). The key sets are derived from the
+>    reference's own types, not hand-listed. On the 216 bundled flows the new
+>    rule fires **zero** times. `valid-branching.yaml` carried a nested
+>    `constraints:` block the reference refuses; its two keys now sit at the
+>    flow root, where the reference reads them.
+> 3. **A number in a Go `string` duration field is judged by its source text.**
+>    yaml.v3 fills such a field with the scalar's text, so `delay: 0.0` arrives
+>    as `"0.0"` (no unit, refused). `parseFlow` now records the source spelling
+>    of every number and boolean scalar (`scalarSources`), and `validateFlow`
+>    uses it. Measured for a mock delay: `0`, `+0`, `-0`, `100ms` and `"0"` save;
+>    `0.0`, `00`, `0x0`, `.0`, `-0.0`, `0.`, `0o0`, `0_0`, `1.5`, `100`, `1e3`,
+>    `true` and `.inf` are refused. The same mechanism closes four more gaps the
+>    probe found in the same family, each of which skipped numbers entirely:
+>    `for_each.throttle.delay`, `throttle.batch_delay` and `error_strategy.max_delay`
+>    (`100`, `1.5`, `0.0` were accepted, and are refused by the reference) and an
+>    orchestrator timer `interval: 0` (refused here as "no interval"; the
+>    reference saves it). **Divergence #13 is narrowed** to `validateFlowObject`,
+>    which never sees source text.
+>
+> Two parse changes keep the unknown-key rule from refusing flows the reference
+> saves: `merge: true` (yaml.v3 honours `<<: *anchor`, and without it `<<` was a
+> literal key), and a step id written as a number (`1:`) was already fine here.
+>
+> Cross-check over the reference's `example_flows/` (216 files): with
+> `strictRegistries` the verdict matches on all 216, and `unreachable_step`
+> 25 = 25 and `potential_infinite_loop` 1 = 1. In default mode the same 10 files
+> as before differ (unknown template functions warn here, divergence #4).
 
 > v2.738.0 — **five older save-door refusals, and one false positive removed
 > (package 0.13.0).** No grammar change, so `specVersion` stays `2.738.0`: every
@@ -321,8 +379,8 @@ discipline for keeping the two in sync.
 > ⚠️ **`end` is reported as a missing target, not as a sentinel.** The reference
 > names only `null` and `orchestrator` and lets everything else fall through to
 > the existence check, and that is the honest answer inside a loop body, where
-> nothing reads `end` either. **Divergence #2 is about TOP-LEVEL next targets and
-> is deliberately not extended into a loop body.**
+> nothing reads `end` either. (Since 0.14.0 the same is true of top-level next
+> targets; divergence #2 is closed.)
 >
 > **Severity: all three are `error` here.** Upstream they are hard refusals at the
 > SAVE door and downgraded to a warning on the stored-flow LOAD door, so a flow
@@ -453,9 +511,9 @@ max_retries` and `QualityGateDefinition.max_retries` are unchanged. Removing
 >
 > Divergence, none of which changes a verdict on a flow the reference would save:
 > the reference refuses a `budget` or `max_retries` key at ANY depth where the
-> containing type has no such field (the generic unknown-key rule, still not ported
-> — see "Unknown-key rejection" below); this validator reports only the four
-> locations above.
+> containing type has no such field (the generic unknown-key rule, ported in
+> 0.14.0 — see [Unknown keys and value kinds](#unknown-keys-and-value-kinds)).
+> The four locations above keep their specific advice.
 
 > v2.646.0 (no grammar change, so `specVersion` stays `2.642.0`) — **the reference
 > finally validates `pre_processing:` / `post_processing:` templates at all.** Its
@@ -626,7 +684,8 @@ max_retries` and `QualityGateDefinition.max_retries` are unchanged. Removing
 >   `executorConfigKeyProtocols`) — a new vendoring surface that will drift silently,
 >   and a reduced-fidelity version produces false positives on the `extras` rows.
 >   **Owed, not skipped.**
-> - Unknown-key rejection. AIgentFlow's create path has always parsed with
+> - Unknown-key rejection (**ported in 0.14.0**, see
+>   [Unknown keys and value kinds](#unknown-keys-and-value-kinds)). AIgentFlow's create path has always parsed with
 >   `KnownFields(true)`; AIF v2.604.0 made `POST /flows/validate` and the Studio
 >   assistant strict too, so "would this save" now answers the same everywhere.
 >   This validator inspects no unknown keys, so a step-level `output:` block
@@ -693,7 +752,8 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | Response expectation nothing reads (`response_expectation_unread`, warning)                                             | `validateResponseExpectationIsRead` (validation.go)                                                     | `validators/responseExpectation.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
 | Error strategy (action, goto, max_delay, backoff, retry_on)                                                             | `validateErrorStrategy`                                                                                 | `validators/errorStrategy.ts`                            | `validate.test.ts`                          |
 | Retired `budget:` / `max_retries:` (flow, step, loop sub-step) and `campaign.budget_max_per_child` → `unknown_yaml_key` | `retiredGrammarKeys` + `KnownFields(true)` (parser.go)                                                  | `validators/retiredKeys.ts`                              | `validate.test.ts`, `conformance.test.ts`   |
-| `next` references, reachability, cycles                                                                                 | `validateStepConnectivity`, `findReachableSteps`, `checkForCycles`                                      | `validators/connectivity.ts`                             | `validate.test.ts`                          |
+| `next` references (save-door sentinels `null`/`orchestrator`), reachability and cycles (`end` also terminal)            | `validateNextLogic` (parser.go), `findReachableSteps`, `checkForCycles`                                 | `validators/connectivity.ts`                             | `validate.test.ts`, `conformance.test.ts`   |
+| Unknown keys at every level (`unknown_yaml_key`) and value kinds (`invalid_type`)                                       | `KnownFields(true)` over the reference's types (parser.go); `knownKeys` in the spec                     | `validators/unknownKeys.ts`                              | `validate.test.ts`, `conformance.test.ts`   |
 | `next.parallel` + orchestrator-next requirement                                                                         | `validateNextLogic`, `validateOrchestratorNext`                                                         | `validators/nextLogic.ts`                                | `validate.test.ts`                          |
 | Expression functions (XOR package/function)                                                                             | `validateExpressionFunctions`                                                                           | `validators/expressionFunctions.ts`                      | `validate.test.ts`                          |
 | Expression-function catalog (`package:` refused, unknown `function:` refused)                                           | `validateExpressionFunctionCatalog` (parser.go)                                                         | `validators/expressionFunctions.ts`                      | `validate.test.ts`, `conformance.test.ts`   |
@@ -726,10 +786,12 @@ validator useful and low-false-positive while staying offline.
    `unknown_executor_scheme` **warning**. This means a brand-new AIgentFlow scheme never
    produces a false failure here.
 
-2. **`end` is always a terminal marker.** The reference is internally inconsistent —
-   `validateStepConnectivity` exempts `end`, while `validateNextLogic` does not. We follow
-   the structured validator (and the reachability/cycle code) and treat `null`, `end`,
-   and `orchestrator` as terminal everywhere.
+2. **Closed in 0.14.0: `end` was always a terminal marker here.** The reference is
+   internally inconsistent: its structured validator exempts `end`, and its save door
+   (`validateNextLogic`) does not. This port used to follow the structured validator, so
+   it accepted `next: { default: end }`, which the reference refuses to save. It now
+   follows each: the existence check uses the save door's set (`null`, `orchestrator`),
+   and the reachability and cycle walks keep `end` as terminal, as the reference's do.
 
 3. **Runtime template field-resolution is not reproduced.** Go additionally _executes_
    each template against a mock context to emit `template_missing_field` /
@@ -778,7 +840,8 @@ validator useful and low-false-positive while staying offline.
     walks every string leaf of the parsed document — including keys the Go struct does
     not carry. The two agree on every flow AIgentFlow would accept, because its create
     path parses with `KnownFields(true)`; they differ only on a document that AIgentFlow
-    rejects for an unrelated reason. Same family as divergence #8, and strictly additive.
+    rejects for an unrelated reason, and since 0.14.0 this validator refuses that document
+    too (`unknown_yaml_key`). Same family as divergence #8, and strictly additive.
 
     Severity: the catalog and usage rules are refused at AIgentFlow's SAVE door and only
     warned at its load/run door, so a flow stored before the rules existed keeps running.
@@ -819,19 +882,63 @@ validator useful and low-false-positive while staying offline.
     reference treats a default here as a policy nobody chose, and inventing one would make the
     oracle refuse or accept on a premise the door does not hold.
 
-13. **A mock `delay` written as a number is judged by its JavaScript spelling (0.13.0).**
-    yaml.v3 fills the reference's `string` field with the scalar's **source
-    text**, and this validator only has the parsed value. They agree on every
-    number except those that parse to zero without being written `0`, `+0` or
-    `-0`: `delay: 0.0`, `00` and `0x0` are refused by the reference (no unit) and
-    accepted here. Every other number is refused on both sides, because no
-    number's text carries a unit. This is the lenient direction, and the fix is
-    the one the refusal message already gives: write a unit. Same family as
-    divergence #8.
+13. **Narrowed in 0.14.0: a number in a duration field is judged by its source text
+    only when there is source text.** yaml.v3 fills the reference's `string` field with
+    the scalar's **source text**. `validateFlow` now has it (`parseFlow` records the
+    spelling of every number and boolean scalar), so `delay: 0.0`, `00` and `0x0` are
+    refused as the reference refuses them. Two cases still see only the parsed value:
+    `validateFlowObject`, whose caller parsed the document, and a value reached through a
+    YAML alias. There the number 0 reads as `"0"` and saves, whatever its spelling. This
+    is the lenient direction. Every other number is refused either way, because no
+    number's text carries a unit.
 
-    The same limit applies to `tool_discovery` and to the campaign `flow_id` /
-    `flow_name`, where it cannot change a verdict: no number or boolean spelling
-    is a valid mode, an empty one, or a template.
+    The mechanism covers the mock `delay`, `throttle.delay`, `throttle.batch_delay`,
+    `error_strategy.max_delay`, an orchestrator timer `interval`, and `tool_discovery`.
+    The campaign `flow_id` / `flow_name` still use the parsed value, which cannot change a
+    verdict there: no number spelling is empty or a template.
+
+---
+
+## Unknown keys and value kinds
+
+The reference's save door decodes a flow with yaml.v3 `KnownFields(true)`. That refuses
+a key the containing Go struct does not declare, **at every depth**, and a value whose
+KIND does not decode into the field (a scalar where a struct, map or list is required,
+or a mapping or list where a scalar is). `validators/unknownKeys.ts` reproduces both.
+
+**The key sets are derived, not hand-listed.** `knownKeys` in the spec is generated by
+reflection over the reference's `Flow` type, applying yaml.v3's own field rules:
+
+- a field's key is its `yaml:` tag name, or the lowercased field name when untagged;
+  `yaml:"-"` and unexported fields are skipped;
+- an `,inline` struct's keys merge into the parent (this is why `currency` and
+  `max_duration` are flow-root keys); an `,inline` map would make the type open (none
+  does today);
+- a pointer is followed; a slice becomes `list<…>`; a map becomes `map<…>` with
+  author-chosen keys; an interface is `any`;
+- a type with its own `UnmarshalYAML` is `any`, because yaml.v3 does not propagate
+  `KnownFields` into `Node.Decode`. The one such type is a pre/post-processing entry,
+  whose shape stays out of scope (divergence #11).
+
+**How it was checked.** For each of the 35 struct types, a document placing an unknown
+key at that type's position must be refused as an unknown key; for each of its keys, a
+value of each wrong kind must fail to decode and a null must decode; for each `any`
+position, a mapping, a list and a scalar must all decode. 771 checks, run against the
+reference's strict parser, all as expected, and a mutated inventory (a key removed, a
+kind changed) fails them. On the 216 bundled flows the rule fires zero times.
+
+**What is judged.** Keys and kinds only. Whether a scalar fits its field (a number in an
+integer field, `yes` in a boolean) is left to the rules that already own those fields
+(divergence #8). A YAML null is the zero value of any type and is never reported. A key
+the reference deleted from the grammar is named as retired wherever it appears; at the
+locations `retiredKeys.ts` covers, that rule's specific advice is reported instead, and a
+location is never reported twice.
+
+**Regenerating it.** On a grammar change, re-run the derivation above against the new
+reference types (a short Go program: reflect over `Flow`, apply the rules above, print
+each struct type's key → shape map, sorted) and replace `knownKeys` in the spec. Then
+re-run the check above and the bundled-corpus comparison. The derivation program is
+not shipped here, because it links the reference implementation.
 
 ---
 
@@ -853,7 +960,10 @@ updated. The trigger conditions and the checklist:
 **Checklist:**
 
 1. Update [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json) — the enum
-   values and bump `specVersion` to the new AIgentFlow version.
+   values and bump `specVersion` to the new AIgentFlow version. A new or renamed field
+   in any flow type also means regenerating `knownKeys` (see
+   [Unknown keys and value kinds](#unknown-keys-and-value-kinds)); otherwise the new key
+   is refused as unknown.
 2. Port the rule into the matching `validators/*.ts` module (or add a new module).
 3. Add a row to the [rule map](#rule-map) above and, if it diverges, an entry under
    [Intentional divergences](#intentional-divergences).

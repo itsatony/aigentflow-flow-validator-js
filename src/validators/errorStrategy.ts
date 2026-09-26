@@ -7,7 +7,15 @@
 
 import type { ErrorStrategyDefinition, Flow } from '../types.js';
 import { ERROR_STRATEGY_ACTIONS, RETRY_ON_CATEGORIES } from '../spec/index.js';
-import { Issues, isNumber, isRecord, isString, isValidGoDuration } from './util.js';
+import {
+  Issues,
+  isNumber,
+  isRecord,
+  isString,
+  isValidGoDuration,
+  scalarTextAt,
+  type ScalarSources,
+} from './util.js';
 
 const ACTION_GOTO = 'goto';
 
@@ -17,6 +25,7 @@ function validateOne(
   field: string,
   stepID: string | undefined,
   issues: Issues,
+  sources: ScalarSources | undefined,
 ): void {
   const action = strategy.action;
   if (
@@ -79,14 +88,13 @@ function validateOne(
     });
   }
 
-  if (
-    isString(strategy.max_delay) &&
-    strategy.max_delay !== '' &&
-    !isValidGoDuration(strategy.max_delay)
-  ) {
+  // A Go `string` field, filled from ANY scalar by its source text: `max_delay:
+  // 100` is "100" (no unit) and refused, as is `0.0`; `0` saves.
+  const maxDelay = scalarTextAt(strategy.max_delay, `${field}.max_delay`, sources);
+  if (maxDelay !== null && maxDelay !== '' && !isValidGoDuration(maxDelay)) {
     issues.error({
       field: `${field}.max_delay`,
-      message: `Invalid max_delay duration '${strategy.max_delay}'`,
+      message: `Invalid max_delay duration '${maxDelay}'`,
       code: 'invalid_duration',
       ...(stepID ? { stepId: stepID } : {}),
     });
@@ -131,7 +139,7 @@ function validateOne(
   }
 }
 
-export function validateErrorStrategies(flow: Flow, issues: Issues): void {
+export function validateErrorStrategies(flow: Flow, issues: Issues, sources?: ScalarSources): void {
   const steps = isRecord(flow.steps) ? flow.steps : {};
 
   if (isRecord(flow.error_strategy)) {
@@ -141,6 +149,7 @@ export function validateErrorStrategies(flow: Flow, issues: Issues): void {
       'error_strategy',
       undefined,
       issues,
+      sources,
     );
   }
 
@@ -153,6 +162,7 @@ export function validateErrorStrategies(flow: Flow, issues: Issues): void {
         `steps.${stepID}.error_strategy`,
         stepID,
         issues,
+        sources,
       );
     }
     validateLoopBodyErrorGoto(step, stepID, issues);

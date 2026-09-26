@@ -4,7 +4,7 @@
 // errors are surfaced as ValidationIssues with line/column when available.
 // Alias expansion is capped to guard against "billion laughs" style payloads.
 
-import { parseDocument, type YAMLError, type YAMLWarning } from 'yaml';
+import { isMap, isScalar, isSeq, parseDocument, type YAMLError, type YAMLWarning } from 'yaml';
 import type { Flow, ValidationIssue } from './types.js';
 
 const MAX_ALIAS_COUNT = 100;
@@ -17,6 +17,37 @@ export interface ParseOutput {
   parseErrors: ValidationIssue[];
   /** Non-fatal YAML warnings (e.g. deprecated tags). */
   parseWarnings: ValidationIssue[];
+  /**
+   * The SOURCE spelling of every number and boolean scalar, keyed by field path
+   * (`mock_scenarios.s.fetch.delay`). The reference decodes a scalar into a Go
+   * `string` field as its source text, so `delay: 0.0` arrives there as "0.0"
+   * (not a Go duration) while the parsed value here is the number 0. Present
+   * whenever `flow` is.
+   */
+  scalarSources?: ReadonlyMap<string, string>;
+}
+
+/**
+ * Record the source text of each plain number/boolean scalar under the field
+ * path the validators use. Aliases are not followed: a value reached through
+ * one keeps its parsed rendering, which differs only for spellings such as
+ * `0.0` (see PARITY.md).
+ */
+function collectScalarSources(node: unknown, path: string, out: Map<string, string>): void {
+  if (isMap(node)) {
+    for (const pair of node.items) {
+      const key = isScalar(pair.key) ? String(pair.key.value) : null;
+      if (key === null) continue;
+      collectScalarSources(pair.value, path === '' ? key : `${path}.${key}`, out);
+    }
+  } else if (isSeq(node)) {
+    node.items.forEach((item, i) => collectScalarSources(item, `${path}[${i}]`, out));
+  } else if (isScalar(node)) {
+    const v = node.value;
+    if ((typeof v === 'number' || typeof v === 'boolean') && typeof node.source === 'string') {
+      out.set(path, node.source);
+    }
+  }
 }
 
 function issueFromYamlError(
@@ -62,7 +93,10 @@ export function parseFlow(yamlText: string): ParseOutput {
 
   let doc;
   try {
-    doc = parseDocument(yamlText, { prettyErrors: true, uniqueKeys: true });
+    // `merge: true`: the reference's yaml.v3 honours `<<: *anchor` merge keys,
+    // and without it `<<` survives as a literal key, which the unknown-key rule
+    // would refuse on a flow the reference saves.
+    doc = parseDocument(yamlText, { prettyErrors: true, uniqueKeys: true, merge: true });
   } catch (e) {
     parseErrors.push({
       field: '',
@@ -106,5 +140,7 @@ export function parseFlow(yamlText: string): ParseOutput {
     return { parseErrors, parseWarnings };
   }
 
-  return { flow: value as Flow, parseErrors, parseWarnings };
+  const scalarSources = new Map<string, string>();
+  collectScalarSources(doc.contents, '', scalarSources);
+  return { flow: value as Flow, parseErrors, parseWarnings, scalarSources };
 }

@@ -2,7 +2,8 @@
 // (warnings), and cycle detection (warning).
 //
 // Mirrors `validateStepConnectivity` + `checkForCycles` + `findReachableSteps`
-// (validation.go), exempting the terminal markers null / end / orchestrator.
+// (validation.go) and the save door's `validateNextLogic` (parser.go). See the
+// two marker sets below: `end` is a terminal marker for the walks only.
 //
 // ⚠ REACHABILITY AND CYCLES FOLLOW DIFFERENT EDGE SETS, and that is faithful,
 // not an oversight. AIgentFlow v2.598.0 (DC-FORGE-30) widened `findReachableSteps`
@@ -20,11 +21,25 @@
 // three working steps of a bundled flow were dead code.
 
 import type { Flow, NextCondition, NextLogicDefinition } from '../types.js';
-import { NEXT_MARKERS } from '../spec/index.js';
+import { NEXT_MARKERS, REACHABILITY_TERMINAL_MARKERS } from '../spec/index.js';
 import { Issues, isRecord, isString, stepNames } from './util.js';
 
-function isMarker(target: string): boolean {
+// TWO sets, because the reference gives two answers and both are verdicts.
+//
+// Existence (an ERROR) follows the save door, `validateNextLogic` (parser.go):
+// only `null` and `orchestrator` stand without a step of that name, so
+// `default: end` is refused when no step is called `end`.
+//
+// Reachability and cycles (WARNINGS) follow `findReachableSteps` /
+// `checkForCycles` (validation.go), which still skip `end` as "control leaves
+// the graph" — so a real step named `end` that only `end` routes to is reported
+// unreachable, by the reference too.
+function isSaveDoorMarker(target: string): boolean {
   return NEXT_MARKERS.has(target);
+}
+
+function isMarker(target: string): boolean {
+  return REACHABILITY_TERMINAL_MARKERS.has(target);
 }
 
 /** Edges the CYCLE detector follows — deliberately only two. See the header. */
@@ -88,7 +103,7 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
     if (
       isString(n.default) &&
       n.default !== '' &&
-      !isMarker(n.default) &&
+      !isSaveDoorMarker(n.default) &&
       !available.has(n.default)
     ) {
       issues.error({
@@ -124,7 +139,7 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
         }
 
         const goto = (cond as NextCondition).goto;
-        if (isString(goto) && goto !== '' && !isMarker(goto) && !available.has(goto)) {
+        if (isString(goto) && goto !== '' && !isSaveDoorMarker(goto) && !available.has(goto)) {
           issues.error({
             field: `steps.${stepID}.next.conditions[${i}].goto`,
             message: `Referenced step '${goto}' does not exist`,
