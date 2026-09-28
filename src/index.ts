@@ -29,6 +29,7 @@ import { validateRetiredKeys } from './validators/retiredKeys.js';
 import { validateSaveDoorExtras } from './validators/saveDoor.js';
 import { validateUnknownKeys } from './validators/unknownKeys.js';
 import { validateExecutorConfigEnvScopes } from './validators/executorConfigEnv.js';
+import { validateServerOwnedQueryKeys } from './validators/serverOwnedQueryKeys.js';
 import { validateOrchestratorExons } from './validators/exons.js';
 import type { ScalarSources } from './validators/util.js';
 
@@ -114,6 +115,7 @@ function validateParsed(
   validateStepMaxDuration(f, issues);
   validateSaveDoorExtras(f, issues);
   validateExecutorConfigEnvScopes(f, issues);
+  validateServerOwnedQueryKeys(f, issues);
   // The orchestrator's inline .exons frontmatter. A step's inline `query.exons`
   // needs an .exons ENGINE to judge (`exons_attributes`) and is not judged here
   // at all — PARITY.md, divergence #16.

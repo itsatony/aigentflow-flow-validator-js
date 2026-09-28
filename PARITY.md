@@ -4,7 +4,36 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.788.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
+**Tracks AIgentFlow flow schema: `v2.788.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), plus `server_owned_query_key` (package 0.15.1, below) from the AIgentFlow release after v2.790.0.
+
+> package 0.15.1 — **a step query may not declare a server-owned parameter**, in step
+> with the Go port (go-aigentflow-validator v0.6.1). The spec (new section
+> `serverOwnedQueryKeys`; `specVersion` unchanged) and the seven new conformance
+> fixtures are the Go port's byte for byte.
+>
+> | Rule (reference)                                                        | Code                     | Severity | Module                                                            |
+> | ----------------------------------------------------------------------- | ------------------------ | -------- | ----------------------------------------------------------------- |
+> | `validateNoServerOwnedStepQueryKeys` / `IsServerOwnedParamKey` (CFX-05) | `server_owned_query_key` | error    | `validators/serverOwnedQueryKeys.ts`, spec `serverOwnedQueryKeys` |
+>
+> - **Why.** The `aiv://` executor sends the running org's aigentverse credential, or
+>   a signed token naming the running person, to the base URL in its parameters, and
+>   the reference used to lay a step's `query:` over the credential resolver's output.
+>   A shared flow declaring `aiv_base_url: https://attacker.example` therefore chose
+>   where that credential went. The reference now discards such a value at run time
+>   and refuses it by name at save.
+> - **Exactly as the reference.** The key set is data (`serverOwnedQueryKeys.keys`:
+>   `aiv_api_key`, `aiv_base_url`, `aiv_delegation`), so a new server-owned key is a
+>   spec change. Matching is exact and case-sensitive. The scanned surfaces are exactly
+>   the reference's two: a top-level step's `query:` (field `steps.<step>.query.<key>`)
+>   and a loop sub-step's `query:` (field `steps.<step>.loop.steps.<sub-step id>.query.<key>`,
+>   `stepId` the loop step). A parallel branch or a `for_each` body is a top-level step.
+>   Any value is refused, `null` and templates included; a key nested inside a query
+>   value, the name as a value, and a flow input parameter of that name are not.
+> - **Measured** (in the Go port, with the reference at the rule's commit, over the 216
+>   bundled flows and every conformance fixture): identical `(code, field)` pairs, and
+>   no bundled flow trips the rule. Go `make parity-check` reports no drift. Three
+>   mutants here (the loop surface unscanned, the step surface unscanned, a folded
+>   case): all killed.
 
 > v2.788.0, package 0.15.0 — **every save-door rule AIgentFlow added after v2.753.0,
 > in step with the Go port (go-aigentflow-validator v0.6.0).** Since AIgentFlow
@@ -871,6 +900,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | Campaign `max_credits_per_child` (decoded as int64, >= 0), `child_flows`                                                | `CampaignConfig.Validate` (domain.campaign.go)                                                          | `validators/orchestratorCampaign.ts`                     | `validate.test.ts`, `conformance.test.ts`        |
 | `tool_discovery` vocabulary, mock scenario `delay`, empty `output:` entry                                               | `validateToolDiscoveryVocabulary`, `validateMockScenarioDelays`, `validateOutputParameters` (parser.go) | `validators/saveDoor.ts`                                 | `validate.test.ts`, `conformance.test.ts`        |
 | `executor_config` `${NAME}` references outside the key's scope (`executor_config_env_scope`)                            | `ValidateExecutorConfigEnvScopes` (parser.go)                                                           | `validators/executorConfigEnv.ts`                        | `v0150-save-door.test.ts`, `conformance.test.ts` |
+| A step or loop sub-step `query:` declaring a server-owned key (`server_owned_query_key`)                                | `validateNoServerOwnedStepQueryKeys` (validation.go), `IsServerOwnedParamKey`                           | `validators/serverOwnedQueryKeys.ts`                     | `v0151-save-door.test.ts`, `conformance.test.ts` |
 | Orchestrator `.exons` frontmatter: spec, provider, `requirements.resources`, `tools.allow` withholds                    | `validateOrchestrator` (parser.go), `validateOrchestratorToolAllowWithholds`                            | `validators/exons.ts`                                    | `v0150-save-door.test.ts`, `conformance.test.ts` |
 | Credential bindings (`stored/...`, inject_as, exclusivity)                                                              | `validateStepCredentialBindings`                                                                        | `validators/credentialBindings.ts`                       | `validate.test.ts`                               |
 | `input_schema` definition + ordering lint                                                                               | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                         | `validators/inputSchema.ts`                              | `validate.test.ts`                               |
