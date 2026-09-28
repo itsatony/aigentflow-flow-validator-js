@@ -120,8 +120,10 @@ function validateDeclarations(list: unknown, issues: Issues): void {
       return;
     }
     const key = hasPackage ? KEY_PACKAGE : KEY_FUNCTION;
-    const value = entry[key];
-    if (!isString(value) || value === '') {
+    // A Go `string`: `function: 5` is the name "5", looked up (and unknown),
+    // not an empty value.
+    const value = issues.stringOf(entry, key, field);
+    if (value === null || value === '') {
       issues.error({
         field: `${field}.${key}`,
         message: `expression_functions '${key}' must have a non-empty value`,

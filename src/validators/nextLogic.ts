@@ -5,7 +5,7 @@
 // `validateNextLogic` parallel block + `validateOrchestratorNext`.
 
 import type { Flow, NextCondition, NextLogicDefinition, ParallelDefinition } from '../types.js';
-import { Issues, isRecord, isString } from './util.js';
+import { Issues, isRecord } from './util.js';
 
 const NEXT_NULL = 'null';
 const NEXT_ORCHESTRATOR = 'orchestrator';
@@ -27,17 +27,19 @@ export function validateNextLogic(flow: Flow, issues: Issues): void {
       const par = n.parallel as ParallelDefinition;
       const base = `steps.${stepID}.next.parallel`;
 
-      if (!isString(par.rendezvous) || par.rendezvous === '') {
+      // Go `string` fields: `rendezvous: 9` names the step "9".
+      const rendezvous = issues.stringOf(par, 'rendezvous', base);
+      if (rendezvous === null || rendezvous === '') {
         issues.error({
           field: `${base}.rendezvous`,
           message: 'parallel block requires a rendezvous step',
           code: 'missing_required_field',
           stepId: stepID,
         });
-      } else if (par.rendezvous !== NEXT_NULL && !available.has(par.rendezvous)) {
+      } else if (rendezvous !== NEXT_NULL && !available.has(rendezvous)) {
         issues.error({
           field: `${base}.rendezvous`,
-          message: `Referenced rendezvous step '${par.rendezvous}' does not exist`,
+          message: `Referenced rendezvous step '${rendezvous}' does not exist`,
           code: 'step_not_found',
           stepId: stepID,
         });
@@ -52,10 +54,11 @@ export function validateNextLogic(flow: Flow, issues: Issues): void {
         });
       } else {
         par.steps.forEach((ps: unknown, i: number) => {
-          if (!isString(ps) || !available.has(ps)) {
+          const member = issues.stringAt(ps, `${base}.steps[${i}]`);
+          if (member === null || !available.has(member)) {
             issues.error({
               field: `${base}.steps[${i}]`,
-              message: `Referenced parallel step '${String(ps)}' does not exist`,
+              message: `Referenced parallel step '${member ?? String(ps)}' does not exist`,
               code: 'step_not_found',
               stepId: stepID,
             });

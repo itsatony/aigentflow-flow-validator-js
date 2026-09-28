@@ -500,6 +500,9 @@ const CASES: Case[] = [
     file: 'valid-open-key-sets.yaml',
     valid: true,
     forbidErrorCodes: ['unknown_yaml_key', 'invalid_type'],
+    // `default: 1` reaches the step `1`: a number in a step reference is the
+    // step id of its text (0.14.1).
+    forbidWarningCodes: ['unreachable_step'],
   },
   {
     // A number in a Go `string` duration field is its SOURCE text: 0.0, 00, 0x0,
@@ -518,6 +521,67 @@ const CASES: Case[] = [
       'orchestrator_timer_no_interval',
       'orchestrator_timer_bad_interval',
     ],
+  },
+  // 0.14.1: a step REFERENCE written as a number is the step id of its source
+  // text, because the reference decodes every reference into a Go `string`.
+  // Each pair is one reference kind, refused and accepted; every verdict was
+  // measured on the reference's strict save parser (by the Go port, v0.5.1).
+  {
+    file: 'invalid-numeric-next-default-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['step_not_found'],
+  },
+  {
+    file: 'valid-numeric-next-default.yaml',
+    valid: true,
+    forbidWarningCodes: ['unreachable_step'],
+  },
+  {
+    file: 'invalid-numeric-condition-goto-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['step_not_found'],
+  },
+  {
+    file: 'valid-numeric-condition-goto.yaml',
+    valid: true,
+    forbidWarningCodes: ['unreachable_step'],
+  },
+  {
+    file: 'invalid-numeric-parallel-member-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['step_not_found'],
+  },
+  {
+    // A false step_not_found on the member and a false missing rendezvous.
+    file: 'valid-numeric-parallel-member.yaml',
+    valid: true,
+    forbidErrorCodes: ['step_not_found', 'missing_required_field'],
+    forbidWarningCodes: ['unreachable_step'],
+  },
+  {
+    // Refused as a MISSING STEP — the goto_step is present.
+    file: 'invalid-numeric-error-goto-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['step_not_found'],
+    forbidErrorCodes: ['goto_step_missing'],
+  },
+  {
+    file: 'valid-numeric-error-goto.yaml',
+    valid: true,
+    forbidErrorCodes: ['goto_step_missing'],
+    forbidWarningCodes: ['unreachable_step'],
+  },
+  {
+    // `1e3`, `0x1F` and `True`, as keys and as references, are their text.
+    file: 'valid-numeric-reference-spellings.yaml',
+    valid: true,
+    forbidWarningCodes: ['unreachable_step'],
+  },
+  {
+    // `1e3` is not the step `1000`, although both are the number 1000.
+    file: 'invalid-numeric-reference-spelling-mismatch.yaml',
+    valid: false,
+    expectErrorCodes: ['step_not_found'],
   },
 ];
 

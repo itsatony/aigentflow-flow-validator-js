@@ -7,7 +7,7 @@
 // would have failed at unmarshal time.
 
 import type { Flow } from '../types.js';
-import { Issues, isRecord, isString, stepNames } from './util.js';
+import { Issues, isRecord, stepNames } from './util.js';
 
 // Reserved in step IDs: the engine uses "parent.child" as the composite ID for
 // loop sub-steps, so a literal "." in a top-level step ID is rejected.
@@ -15,7 +15,7 @@ const RESERVED_STEP_ID_CHAR = '.';
 const RESERVED_STEP_ID_ORCHESTRATOR = 'orchestrator';
 
 export function validateBasicStructure(flow: Flow, issues: Issues): void {
-  if (!isString(flow.aigentflow_version) || flow.aigentflow_version === '') {
+  if (!issues.nonEmptyStringOf(flow, 'aigentflow_version', '')) {
     issues.error({
       field: 'aigentflow_version',
       message: 'AIgentFlow version is required',
@@ -24,7 +24,7 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
     });
   }
 
-  if (!isString(flow.name) || flow.name === '') {
+  if (!issues.nonEmptyStringOf(flow, 'name', '')) {
     issues.error({
       field: 'name',
       message: 'Flow name is required',
@@ -33,7 +33,9 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
     });
   }
 
-  if (!isString(flow.start) || flow.start === '') {
+  // A Go `string`: `start: 1` names the step "1".
+  const start = issues.stringOf(flow, 'start', '');
+  if (start === null || start === '') {
     issues.error({
       field: 'start',
       message: 'Start step is required',
@@ -73,10 +75,10 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
   const names = stepNames(steps);
 
   // Start step must exist.
-  if (isString(flow.start) && flow.start !== '' && !(flow.start in steps)) {
+  if (start !== null && start !== '' && !(start in steps)) {
     issues.error({
       field: 'start',
-      message: `Start step '${flow.start}' not found in steps`,
+      message: `Start step '${start}' not found in steps`,
       code: 'step_not_found',
       context: `Available steps: ${names.join(', ')}`,
       suggestion: `Change start to one of: ${names.join(', ')}`,
@@ -120,9 +122,13 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
 
     // Loop steps define sub-steps instead of an executor.
     const hasLoop = step.loop !== undefined && step.loop !== null;
+    // A number here is the reference's executor "42" — present, and refused by
+    // the URL check (executors.ts) rather than as a type error. Only a mapping
+    // or a list fails to decode into the Go `string`.
     const executor = step.executor;
+    const executorText = issues.stringOf(step, 'executor', `steps.${stepID}`);
     if (!hasLoop) {
-      if (executor === undefined || executor === null || executor === '') {
+      if (executor === undefined || executor === null || executorText === '') {
         issues.error({
           field: `steps.${stepID}.executor`,
           message: 'Executor is required for each step',
@@ -130,7 +136,7 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
           stepId: stepID,
           suggestion: "Specify an executor URL (e.g., 'function://demo/processor')",
         });
-      } else if (!isString(executor)) {
+      } else if (executorText === null) {
         issues.error({
           field: `steps.${stepID}.executor`,
           message: 'Executor must be a string URL',

@@ -10,23 +10,16 @@
 // shape rule (PARITY.md, divergence #10).
 
 import type { Flow } from '../types.js';
-import {
-  Issues,
-  isRecord,
-  isString,
-  parseGoDuration,
-  scalarTextAt,
-  type ScalarSources,
-} from './util.js';
+import { Issues, isRecord, isString, parseGoDuration } from './util.js';
 
 /** The closed `tool_discovery` vocabulary (reference: IsValidDiscoveryMode). */
 const TOOL_DISCOVERY_MODES: ReadonlySet<string> = new Set(['eager', 'lazy', 'off']);
 const TEMPLATE_ACTION_OPEN = '{{';
 const KEY_TOOL_DISCOVERY = 'tool_discovery';
 
-export function validateSaveDoorExtras(flow: Flow, issues: Issues, sources?: ScalarSources): void {
-  validateToolDiscovery(flow, issues, sources);
-  validateMockScenarioDelays(flow, issues, sources);
+export function validateSaveDoorExtras(flow: Flow, issues: Issues): void {
+  validateToolDiscovery(flow, issues);
+  validateMockScenarioDelays(flow, issues);
   validateOutputParameters(flow, issues);
 }
 
@@ -40,7 +33,7 @@ export function validateSaveDoorExtras(flow: Flow, issues: Issues, sources?: Sca
 // fills from ANY scalar: `tool_discovery: 5` is the string "5" and is refused.
 // On a step the surface is a free-form `query` key, so only a YAML string is
 // judged there — a number or boolean is left to the executor.
-function validateToolDiscovery(flow: Flow, issues: Issues, sources?: ScalarSources): void {
+function validateToolDiscovery(flow: Flow, issues: Issues): void {
   const check = (value: string | null, field: string, stepId?: string): void => {
     if (value === null || value === '' || value.includes(TEMPLATE_ACTION_OPEN)) return;
     if (TOOL_DISCOVERY_MODES.has(value)) return;
@@ -54,12 +47,12 @@ function validateToolDiscovery(flow: Flow, issues: Issues, sources?: ScalarSourc
   };
 
   if (KEY_TOOL_DISCOVERY in flow) {
-    check(scalarTextAt(flow[KEY_TOOL_DISCOVERY], KEY_TOOL_DISCOVERY, sources), KEY_TOOL_DISCOVERY);
+    check(issues.stringOf(flow, KEY_TOOL_DISCOVERY, ''), KEY_TOOL_DISCOVERY);
   }
   const orch: unknown = flow.orchestrator;
   if (isRecord(orch) && KEY_TOOL_DISCOVERY in orch) {
     check(
-      scalarTextAt(orch[KEY_TOOL_DISCOVERY], `orchestrator.${KEY_TOOL_DISCOVERY}`, sources),
+      issues.stringOf(orch, KEY_TOOL_DISCOVERY, 'orchestrator'),
       `orchestrator.${KEY_TOOL_DISCOVERY}`,
     );
   }
@@ -80,7 +73,7 @@ function validateToolDiscovery(flow: Flow, issues: Issues, sources?: ScalarSourc
 //
 // Every scenario and every step key is checked, including a step id the flow
 // does not define — the reference walks the map, not the step table.
-function validateMockScenarioDelays(flow: Flow, issues: Issues, sources?: ScalarSources): void {
+function validateMockScenarioDelays(flow: Flow, issues: Issues): void {
   const scenarios: unknown = flow.mock_scenarios;
   if (!isRecord(scenarios)) return;
   for (const [scenario, steps] of Object.entries(scenarios)) {
@@ -90,7 +83,7 @@ function validateMockScenarioDelays(flow: Flow, issues: Issues, sources?: Scalar
       const field = `mock_scenarios.${scenario}.${stepID}.delay`;
       // Judged by the SOURCE spelling: `delay: 0.0` is the text "0.0" to the
       // reference (no unit, refused) although it parses to the number 0.
-      const delay = scalarTextAt(mock.delay, field, sources);
+      const delay = issues.stringAt(mock.delay, field);
       if (delay === null || delay === '') continue;
       if (parseGoDuration(delay) !== null) continue;
       issues.error({

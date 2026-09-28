@@ -28,10 +28,67 @@ export interface ParseOutput {
 }
 
 /**
+ * The text a Go `string` receives for a scalar node: its source spelling. The
+ * `yaml` package keeps it on `Scalar.source` (the scalar's text after quote and
+ * escape processing), while `Scalar.value` is the resolved number or boolean —
+ * `1.0` → 1, `0x1F` → 31, `True` → true, `-0` → -0. null when the node is not a
+ * scalar, or is a YAML null (a null is absent, not text).
+ */
+function scalarSourceText(node: unknown): string | null {
+  if (!isScalar(node) || node.value === null) return null;
+  if (typeof node.source === 'string') return node.source;
+  return typeof node.value === 'string' ? node.value : null;
+}
+
+/**
+ * Give every number or boolean mapping KEY its source text, before the
+ * document is converted. That is what the reference stores: its step table is
+ * a `map[string]*StepDefinition`, and yaml.v3 fills a Go `string` from any
+ * scalar by its text, so `1e3:` is the step "1e3", `0x1F:` is "0x1F", `True:`
+ * is "True". Converting the resolved key instead gives "1000", "31", "true",
+ * and a reference written `next: { default: 1e3 }` no longer matches its own
+ * step. Null keys, merge keys (`<<`, a string) and complex keys are left alone.
+ */
+function retagScalarKeys(node: unknown): void {
+  if (isMap(node)) {
+    for (const pair of node.items) {
+      const key = pair.key;
+      if (
+        isScalar(key) &&
+        (typeof key.value === 'number' || typeof key.value === 'boolean') &&
+        typeof key.source === 'string'
+      ) {
+        key.value = key.source;
+      }
+      retagScalarKeys(key);
+      retagScalarKeys(pair.value);
+    }
+  } else if (isSeq(node)) {
+    for (const item of node.items) retagScalarKeys(item);
+  }
+}
+
+/**
+ * Duplicate-key identity, as yaml.v3 decides it: two scalar keys collide when
+ * their TEXT is equal, not their resolved value — `1:` and `1.0:` are two
+ * steps there ("1" and "1.0"), and `"1":` and `1:` are one. The `yaml`
+ * package's default compares resolved values, which would refuse the first.
+ */
+function sameKeyText(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!isScalar(a) || !isScalar(b)) return false;
+  const ta = scalarSourceText(a);
+  const tb = scalarSourceText(b);
+  if (ta === null || tb === null) return a.value === b.value;
+  return ta === tb;
+}
+
+/**
  * Record the source text of each plain number/boolean scalar under the field
- * path the validators use. Aliases are not followed: a value reached through
- * one keeps its parsed rendering, which differs only for spellings such as
- * `0.0` (see PARITY.md).
+ * path the validators use. Runs after {@link retagScalarKeys}, so a path
+ * segment is a key's source text too. Aliases are not followed: a value
+ * reached through one keeps its parsed rendering, which differs only for
+ * spellings such as `0.0` (see PARITY.md).
  */
 function collectScalarSources(node: unknown, path: string, out: Map<string, string>): void {
   if (isMap(node)) {
@@ -96,7 +153,7 @@ export function parseFlow(yamlText: string): ParseOutput {
     // `merge: true`: the reference's yaml.v3 honours `<<: *anchor` merge keys,
     // and without it `<<` survives as a literal key, which the unknown-key rule
     // would refuse on a flow the reference saves.
-    doc = parseDocument(yamlText, { prettyErrors: true, uniqueKeys: true, merge: true });
+    doc = parseDocument(yamlText, { prettyErrors: true, uniqueKeys: sameKeyText, merge: true });
   } catch (e) {
     parseErrors.push({
       field: '',
@@ -117,6 +174,7 @@ export function parseFlow(yamlText: string): ParseOutput {
     return { parseErrors, parseWarnings };
   }
 
+  retagScalarKeys(doc.contents);
   let value: unknown;
   try {
     value = doc.toJS({ maxAliasCount: MAX_ALIAS_COUNT });

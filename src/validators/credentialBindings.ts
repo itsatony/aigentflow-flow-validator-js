@@ -7,7 +7,7 @@
 
 import type { CredentialBinding, Flow, LoopSubStep } from '../types.js';
 import { CREDENTIAL_REFERENCE_PREFIX } from '../spec/index.js';
-import { Issues, isRecord, isString } from './util.js';
+import { Issues, isRecord } from './util.js';
 
 function hasPrefix(source: string): boolean {
   return (
@@ -31,9 +31,11 @@ interface StepCreds {
 
 function checkBindings(creds: StepCreds, fieldBase: string, stepID: string, issues: Issues): void {
   const credentialsMap = creds.credentials;
-  const credential = creds.credential;
+  // Go `string` fields throughout. `fieldBase` is the owner's path plus
+  // `.credential`, which is the shorthand's own document path.
+  const credential = issues.stringAt(creds.credential, fieldBase);
   const hasCredentialsMap = isRecord(credentialsMap) && Object.keys(credentialsMap).length > 0;
-  const hasShorthand = isString(credential) && credential !== '';
+  const hasShorthand = credential !== null && credential !== '';
 
   if (hasCredentialsMap && hasShorthand) {
     issues.error({
@@ -57,8 +59,9 @@ function checkBindings(creds: StepCreds, fieldBase: string, stepID: string, issu
         continue;
       }
       const binding = rawBinding as CredentialBinding;
-      const source = binding.source;
-      if (!isString(source) || !hasPrefix(source)) {
+      const bindingPath = `${fieldBase}s.${bindingName}`;
+      const source = issues.stringOf(binding, 'source', bindingPath);
+      if (source === null || !hasPrefix(source)) {
         issues.error({
           field: `${fieldBase}s.${bindingName}.source`,
           message: `Credential binding '${bindingName}' source must start with '${CREDENTIAL_REFERENCE_PREFIX}'`,
@@ -73,7 +76,7 @@ function checkBindings(creds: StepCreds, fieldBase: string, stepID: string, issu
           stepId: stepID,
         });
       }
-      if (!isString(binding.inject_as) || binding.inject_as === '') {
+      if (!issues.nonEmptyStringOf(binding, 'inject_as', bindingPath)) {
         issues.error({
           field: `${fieldBase}s.${bindingName}.inject_as`,
           message: `Credential binding '${bindingName}' requires a non-empty 'inject_as'`,
@@ -85,7 +88,7 @@ function checkBindings(creds: StepCreds, fieldBase: string, stepID: string, issu
   }
 
   if (hasShorthand) {
-    const c = credential as string;
+    const c = credential;
     if (!hasPrefix(c)) {
       issues.error({
         field: fieldBase,
@@ -117,7 +120,8 @@ export function validateCredentialBindings(flow: Flow, issues: Issues): void {
       loop.steps.forEach((sub: unknown, i: number) => {
         if (!isRecord(sub)) return;
         const subStep = sub as LoopSubStep;
-        const subID = isString(subStep.id) ? subStep.id : String(i);
+        const subID =
+          issues.stringOf(subStep, 'id', `steps.${stepID}.loop.steps[${i}]`) ?? String(i);
         checkBindings(
           subStep as StepCreds,
           `steps.${stepID}.loop.steps[${i}].credential`,

@@ -22,7 +22,7 @@
 
 import type { Flow, LoopSubStep, StepDefinition } from '../types.js';
 import { EXECUTOR_SCHEMES, EXECUTOR_URL_PATTERN, TEMPLATE_ACTION_OPEN } from '../spec/index.js';
-import { Issues, isRecord, isString } from './util.js';
+import { Issues, isRecord } from './util.js';
 
 const SCHEME_SEPARATOR = '://';
 
@@ -68,8 +68,10 @@ export function validateExecutors(flow: Flow, issues: Issues): void {
     if (!isRecord(rawStep)) continue;
     const step = rawStep as StepDefinition;
 
-    if (isString(step.executor) && step.executor !== '') {
-      checkExecutor(step.executor, `steps.${stepID}.executor`, stepID, issues);
+    // A Go `string`: `executor: 42` is the URL "42", refused as a URL.
+    const executor = issues.stringOf(step, 'executor', `steps.${stepID}`);
+    if (executor !== null && executor !== '') {
+      checkExecutor(executor, `steps.${stepID}.executor`, stepID, issues);
     }
 
     // Loop sub-steps each carry their own executor.
@@ -78,10 +80,12 @@ export function validateExecutors(flow: Flow, issues: Issues): void {
       loop.steps.forEach((sub: unknown, i: number) => {
         if (!isRecord(sub)) return;
         const subStep = sub as LoopSubStep;
-        const subID = isString(subStep.id) ? subStep.id : String(i);
-        if (isString(subStep.executor) && subStep.executor !== '') {
+        const subPath = `steps.${stepID}.loop.steps[${i}]`;
+        const subID = issues.stringOf(subStep, 'id', subPath) ?? String(i);
+        const subExecutor = issues.stringOf(subStep, 'executor', subPath);
+        if (subExecutor !== null && subExecutor !== '') {
           checkExecutor(
-            subStep.executor,
+            subExecutor,
             `steps.${stepID}.loop.steps[${i}].executor`,
             `${stepID}.${subID}`,
             issues,

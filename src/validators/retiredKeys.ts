@@ -16,7 +16,7 @@
 // grammar, and `billing.max_credits` is the enforced spend ceiling.
 
 import type { Flow } from '../types.js';
-import { Issues, isRecord, isString } from './util.js';
+import { Issues, isRecord } from './util.js';
 
 const CODE_UNKNOWN_YAML_KEY = 'unknown_yaml_key';
 const KEY_BUDGET = 'budget';
@@ -115,7 +115,7 @@ export function validateRetiredKeys(flow: Flow, issues: Issues): void {
     if (!isRecord(loop) || !Array.isArray(loop.steps)) continue;
     loop.steps.forEach((sub: unknown, i: number) => {
       if (!isRecord(sub) || !declares(sub, KEY_MAX_RETRIES)) return;
-      const subID = isString(sub.id) ? sub.id : String(i);
+      const subID = issues.stringOf(sub, 'id', `steps.${stepID}.loop.steps[${i}]`) ?? String(i);
       issues.error({
         field: `steps.${stepID}.loop.steps[${i}].${KEY_MAX_RETRIES}`,
         message: maxRetriesMessage(`loop sub-step '${stepID}.${subID}'`),

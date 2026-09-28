@@ -22,7 +22,7 @@
 
 import type { Flow, NextCondition, NextLogicDefinition } from '../types.js';
 import { NEXT_MARKERS, REACHABILITY_TERMINAL_MARKERS } from '../spec/index.js';
-import { Issues, isRecord, isString, stepNames } from './util.js';
+import { Issues, isRecord, stepNames } from './util.js';
 
 // TWO sets, because the reference gives two answers and both are verdicts.
 //
@@ -42,18 +42,21 @@ function isMarker(target: string): boolean {
   return REACHABILITY_TERMINAL_MARKERS.has(target);
 }
 
-/** Edges the CYCLE detector follows — deliberately only two. See the header. */
-function cycleTargets(next: NextLogicDefinition): string[] {
+/**
+ * Edges the CYCLE detector follows — deliberately only two. See the header.
+ * `nextPath` is the step's `steps.<id>.next`. Every reference is a Go `string`,
+ * so `default: 2` is the step "2" (read through `issues.stringAt`).
+ */
+function cycleTargets(next: NextLogicDefinition, nextPath: string, issues: Issues): string[] {
   const out: string[] = [];
-  if (isString(next.default) && next.default !== '' && !isMarker(next.default)) {
-    out.push(next.default);
-  }
+  const target = issues.stringOf(next, 'default', nextPath);
+  if (target !== null && target !== '' && !isMarker(target)) out.push(target);
   if (Array.isArray(next.conditions)) {
-    for (const cond of next.conditions as NextCondition[]) {
-      if (isRecord(cond) && isString(cond.goto) && cond.goto !== '' && !isMarker(cond.goto)) {
-        out.push(cond.goto);
-      }
-    }
+    (next.conditions as NextCondition[]).forEach((cond, i) => {
+      if (!isRecord(cond)) return;
+      const goto = issues.stringOf(cond, 'goto', `${nextPath}.conditions[${i}]`);
+      if (goto !== null && goto !== '' && !isMarker(goto)) out.push(goto);
+    });
   }
   return out;
 }
@@ -63,26 +66,34 @@ function cycleTargets(next: NextLogicDefinition): string[] {
  * (aigentflow.flow.simulator.go). Under-reporting here is wrong in the silent
  * direction: it turns a missing edge into a confident accusation.
  */
-function reachTargets(step: Record<string, unknown>): string[] {
+function reachTargets(step: Record<string, unknown>, stepID: string, issues: Issues): string[] {
   const out: string[] = [];
-  const push = (target: unknown): void => {
-    if (isString(target) && target !== '' && !isMarker(target)) out.push(target);
+  const push = (target: string | null): void => {
+    if (target !== null && target !== '' && !isMarker(target)) out.push(target);
   };
 
   if (isRecord(step.next)) {
     const next = step.next as NextLogicDefinition;
-    out.push(...cycleTargets(next));
+    const nextPath = `steps.${stepID}.next`;
+    out.push(...cycleTargets(next, nextPath, issues));
 
     const parallel = (next as { parallel?: unknown }).parallel;
     if (isRecord(parallel)) {
-      if (Array.isArray(parallel.steps)) for (const id of parallel.steps) push(id);
-      push(parallel.rendezvous);
+      const parallelPath = `${nextPath}.parallel`;
+      if (Array.isArray(parallel.steps)) {
+        parallel.steps.forEach((id: unknown, i: number) =>
+          push(issues.stringAt(id, `${parallelPath}.steps[${i}]`)),
+        );
+      }
+      push(issues.stringOf(parallel, 'rendezvous', parallelPath));
     }
   }
 
   // The step-level error redirect is an edge like any other.
   const errorStrategy = step.error_strategy;
-  if (isRecord(errorStrategy)) push(errorStrategy.goto_step);
+  if (isRecord(errorStrategy)) {
+    push(issues.stringOf(errorStrategy, 'goto_step', `steps.${stepID}.error_strategy`));
+  }
 
   return out;
 }
@@ -99,16 +110,13 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
     const next = step.next;
     if (!isRecord(next)) continue;
     const n = next as NextLogicDefinition;
+    const nextPath = `steps.${stepID}.next`;
 
-    if (
-      isString(n.default) &&
-      n.default !== '' &&
-      !isSaveDoorMarker(n.default) &&
-      !available.has(n.default)
-    ) {
+    const target = issues.stringOf(n, 'default', nextPath);
+    if (target !== null && target !== '' && !isSaveDoorMarker(target) && !available.has(target)) {
       issues.error({
         field: `steps.${stepID}.next.default`,
-        message: `Referenced step '${n.default}' does not exist`,
+        message: `Referenced step '${target}' does not exist`,
         code: 'step_not_found',
         stepId: stepID,
         context: `Available steps: ${names.join(', ')}`,
@@ -127,7 +135,8 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
         // dropped"), verified against the Go parser, so this is an error and not
         // a warning. Reported explicitly because the failure is otherwise silent:
         // the branch target simply vanishes.
-        if (isString((cond as NextCondition).goto_step)) {
+        // Any value: the key itself is what the reference refuses.
+        if ((cond as NextCondition).goto_step !== undefined) {
           issues.error({
             field: `steps.${stepID}.next.conditions[${i}].goto_step`,
             message: "A condition's branch target key is 'goto', not 'goto_step'",
@@ -138,8 +147,8 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
           });
         }
 
-        const goto = (cond as NextCondition).goto;
-        if (isString(goto) && goto !== '' && !isSaveDoorMarker(goto) && !available.has(goto)) {
+        const goto = issues.stringOf(cond, 'goto', `${nextPath}.conditions[${i}]`);
+        if (goto !== null && goto !== '' && !isSaveDoorMarker(goto) && !available.has(goto)) {
           issues.error({
             field: `steps.${stepID}.next.conditions[${i}].goto`,
             message: `Referenced step '${goto}' does not exist`,
@@ -153,7 +162,7 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
     }
   }
 
-  const start = isString(flow.start) ? flow.start : '';
+  const start = issues.stringOf(flow, 'start', '') ?? '';
   if (start === '' || !available.has(start)) {
     // Without a valid start, reachability/cycle analysis is meaningless and
     // the missing-start error is already reported elsewhere.
@@ -169,8 +178,8 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
   // probe after the first pass of the fix.
   const flowErrorStrategy = flow.error_strategy;
   if (isRecord(flowErrorStrategy)) {
-    const gotoStep = flowErrorStrategy.goto_step;
-    if (isString(gotoStep) && gotoStep !== '' && !isMarker(gotoStep)) queue.push(gotoStep);
+    const gotoStep = issues.stringOf(flowErrorStrategy, 'goto_step', 'error_strategy');
+    if (gotoStep !== null && gotoStep !== '' && !isMarker(gotoStep)) queue.push(gotoStep);
   }
   while (queue.length > 0) {
     const current = queue.shift() as string;
@@ -178,7 +187,7 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
     reachable.add(current);
     const step = steps[current];
     if (isRecord(step)) {
-      for (const target of reachTargets(step)) {
+      for (const target of reachTargets(step, current, issues)) {
         if (!reachable.has(target)) queue.push(target);
       }
     }
@@ -205,7 +214,8 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
     recStack.add(stepID);
     const step = steps[stepID];
     if (isRecord(step) && isRecord(step.next)) {
-      for (const target of cycleTargets(step.next as NextLogicDefinition)) {
+      const next = step.next as NextLogicDefinition;
+      for (const target of cycleTargets(next, `steps.${stepID}.next`, issues)) {
         if (hasCycle(target)) return true;
       }
     }
