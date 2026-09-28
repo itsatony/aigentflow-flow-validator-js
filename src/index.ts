@@ -28,6 +28,8 @@ import { validateStepMaxDuration } from './validators/stepMaxDuration.js';
 import { validateRetiredKeys } from './validators/retiredKeys.js';
 import { validateSaveDoorExtras } from './validators/saveDoor.js';
 import { validateUnknownKeys } from './validators/unknownKeys.js';
+import { validateExecutorConfigEnvScopes } from './validators/executorConfigEnv.js';
+import { validateOrchestratorExons } from './validators/exons.js';
 import type { ScalarSources } from './validators/util.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
@@ -111,6 +113,11 @@ function validateParsed(
   validateProcessingOperations(f, issues);
   validateStepMaxDuration(f, issues);
   validateSaveDoorExtras(f, issues);
+  validateExecutorConfigEnvScopes(f, issues);
+  // The orchestrator's inline .exons frontmatter. A step's inline `query.exons`
+  // needs an .exons ENGINE to judge (`exons_attributes`) and is not judged here
+  // at all — PARITY.md, divergence #16.
+  validateOrchestratorExons(f, issues);
   // Last among the structural rules: it skips a location another rule has
   // already reported with more specific advice.
   validateUnknownKeys(f, issues);

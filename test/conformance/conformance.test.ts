@@ -5,7 +5,7 @@
 //
 // To extend: drop a new `.yaml` under fixtures/ and add an entry here.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -36,6 +36,14 @@ interface Case {
    * a legal backward jump" rather than as an anonymous count mismatch.
    */
   forbidErrorCodes?: string[];
+  /**
+   * The fixture's reference verdict needs an `.exons` ENGINE (PARITY.md,
+   * divergence #16), which this validator does not have. `valid` and
+   * `expectErrorCodes` state the REFERENCE's verdict, for the record and for
+   * any implementation that has an engine; this suite asserts the documented,
+   * looser one instead: valid, with none of `expectErrorCodes`.
+   */
+  exonsEngineOnly?: boolean;
 }
 
 const CASES: Case[] = [
@@ -473,11 +481,11 @@ const CASES: Case[] = [
     expectErrorCodes: ['step_not_found'],
   },
   {
-    // A real step named `end` saves. The reference's reachability walk still
-    // stops at `end`, so that step is unreachable — on both sides.
+    // A real step named `end` saves and is REACHABLE: since AIgentFlow v2.760.0
+    // no reference walk treats `end` as a terminal (it was unreachable until 0.15.0).
     file: 'valid-next-end-names-a-step.yaml',
     valid: true,
-    expectWarningCodes: ['unreachable_step'],
+    forbidWarningCodes: ['unreachable_step'],
     forbidErrorCodes: ['step_not_found'],
   },
   {
@@ -583,6 +591,116 @@ const CASES: Case[] = [
     valid: false,
     expectErrorCodes: ['step_not_found'],
   },
+
+  // 0.15.0 — the save-door rules AIgentFlow added after v2.753.0 (Go port v0.6.0).
+  {
+    // v2.597.0: five out-of-scope references, one per shape.
+    file: 'invalid-executor-config-env-scope.yaml',
+    valid: false,
+    expectErrorCodes: ['executor_config_env_scope'],
+  },
+  {
+    // The counter-fixture: every reference in scope, and every non-reference.
+    file: 'valid-executor-config-env-scope.yaml',
+    valid: true,
+    forbidErrorCodes: ['executor_config_env_scope'],
+  },
+  {
+    // v2.777.0: tags the engine's resolver refuses. Engine-only.
+    file: 'invalid-exons-step-attributes.yaml',
+    valid: false,
+    expectErrorCodes: ['exons_attributes'],
+    exonsEngineOnly: true,
+  },
+  {
+    // Templated, non-exons executor, non-string: none is judged.
+    file: 'valid-exons-step-attributes-skipped.yaml',
+    valid: true,
+    forbidErrorCodes: ['exons_attributes'],
+  },
+  {
+    file: 'invalid-orchestrator-exons-no-spec.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_exons_parse_failed'],
+  },
+  {
+    file: 'invalid-orchestrator-exons-unclosed-frontmatter.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_exons_parse_failed'],
+  },
+  {
+    file: 'invalid-orchestrator-exons-no-provider.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_exons_no_provider'],
+  },
+  {
+    // v2.767.0: every declared resource is refused.
+    file: 'invalid-orchestrator-exons-resources.yaml',
+    valid: false,
+    expectErrorCodes: ['exons_resources_unhonoured'],
+  },
+  {
+    file: 'valid-orchestrator-exons-resources-empty.yaml',
+    valid: true,
+    forbidErrorCodes: ['exons_resources_unhonoured'],
+  },
+  {
+    file: 'invalid-orchestrator-exons-attributes.yaml',
+    valid: false,
+    expectErrorCodes: ['exons_attributes'],
+    exonsEngineOnly: true,
+  },
+  {
+    // The engine's parse validates the decoded spec. Engine-only.
+    file: 'invalid-orchestrator-exons-spec-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_exons_parse_failed'],
+    exonsEngineOnly: true,
+  },
+  {
+    // v2.760.0: the four withholds, each its own fixture.
+    file: 'warn-orchestrator-tool-withheld-ask-human.yaml',
+    valid: true,
+    expectWarningCodes: ['orchestrator_tool_withheld'],
+  },
+  {
+    file: 'warn-orchestrator-tool-withheld-named.yaml',
+    valid: true,
+    expectWarningCodes: ['orchestrator_tool_withheld'],
+  },
+  {
+    file: 'warn-orchestrator-tool-withheld-signals-off.yaml',
+    valid: true,
+    expectWarningCodes: ['orchestrator_tool_withheld'],
+  },
+  {
+    file: 'warn-orchestrator-tool-withheld-campaign.yaml',
+    valid: true,
+    expectWarningCodes: ['orchestrator_tool_withheld'],
+  },
+  {
+    // The counter-fixtures: a false positive here goes red.
+    file: 'valid-orchestrator-tool-allow-consistent.yaml',
+    valid: true,
+    forbidWarningCodes: ['orchestrator_tool_withheld'],
+  },
+  {
+    file: 'valid-orchestrator-tool-allow-campaign.yaml',
+    valid: true,
+    forbidWarningCodes: ['orchestrator_tool_withheld'],
+  },
+  {
+    file: 'valid-orchestrator-tool-allow-absent.yaml',
+    valid: true,
+    forbidWarningCodes: ['orchestrator_tool_withheld'],
+  },
+  {
+    // v2.760.0: `end` is a step, so this is a cycle, and `end` is reachable.
+    file: 'warn-next-end-cycle.yaml',
+    valid: true,
+    expectWarningCodes: ['potential_infinite_loop'],
+    forbidWarningCodes: ['unreachable_step'],
+  },
 ];
 
 describe('conformance fixtures', () => {
@@ -592,6 +710,18 @@ describe('conformance fixtures', () => {
       const result = validateFlow(yaml);
       const errorCodes = new Set(result.errors.map((e) => e.code));
       const warningCodes = new Set(result.warnings.map((w) => w.code));
+
+      if (c.exonsEngineOnly) {
+        // No .exons engine here (divergence #16): the flow must be accepted,
+        // and none of the codes only an engine can produce may appear.
+        expect(result.valid, `errors: ${[...errorCodes].join(', ')}`).toBe(true);
+        for (const code of c.expectErrorCodes ?? []) {
+          expect(errorCodes, `engine-only code '${code}' must NOT be raised here`).not.toContain(
+            code,
+          );
+        }
+        return;
+      }
 
       expect(result.valid, `errors: ${[...errorCodes].join(', ')}`).toBe(c.valid);
       if (c.valid) {
@@ -617,4 +747,16 @@ describe('conformance fixtures', () => {
       }
     });
   }
+});
+
+// A fixture on disk with no case would sit unasserted, and the Go port's parity
+// check would still count it as shared.
+describe('conformance corpus', () => {
+  it('asserts every fixture exactly once', () => {
+    const onDisk = readdirSync(fixturesDir)
+      .filter((f) => f.endsWith('.yaml'))
+      .sort();
+    const asserted = CASES.map((c) => c.file).sort();
+    expect(asserted).toEqual(onDisk);
+  });
 });

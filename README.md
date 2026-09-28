@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.753.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.788.0"`).
 
 ### Options
 
@@ -167,10 +167,12 @@ interface ValidationIssue {
 - **Query schema** — parameter types, `array` requires `items`, item-type validity, `min_items`/`max_items`, nested `object`/`array` recursion.
 - **Response expectations** — valid data types; `array` requires `items`; `required` is boolean or template.
 - **Error strategy** — action enum (`retry`/`fail`/`goto`/`continue`), `goto_step` existence, `max_delay` duration, `backoff_multiplier`, `retry_on` categories.
-- **Connectivity** — `next.default` / `next.conditions[].goto` references (error; only `null` and `orchestrator` need no step, so `end` must name one); unreachable steps (warning); cycles (warning).
+- **Connectivity** — `next.default` / `next.conditions[].goto` references (error; only `null` and `orchestrator` need no step, so `end` must name one, and is then an ordinary step); unreachable steps (warning); cycles (warning).
 - **Parallel + orchestrator routing** — `next.parallel` rendezvous/steps; `orchestrator` next requires an orchestrator block.
 - **Loop / for_each / throttle** — required fields, iteration limits, mutual exclusions, throttle ceilings.
 - **Orchestrator / campaign** — exons presence, trigger types, timer intervals, tool names; campaign requires an orchestrator and at least one child flow, each naming a `flow_id` or `flow_name`; `max_credits_per_child` >= 0.
+- **Orchestrator `.exons` frontmatter** — the document must open with a closed `---` frontmatter spec (`orchestrator_exons_parse_failed`) that sets `execution.provider` (`orchestrator_exons_no_provider`) and declares no `requirements.resources` (`exons_resources_unhonoured`); a tool that `orchestrator.tools` and the definition's `tools.allow` disagree about is never offered (`orchestrator_tool_withheld`, warning). The document body is not parsed: that needs the `.exons` engine (see PARITY.md).
+- **`executor_config` environment references** — a `${NAME}` value may name only the variables of the provider or protocol it is written under (`executor_config_env_scope`).
 - **Credential bindings** — `stored/{provider}/{name}` format, `inject_as`, `credential`/`credentials` mutual exclusion.
 - **Expression functions** — exactly one of `package`/`function`.
 - **`input_schema`** — version, field-name pattern, type enum, per-type constraints, `pattern` compilation, `visible_when` predicate + reference resolution, duplicate-name detection, file-ordering lint.
@@ -187,6 +189,7 @@ These need a live server / org context and are intentionally out of scope:
 
 - **Credentials** — whether a bound credential actually exists or is authorised.
 - **Model compliance** — the `compliance:` block is enforced against the provider catalogue at flow-create time on the server.
+- **`.exons` document bodies** — whether an inline `.exons` document parses and whether its tags can render (`exons_attributes`) needs the `.exons` template engine, which this package does not embed.
 - **Template field resolution** — whether `.data.x.y` will actually be populated at runtime (we validate syntax, not data flow).
 - **Publish gates** — `visibility`/`classification`/template-metadata publish rules are server- and org-context dependent.
 

@@ -378,9 +378,10 @@ describe('connectivity', () => {
     expect(viaCondition.errors.map((e) => e.field)).toContain('steps.a.next.conditions[0].goto');
   });
 
-  // The reference's reachability walk still skips `end`, so a real step named
-  // `end` saves, and is reported unreachable when only `end` routes to it.
-  it('accepts end when a step of that name exists, and warns it unreachable as the reference does', () => {
+  // AIgentFlow v2.760.0: no reference walk treats `end` as a terminal any more,
+  // so a real step named `end` is an ordinary step — reachable here, and a
+  // cycle through it is a cycle. It was reported unreachable until 0.15.0.
+  it('accepts end when a step of that name exists, and walks it as an ordinary step', () => {
     const r = validateFlowObject({
       ...MINIMAL,
       steps: {
@@ -389,9 +390,16 @@ describe('connectivity', () => {
       },
     });
     expect(r.valid).toBe(true);
-    expect(r.warnings.filter((w) => w.code === 'unreachable_step').map((w) => w.stepId)).toEqual([
-      'end',
-    ]);
+    expect(r.warnings.filter((w) => w.code === 'unreachable_step')).toEqual([]);
+
+    const cycle = validateFlowObject({
+      ...MINIMAL,
+      steps: {
+        a: { executor: 'mock://x/y', next: { default: 'end' } },
+        end: { executor: 'mock://x/y', next: { default: 'a' } },
+      },
+    });
+    expect(cycle.warnings.map((w) => w.code)).toContain('potential_infinite_loop');
   });
   it('warns about unreachable steps', () => {
     const r = validateFlowObject({
