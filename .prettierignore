@@ -1,3 +1,6 @@
 dist/
 node_modules/
 coverage/
+# Vendored byte-for-byte from the Go port (go-aigentflow-validator), whose parity
+# check compares the two files byte for byte. Reformatting it here is drift.
+src/spec/aigentflow-spec.json

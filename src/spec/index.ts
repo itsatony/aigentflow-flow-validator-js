@@ -33,10 +33,13 @@ export const NEXT_MARKERS: ReadonlySet<string> = new Set(spec.nextMarkers);
 
 /**
  * Targets the reachability and cycle walks treat as "control leaves the graph".
- * This set is WIDER than {@link NEXT_MARKERS}: the reference's structured
- * validator still skips `end` there, so a flow that routes to a real step named
- * `end` saves, and that step is then reported `unreachable_step`. Two sets
- * because the reference has two answers; merging them changes a verdict.
+ *
+ * Since AIgentFlow v2.760.0 this holds the same values as {@link NEXT_MARKERS}:
+ * no reference walk treats `end` as a terminal any more, so a real step named
+ * `end` is reachable and a cycle through it is a cycle. Until then this set was
+ * WIDER (it carried `end`), and a step named `end` that only `end` routed to was
+ * reported `unreachable_step`. The two stay separate spec keys so a future
+ * split is a one-value change.
  */
 export const REACHABILITY_TERMINAL_MARKERS: ReadonlySet<string> = new Set(
   spec.reachabilityTerminalMarkers,
@@ -186,3 +189,44 @@ export const KNOWN_KEYS = spec.knownKeys as {
   readonly root: string;
   readonly types: Readonly<Record<string, Readonly<Record<string, string>>>>;
 };
+
+/**
+ * Which orchestrator tools the inline `.exons` definition's `tools.allow` may
+ * withhold (AIgentFlow v2.760.0, `orchestrator_tool_withheld`). A tool is offered
+ * only if it passes BOTH `orchestrator.tools` (empty = every tool) AND
+ * `tools.allow` (absent = no narrowing). The lifecycle tools, and the signal
+ * tools while `enable_signals` is on (the default), are exempt from
+ * `tools.allow`.
+ */
+export const ORCHESTRATOR_TOOL_ALLOW = {
+  warningField: spec.orchestratorToolAllow.warningField,
+  askHumanTool: spec.orchestratorToolAllow.askHumanTool,
+  enableSignalsDefault: spec.orchestratorToolAllow.enableSignalsDefault,
+  lifecycleTools: spec.orchestratorToolAllow.lifecycleTools as readonly string[],
+  signalTools: spec.orchestratorToolAllow.signalTools as readonly string[],
+  campaignTools: spec.orchestratorToolAllow.campaignTools as readonly string[],
+} as const;
+
+/** Where an inline `.exons` document arrives at the save door. */
+export const EXONS = {
+  /** A step's document is judged only on an executor with this prefix. */
+  executorPrefix: spec.exons.executorPrefix,
+  /** The step `query` parameter that carries the document. */
+  documentParam: spec.exons.documentParam,
+  /** The YAML frontmatter delimiter line. */
+  frontmatterDelimiter: spec.exons.frontmatterDelimiter,
+} as const;
+
+/**
+ * `executor_config` may expand only the environment variables of the key it is
+ * written under (AIgentFlow v2.597.0, `executor_config_env_scope`). `scopes` is
+ * the reference's own scope function evaluated for every key that has one; a
+ * key absent from it has an EMPTY scope and refuses every reference.
+ */
+export const EXECUTOR_CONFIG_ENV_SCOPES = {
+  referencePrefix: spec.executorConfigEnvScopes.referencePrefix,
+  referenceSuffix: spec.executorConfigEnvScopes.referenceSuffix,
+  fields: spec.executorConfigEnvScopes.fields as readonly string[],
+  extraKey: spec.executorConfigEnvScopes.extraKey,
+  scopes: spec.executorConfigEnvScopes.scopes as Readonly<Record<string, readonly string[]>>,
+} as const;
