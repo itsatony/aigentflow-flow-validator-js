@@ -6,6 +6,63 @@ discipline for keeping the two in sync.
 
 **Tracks AIgentFlow flow schema: `v2.753.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)).
 
+> v2.753.0, package 0.14.1 — **a number where the reference expects text is that
+> text, in every Go `string` field.** No grammar change, so `specVersion` stays
+> `2.753.0`. The reference decodes a step reference, an enum, a name and a
+> duration into a Go `string`, and yaml.v3 fills a `string` from any scalar by
+> its **source text**: `next: { default: 2 }` names the step `"2"`, `action: 1`
+> is the invalid action `"1"`, `name: 123` is the name `"123"`. This validator
+> read most of those fields with `isString`, so a number was either
+> **invisible** (an existence or enum check skipped: looser) or **absent** (a
+> present value reported missing: stricter). Ported from the Go port's v0.5.1,
+> whose verdicts were measured on the reference's strict save parser.
+>
+> | Shape                                                                                                                                    | Reference                      | 0.14.0                                                                | 0.14.1                                           |
+> | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------ |
+> | `next.default: 2`, a condition's `goto: 7`, `rendezvous: 9`, `error_strategy.goto_step: 9`, no such step                                 | refused, step not found        | valid (default, goto); `missing_required_field` / `goto_step_missing` | `step_not_found`                                 |
+> | the same with the step present, and `parallel.steps: [1]`                                                                                | saves, reachable               | `unreachable_step`; `step_not_found` / `goto_step_missing`            | valid, reachable                                 |
+> | `default: 1e3` with a step `1000`                                                                                                        | refused (`1e3` is not `1000`)  | valid                                                                 | `step_not_found`                                 |
+> | step keys `1e3:`, `0x1F:`, `True:` named by the same spelling                                                                            | saves                          | `unreachable_step` (keys read `1000`, `31`, `true`)                   | valid                                            |
+> | `action: 1`, `on_fail: 1`, `for_each.resolution: 1`, `orchestrator.mode: 1`                                                              | refused, invalid value         | valid                                                                 | the rule's own code                              |
+> | `name: 123`, `aigentflow_version: 2.0`, `start: 1`, `rubric: 5`, `for_each.items: 5`, `inject_as: 5`, a `query` param/property `type: 1` | saves                          | `missing_required_field` / the rule's "missing" code                  | valid (`unknown_data_type` warning for the type) |
+> | loop sub-steps `id: 3` / `id: 4`, `next: { default: 4 }`                                                                                 | saves                          | `loop_step_id_required`, `invalid_type`                               | valid                                            |
+> | `executor: 42`                                                                                                                           | refused, unusable executor URL | `invalid_type`                                                        | `invalid_executor_url`                           |
+> | `expression_functions: [{ function: 5 }]`                                                                                                | refused, not in the catalog    | `invalid_expression_function`                                         | `expression_function_unknown`                    |
+>
+> - **One reader.** Every Go `string` field is read through `Issues.stringAt` /
+>   `stringOf` / `nonEmptyStringOf` (`validators/util.ts`), which return a string
+>   as itself and a number or boolean by its source spelling. Only a mapping, a
+>   list or null is "not a string". The `Issues` collector now carries the
+>   pass's `scalarSources`, so the per-validator `sources` parameters are gone.
+>   Sites are left alone where the value is compared only against a literal no
+>   scalar spelling can equal (`orchestrator`, an `fn_` name, `{{`, an empty
+>   `output:` entry), and a step `query:` is a Go `any` in the reference, not a
+>   string field.
+> - **The text comes from the parsed node, not the JS value.** The `yaml`
+>   package resolves `1.0` to 1, `0x1F` to 31, `True` to true and `-0` to -0
+>   before `toJS`. `parseFlow` reads `Scalar.source`, the scalar's own text,
+>   from the document node for each value (as `scalarSources` did for
+>   durations) and now for each **key** too: `retagScalarKeys` replaces a number
+>   or boolean key's value with its source text before conversion, so `1e3:` is
+>   the step `"1e3"`. Duplicate keys are compared by text, as yaml.v3 compares
+>   them: `1:` and `1.0:` are two steps, `"1":` and `1:` are one.
+>   `test/scalar-text.test.ts` pins the same 15 spellings the Go port pins
+>   against yaml.v3 (`2`, `-0`, `+1`, `017`, `0o17`, `0x1F`, `1_000`, `1e3`,
+>   `.5`, `0.10`, `.inf`, `true`, `True`, `FALSE`, `2024-01-01`) as a step key
+>   and as a value.
+> - **Timestamps need nothing here.** The `yaml` package's default YAML 1.2
+>   core schema has no timestamp type, so `2024-01-01` is already the string
+>   `"2024-01-01"`, which is what the reference's `string` field receives.
+>   `1_000` and `017` differ between the two parsers as numbers, but both
+>   parsers keep the text, which is all a `string` field reads.
+> - **Measured.** The Go port's ten `*-numeric-*` conformance fixtures are
+>   copied byte-for-byte, and `valid-open-key-sets.yaml` now forbids
+>   `unreachable_step`. On 0.14.0, 10 of those 11 cases fail; on 0.14.1 all 75
+>   fixtures pass, and the Go port's `make parity-check` (spec byte-identical,
+>   fixture set identical, 75 verdicts equal) is green. Over the reference's
+>   216 bundled flows, not one finding changed, with or without
+>   `strictRegistries` (`unreachable_step` 25, `potential_infinite_loop` 1).
+
 > v2.753.0 — **the three gaps that were looser than the reference in both ports
 > are closed (package 0.14.0).** The reference's parser, validator, flow, step,
 > orchestrator, campaign, input-schema and template-registry sources have a
@@ -882,20 +939,32 @@ validator useful and low-false-positive while staying offline.
     reference treats a default here as a policy nobody chose, and inventing one would make the
     oracle refuse or accept on a premise the door does not hold.
 
-13. **Narrowed in 0.14.0: a number in a duration field is judged by its source text
-    only when there is source text.** yaml.v3 fills the reference's `string` field with
-    the scalar's **source text**. `validateFlow` now has it (`parseFlow` records the
-    spelling of every number and boolean scalar), so `delay: 0.0`, `00` and `0x0` are
-    refused as the reference refuses them. Two cases still see only the parsed value:
-    `validateFlowObject`, whose caller parsed the document, and a value reached through a
-    YAML alias. There the number 0 reads as `"0"` and saves, whatever its spelling. This
-    is the lenient direction. Every other number is refused either way, because no
+13. **Narrowed in 0.14.0 and 0.14.1: a number in a Go `string` field is judged by
+    its source text only when there is source text.** yaml.v3 fills the reference's
+    `string` field with the scalar's **source text**. `validateFlow` now has it
+    (`parseFlow` records the spelling of every number and boolean scalar, and gives
+    every number or boolean mapping key its spelling), so `delay: 0.0`, `00` and
+    `0x0` are refused as the reference refuses them, and `default: 1e3` names the
+    step `"1e3"`. Two cases still see only the parsed value: `validateFlowObject`,
+    whose caller parsed the document, and a value reached through a YAML alias.
+    There a number is rendered the way JavaScript renders it (`0.0` is `"0"`, `1e3`
+    is `"1000"`, `0x1F` is `"31"`), which is also how JavaScript renders a numeric
+    object key, so an ordinary `2` still names the step `2`. For durations this is
+    the lenient direction: every other number is refused either way, because no
     number's text carries a unit.
 
-    The mechanism covers the mock `delay`, `throttle.delay`, `throttle.batch_delay`,
-    `error_strategy.max_delay`, an orchestrator timer `interval`, and `tool_discovery`.
-    The campaign `flow_id` / `flow_name` still use the parsed value, which cannot change a
-    verdict there: no number spelling is empty or a template.
+    Since 0.14.1 the mechanism covers every Go `string` field the validators read:
+    step references (`next.default`, condition `goto`, `parallel.steps` and
+    `rendezvous`, `error_strategy` / `quality_gate` `goto_step`, `start`,
+    `campaign.on_children_complete`, loop sub-step ids and `next` targets), enums
+    (`action`, `retry_on`, `on_fail`, `resolution`, `mode`, trigger `type`, data
+    types, `tools`), names and required text (`name`, `aigentflow_version`,
+    `executor`, `rubric`, `items`, `while`, `exons`, credential `source` /
+    `inject_as`, input-schema `name` / `type` / `pattern` / `visible_when.field`,
+    `expression_functions` values, `response_evaluation`, `flow_id` /
+    `flow_name`), and the durations (`delay`, `batch_delay`, `max_delay`,
+    `retry_delay`, timer `interval`, `human_question_timeout`, `max_duration`,
+    `tool_discovery`).
 
 ---
 

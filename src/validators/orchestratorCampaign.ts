@@ -13,16 +13,7 @@ import type {
   ValidateOptions,
 } from '../types.js';
 import { ORCHESTRATOR_MODES, ORCHESTRATOR_TOOLS, ORCHESTRATOR_TRIGGERS } from '../spec/index.js';
-import {
-  Issues,
-  isRecord,
-  isString,
-  isValidGoDuration,
-  parseGoDuration,
-  scalarText,
-  scalarTextAt,
-  type ScalarSources,
-} from './util.js';
+import { Issues, isRecord, isValidGoDuration, parseGoDuration } from './util.js';
 
 const TRIGGER_TIMER = 'timer';
 const MODE_OWNER = 'owner';
@@ -101,8 +92,8 @@ function validateCampaignChildFlows(campaign: Record<string, unknown>, issues: I
       });
       continue;
     }
-    const id = scalarText(entry.flow_id);
-    const name = scalarText(entry.flow_name);
+    const id = issues.stringOf(entry, 'flow_id', `${field}[${i}]`);
+    const name = issues.stringOf(entry, 'flow_name', `${field}[${i}]`);
     if ((id !== null && id !== '') || (name !== null && name !== '')) continue;
     issues.error({
       field: `${field}[${i}]`,
@@ -117,14 +108,15 @@ export function validateOrchestratorCampaign(
   flow: Flow,
   issues: Issues,
   opts: ValidateOptions,
-  sources?: ScalarSources,
 ): void {
   const hasOrchestrator = isRecord(flow.orchestrator);
 
   if (hasOrchestrator) {
     const orch = flow.orchestrator as OrchestratorDefinition;
 
-    if (!isString(orch.exons) || orch.exons === '') {
+    // Every field read below is a Go `string` (issues.stringOf): `mode: 1` is
+    // the invalid mode "1", not an absent one.
+    if (!issues.nonEmptyStringOf(orch, 'exons', 'orchestrator')) {
       issues.error({
         field: 'orchestrator.exons',
         message: 'orchestrator requires an exons specification',
@@ -154,25 +146,27 @@ export function validateOrchestratorCampaign(
     // is non-empty. Refusing either would make this oracle stricter than the door.
     const declared: unknown = orch.human_question_timeout;
     if (declared !== undefined && declared !== null && declared !== '') {
-      const parsed = isString(declared) ? parseGoDuration(declared) : null;
+      const text = issues.stringAt(declared, 'orchestrator.human_question_timeout');
+      const parsed = text !== null ? parseGoDuration(text) : null;
       if (parsed === null || parsed <= 0) {
         issues.error({
           field: 'orchestrator.human_question_timeout',
-          message: `human_question_timeout '${String(declared)}' is not a valid positive duration`,
+          message: `human_question_timeout '${text ?? String(declared)}' is not a valid positive duration`,
           code: 'orchestrator_human_question_timeout_invalid',
         });
       }
     }
 
     // DC-COND-1: termination-authority mode. Empty defaults to monitor (valid).
-    if (isString(orch.mode) && orch.mode !== '' && !ORCHESTRATOR_MODES.has(orch.mode)) {
+    const mode = issues.stringOf(orch, 'mode', 'orchestrator');
+    if (mode !== null && mode !== '' && !ORCHESTRATOR_MODES.has(mode)) {
       issues.error({
         field: 'orchestrator.mode',
-        message: `Invalid orchestrator mode '${orch.mode}'`,
+        message: `Invalid orchestrator mode '${mode}'`,
         code: 'orchestrator_mode_invalid',
         suggestion: `Use one of: ${[...ORCHESTRATOR_MODES].join(', ')}`,
       });
-    } else if (orch.mode === MODE_OWNER && !flowHasOrchestratorYieldEdge(flow)) {
+    } else if (mode === MODE_OWNER && !flowHasOrchestratorYieldEdge(flow)) {
       // owner mode cedes lifecycle to the LLM, reachable only via an explicit
       // next: orchestrator yield edge. A self-terminating DAG under owner is refused.
       issues.error({
@@ -188,20 +182,21 @@ export function validateOrchestratorCampaign(
         if (!isRecord(rawTrigger)) return;
         const trigger = rawTrigger as OrchestratorTrigger;
         const base = `orchestrator.triggers[${i}]`;
-        if (!isString(trigger.type) || !ORCHESTRATOR_TRIGGERS.has(trigger.type)) {
+        const type = issues.stringOf(trigger, 'type', base);
+        if (type === null || !ORCHESTRATOR_TRIGGERS.has(type)) {
           issues.error({
             field: `${base}.type`,
-            message: `Unknown orchestrator trigger type '${String(trigger.type)}'`,
+            message: `Unknown orchestrator trigger type '${type ?? String(trigger.type)}'`,
             code: 'orchestrator_trigger_unknown',
             suggestion: `Use one of: ${[...ORCHESTRATOR_TRIGGERS].join(', ')}`,
           });
           return;
         }
-        if (trigger.type === TRIGGER_TIMER) {
+        if (type === TRIGGER_TIMER) {
           // A Go `string` field, filled from ANY scalar by its source text:
           // `interval: 0` is "0" and saves, `interval: 100` is "100" (no unit).
           // A number used to read as "no interval" here.
-          const interval = scalarTextAt(trigger.interval, `${base}.interval`, sources);
+          const interval = issues.stringOf(trigger, 'interval', base);
           if (interval === null || interval === '') {
             issues.error({
               field: `${base}.interval`,
@@ -220,11 +215,12 @@ export function validateOrchestratorCampaign(
     }
 
     if (Array.isArray(orch.tools)) {
-      orch.tools.forEach((tool: unknown, i: number) => {
-        if (!isString(tool) || ORCHESTRATOR_TOOLS.has(tool)) return;
+      orch.tools.forEach((raw: unknown, i: number) => {
+        const tool = issues.stringAt(raw, `orchestrator.tools[${i}]`);
+        if (tool === null || ORCHESTRATOR_TOOLS.has(tool)) return;
         const finding = {
           field: `orchestrator.tools[${i}]`,
-          message: `Unrecognised orchestrator tool name '${String(tool)}'`,
+          message: `Unrecognised orchestrator tool name '${tool}'`,
           code: 'orchestrator_tool_unknown',
         };
         if (opts.strictRegistries) {
@@ -294,12 +290,10 @@ export function validateOrchestratorCampaign(
 
     // DC-COND-2: on_children_complete (if set) must reference a real step — the
     // engine routes into it deterministically once every child is terminal.
-    if (
-      isRecord(campaign) &&
-      isString(campaign.on_children_complete) &&
-      campaign.on_children_complete !== ''
-    ) {
-      const target = campaign.on_children_complete;
+    const target = isRecord(campaign)
+      ? issues.stringOf(campaign, 'on_children_complete', 'campaign')
+      : null;
+    if (target !== null && target !== '') {
       const steps = isRecord(flow.steps) ? flow.steps : {};
       if (!(target in steps)) {
         issues.error({

@@ -34,23 +34,14 @@ export function isApplicableStepMaxDuration(raw: string): boolean {
   return NO_BOUND_SPELLINGS.has(raw) || parseGoDuration(raw) !== null;
 }
 
-/**
- * The reference's field is a Go `string`, and YAML decoding into it accepts any
- * scalar: `max_duration: 90` arrives as "90", which then fails to parse. A
- * parsed YAML number is therefore read back as its decimal text.
- */
-function declaredMaxDuration(value: unknown): string | null {
-  if (typeof value === 'string') return value;
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  return null;
-}
-
 export function validateStepMaxDuration(flow: Flow, issues: Issues): void {
   const steps = flow.steps;
   if (!isRecord(steps)) return;
   for (const [stepID, rawStep] of Object.entries(steps)) {
     if (!isRecord(rawStep)) continue;
-    const declared = declaredMaxDuration(rawStep[FIELD_MAX_DURATION]);
+    // A Go `string`, filled from any scalar by its source text: `max_duration:
+    // 90` arrives as "90", which then fails to parse.
+    const declared = issues.stringOf(rawStep, FIELD_MAX_DURATION, `steps.${stepID}`);
     if (declared === null || declared === '') continue;
     const field = `steps.${stepID}.${FIELD_MAX_DURATION}`;
     if (!isApplicableStepMaxDuration(declared)) {

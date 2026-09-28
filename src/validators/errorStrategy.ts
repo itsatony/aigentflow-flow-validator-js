@@ -7,15 +7,7 @@
 
 import type { ErrorStrategyDefinition, Flow } from '../types.js';
 import { ERROR_STRATEGY_ACTIONS, RETRY_ON_CATEGORIES } from '../spec/index.js';
-import {
-  Issues,
-  isNumber,
-  isRecord,
-  isString,
-  isValidGoDuration,
-  scalarTextAt,
-  type ScalarSources,
-} from './util.js';
+import { Issues, isNumber, isRecord, isValidGoDuration } from './util.js';
 
 const ACTION_GOTO = 'goto';
 
@@ -25,15 +17,11 @@ function validateOne(
   field: string,
   stepID: string | undefined,
   issues: Issues,
-  sources: ScalarSources | undefined,
 ): void {
-  const action = strategy.action;
-  if (
-    action !== undefined &&
-    action !== '' &&
-    isString(action) &&
-    !ERROR_STRATEGY_ACTIONS.has(action)
-  ) {
+  // Every field below is a Go `string`: `action: 1` is the invalid action "1",
+  // `goto_step: 2` names the step "2".
+  const action = issues.stringOf(strategy, 'action', field);
+  if (action !== null && action !== '' && !ERROR_STRATEGY_ACTIONS.has(action)) {
     issues.error({
       field: `${field}.action`,
       message: `Invalid error_strategy action '${action}'`,
@@ -43,9 +31,10 @@ function validateOne(
     });
   }
 
+  const gotoStep = issues.stringOf(strategy, 'goto_step', field);
   if (action === ACTION_GOTO) {
-    const goto = strategy.goto_step;
-    if (goto === undefined || goto === '' || !isString(goto)) {
+    const goto = gotoStep;
+    if (goto === null || goto === '') {
       issues.error({
         field: `${field}.goto_step`,
         message: "error_strategy action 'goto' requires a 'goto_step'",
@@ -75,12 +64,11 @@ function validateOne(
   // WARNING, not error, matching the reference: it is consulted at the RUN door
   // over flows that are already stored, and the declaration is INERT rather than
   // fatal — the run does not die, it takes a different path.
-  if (action !== ACTION_GOTO && isString(strategy.goto_step) && strategy.goto_step !== '') {
-    const shown =
-      action === undefined || action === '' ? '(absent, defaults to fail)' : String(action);
+  if (action !== ACTION_GOTO && gotoStep !== null && gotoStep !== '') {
+    const shown = action === null || action === '' ? '(absent, defaults to fail)' : action;
     issues.warn({
       field: `${field}.goto_step`,
-      message: `goto_step '${strategy.goto_step}' on ${stepID ? `step '${stepID}'` : 'the flow-level error_strategy'} can never be taken: the engine reads goto_step only when action is "goto", and this action is '${shown}'`,
+      message: `goto_step '${gotoStep}' on ${stepID ? `step '${stepID}'` : 'the flow-level error_strategy'} can never be taken: the engine reads goto_step only when action is "goto", and this action is '${shown}'`,
       code: 'unreachable_error_goto',
       ...(stepID ? { stepId: stepID } : {}),
       suggestion:
@@ -90,7 +78,7 @@ function validateOne(
 
   // A Go `string` field, filled from ANY scalar by its source text: `max_delay:
   // 100` is "100" (no unit) and refused, as is `0.0`; `0` saves.
-  const maxDelay = scalarTextAt(strategy.max_delay, `${field}.max_delay`, sources);
+  const maxDelay = issues.stringOf(strategy, 'max_delay', field);
   if (maxDelay !== null && maxDelay !== '' && !isValidGoDuration(maxDelay)) {
     issues.error({
       field: `${field}.max_delay`,
@@ -100,14 +88,11 @@ function validateOne(
     });
   }
 
-  if (
-    isString(strategy.retry_delay) &&
-    strategy.retry_delay !== '' &&
-    !isValidGoDuration(strategy.retry_delay)
-  ) {
+  const retryDelay = issues.stringOf(strategy, 'retry_delay', field);
+  if (retryDelay !== null && retryDelay !== '' && !isValidGoDuration(retryDelay)) {
     issues.warn({
       field: `${field}.retry_delay`,
-      message: `retry_delay '${strategy.retry_delay}' is not a valid Go duration`,
+      message: `retry_delay '${retryDelay}' is not a valid Go duration`,
       code: 'invalid_duration',
       ...(stepID ? { stepId: stepID } : {}),
     });
@@ -125,11 +110,12 @@ function validateOne(
   }
 
   if (Array.isArray(strategy.retry_on)) {
-    strategy.retry_on.forEach((cat: unknown, i: number) => {
-      if (!isString(cat) || !RETRY_ON_CATEGORIES.has(cat)) {
+    strategy.retry_on.forEach((raw: unknown, i: number) => {
+      const cat = issues.stringAt(raw, `${field}.retry_on[${i}]`);
+      if (cat === null || !RETRY_ON_CATEGORIES.has(cat)) {
         issues.error({
           field: `${field}.retry_on[${i}]`,
-          message: `Invalid retry_on category '${String(cat)}'`,
+          message: `Invalid retry_on category '${cat ?? String(raw)}'`,
           code: 'invalid_retry_on_category',
           ...(stepID ? { stepId: stepID } : {}),
           suggestion: `Use one of: ${[...RETRY_ON_CATEGORIES].join(', ')}`,
@@ -139,7 +125,7 @@ function validateOne(
   }
 }
 
-export function validateErrorStrategies(flow: Flow, issues: Issues, sources?: ScalarSources): void {
+export function validateErrorStrategies(flow: Flow, issues: Issues): void {
   const steps = isRecord(flow.steps) ? flow.steps : {};
 
   if (isRecord(flow.error_strategy)) {
@@ -149,7 +135,6 @@ export function validateErrorStrategies(flow: Flow, issues: Issues, sources?: Sc
       'error_strategy',
       undefined,
       issues,
-      sources,
     );
   }
 
@@ -162,7 +147,6 @@ export function validateErrorStrategies(flow: Flow, issues: Issues, sources?: Sc
         `steps.${stepID}.error_strategy`,
         stepID,
         issues,
-        sources,
       );
     }
     validateLoopBodyErrorGoto(step, stepID, issues);
@@ -197,10 +181,12 @@ function validateLoopBodyErrorGoto(
     if (!isRecord(sub)) return;
     const strategy = sub.error_strategy;
     if (!isRecord(strategy)) return;
-    const goto = (strategy as ErrorStrategyDefinition).goto_step;
-    if (!isString(goto) || goto === '') return;
+    const subPath = `steps.${stepID}.loop.steps[${i}]`;
+    const goto = issues.stringOf(strategy, 'goto_step', `${subPath}.error_strategy`);
+    if (goto === null || goto === '') return;
 
-    const subID = isString(sub.id) && sub.id !== '' ? sub.id : `[${i}]`;
+    const id = issues.stringOf(sub, 'id', subPath);
+    const subID = id !== null && id !== '' ? id : `[${i}]`;
     issues.warn({
       field: `steps.${stepID}.loop.steps.${subID}.error_strategy.goto_step`,
       message: `goto_step '${goto}' on loop step '${stepID}'s sub-step '${subID}' error_strategy is never read: a loop body honours only action "continue" (skip to the next sub-step) and fail. Any other action, including "goto", aborts the whole loop step — which then routes through the LOOP step's own error_strategy.`,

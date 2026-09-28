@@ -16,7 +16,7 @@
 
 import type { Flow, NextLogicDefinition, QualityGateDefinition, StepDefinition } from '../types.js';
 import { QUALITY_GATE } from '../spec/index.js';
-import { Issues, isNumber, isRecord, isString } from './util.js';
+import { Issues, isNumber, isRecord } from './util.js';
 
 const ON_FAIL_GOTO = 'goto';
 
@@ -28,16 +28,17 @@ function isCompositeStep(step: StepDefinition): boolean {
 }
 
 /** Step IDs that appear in some OTHER step's `next.parallel.steps` fan-out. */
-function parallelMembers(steps: Record<string, unknown>): Map<string, string> {
+function parallelMembers(steps: Record<string, unknown>, issues: Issues): Map<string, string> {
   const members = new Map<string, string>();
   for (const [ownerID, rawStep] of Object.entries(steps)) {
     if (!isRecord(rawStep)) continue;
     const next = (rawStep as StepDefinition).next as NextLogicDefinition | undefined;
     const list = isRecord(next) && isRecord(next.parallel) ? next.parallel.steps : undefined;
     if (!Array.isArray(list)) continue;
-    for (const memberID of list) {
-      if (isString(memberID) && !members.has(memberID)) members.set(memberID, ownerID);
-    }
+    list.forEach((raw: unknown, i: number) => {
+      const memberID = issues.stringAt(raw, `steps.${ownerID}.next.parallel.steps[${i}]`);
+      if (memberID !== null && !members.has(memberID)) members.set(memberID, ownerID);
+    });
   }
   return members;
 }
@@ -53,7 +54,10 @@ function validateGate(
   const field = `steps.${stepID}.quality_gate`;
 
   // rubric — required, non-empty.
-  if (!isString(gate.rubric) || gate.rubric.trim() === '') {
+  // Go `string` fields throughout: `rubric: 5` is a rubric, `on_fail: 1` is the
+  // invalid action "1", `goto_step: 2` names the step "2".
+  const rubric = issues.stringOf(gate, 'rubric', field);
+  if (rubric === null || rubric.trim() === '') {
     issues.error({
       field: `${field}.rubric`,
       message: `quality_gate on step '${stepID}' requires a non-empty 'rubric'`,
@@ -79,8 +83,8 @@ function validateGate(
   }
 
   // on_fail — optional; when set must be a supported action.
-  const onFail = gate.on_fail;
-  if (isString(onFail) && onFail !== '') {
+  const onFail = issues.stringOf(gate, 'on_fail', field);
+  if (onFail !== null && onFail !== '') {
     if (QUALITY_GATE.onFailRejected.has(onFail)) {
       // Present in the Go enum but not yet supported (e.g. `human`).
       issues.error({
@@ -102,8 +106,8 @@ function validateGate(
 
   // goto_step — required + must resolve when on_fail=goto, and not be a self-goto.
   if (onFail === ON_FAIL_GOTO) {
-    const goto = gate.goto_step;
-    if (!isString(goto) || goto === '') {
+    const goto = issues.stringOf(gate, 'goto_step', field);
+    if (goto === null || goto === '') {
       issues.error({
         field: `${field}.goto_step`,
         message: `quality_gate on step '${stepID}' uses on_fail=goto but goto_step is empty`,
@@ -150,7 +154,7 @@ function validateGate(
 export function validateQualityGates(flow: Flow, issues: Issues): void {
   const steps = flow.steps;
   if (!isRecord(steps)) return;
-  const members = parallelMembers(steps);
+  const members = parallelMembers(steps, issues);
 
   for (const [stepID, rawStep] of Object.entries(steps)) {
     if (!isRecord(rawStep)) continue;

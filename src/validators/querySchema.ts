@@ -8,12 +8,18 @@
 
 import type { Flow, PropertyDefinition } from '../types.js';
 import { DATA_TYPES } from '../spec/index.js';
-import { Issues, isInteger, isRecord, isString } from './util.js';
+import { Issues, isInteger, isRecord } from './util.js';
 
 const TYPE_OBJECT = 'object';
 const TYPE_ARRAY = 'array';
 
-function validateArrayItems(items: unknown, path: string, issues: Issues): void {
+// Every `type` is a Go `string`, so `type: 1` is the type "1" — unknown, not
+// missing. Source spellings are keyed by DOCUMENT path, which the finding paths
+// below do not follow (they omit the `properties` segment and write `[item]`),
+// so each function also takes `src`, the document path of the definition that
+// owns the `items:` / `properties:` it reads.
+
+function validateArrayItems(items: unknown, path: string, src: string, issues: Issues): void {
   if (items === undefined || items === null || !isRecord(items)) {
     issues.error({
       field: path,
@@ -23,7 +29,9 @@ function validateArrayItems(items: unknown, path: string, issues: Issues): void 
     return;
   }
   const def = items as PropertyDefinition;
-  if (!isString(def.type) || def.type === '') {
+  const srcItems = `${src}.items`;
+  const type = issues.stringOf(def, 'type', srcItems);
+  if (type === null || type === '') {
     issues.error({
       field: `${path}.items.type`,
       message: `Array items for '${path}' must define a 'type'`,
@@ -31,24 +39,29 @@ function validateArrayItems(items: unknown, path: string, issues: Issues): void 
     });
     return;
   }
-  if (!DATA_TYPES.has(def.type)) {
+  if (!DATA_TYPES.has(type)) {
     issues.error({
       field: `${path}.items.type`,
-      message: `Array items for '${path}' have invalid type '${def.type}'`,
+      message: `Array items for '${path}' have invalid type '${type}'`,
       code: 'array_items_type_invalid',
       suggestion: `Use one of: ${[...DATA_TYPES].join(', ')}`,
     });
     return;
   }
-  if (def.type === TYPE_OBJECT) {
-    validateProperties(def.properties, `${path}[item]`, issues);
+  if (type === TYPE_OBJECT) {
+    validateProperties(def.properties, `${path}[item]`, srcItems, issues);
   }
-  if (def.type === TYPE_ARRAY) {
-    validateArrayItems(def.items, `${path}[item]`, issues);
+  if (type === TYPE_ARRAY) {
+    validateArrayItems(def.items, `${path}[item]`, srcItems, issues);
   }
 }
 
-function validateProperties(properties: unknown, parentPath: string, issues: Issues): void {
+function validateProperties(
+  properties: unknown,
+  parentPath: string,
+  src: string,
+  issues: Issues,
+): void {
   if (properties === undefined || properties === null) return;
   if (!isRecord(properties)) {
     issues.error({
@@ -69,7 +82,9 @@ function validateProperties(properties: unknown, parentPath: string, issues: Iss
       continue;
     }
     const def = rawDef as PropertyDefinition;
-    if (!isString(def.type) || def.type === '') {
+    const srcDef = `${src}.properties.${propName}`;
+    const type = issues.stringOf(def, 'type', srcDef);
+    if (type === null || type === '') {
       issues.error({
         field: `${path}.type`,
         message: `Property '${propName}' in '${parentPath}' is missing a 'type'`,
@@ -77,18 +92,18 @@ function validateProperties(properties: unknown, parentPath: string, issues: Iss
       });
       continue;
     }
-    if (!DATA_TYPES.has(def.type)) {
+    if (!DATA_TYPES.has(type)) {
       issues.warn({
         field: `${path}.type`,
-        message: `Property '${propName}' has unrecognised type '${def.type}'`,
+        message: `Property '${propName}' has unrecognised type '${type}'`,
         code: 'unknown_data_type',
       });
     }
-    if (def.type === TYPE_OBJECT) {
-      validateProperties(def.properties, path, issues);
+    if (type === TYPE_OBJECT) {
+      validateProperties(def.properties, path, srcDef, issues);
     }
-    if (def.type === TYPE_ARRAY) {
-      validateArrayItems(def.items, path, issues);
+    if (type === TYPE_ARRAY) {
+      validateArrayItems(def.items, path, srcDef, issues);
     }
   }
 }
@@ -137,7 +152,8 @@ export function validateQuerySchema(flow: Flow, issues: Issues): void {
       continue;
     }
     const def = rawDef as PropertyDefinition;
-    if (!isString(def.type) || def.type === '') {
+    const type = issues.stringOf(def, 'type', path);
+    if (type === null || type === '') {
       issues.error({
         field: `${path}.type`,
         message: `Query parameter '${paramName}' is missing a 'type'`,
@@ -145,18 +161,18 @@ export function validateQuerySchema(flow: Flow, issues: Issues): void {
       });
       continue;
     }
-    if (!DATA_TYPES.has(def.type)) {
+    if (!DATA_TYPES.has(type)) {
       issues.warn({
         field: `${path}.type`,
-        message: `Query parameter '${paramName}' has unrecognised type '${def.type}'`,
+        message: `Query parameter '${paramName}' has unrecognised type '${type}'`,
         code: 'unknown_data_type',
       });
     }
-    if (def.type === TYPE_OBJECT) {
-      validateProperties(def.properties, path, issues);
+    if (type === TYPE_OBJECT) {
+      validateProperties(def.properties, path, path, issues);
     }
-    if (def.type === TYPE_ARRAY) {
-      validateArrayItems(def.items, path, issues);
+    if (type === TYPE_ARRAY) {
+      validateArrayItems(def.items, path, path, issues);
       validateArrayConstraints(def, path, issues);
     }
   }

@@ -12,15 +12,7 @@ import type {
 } from '../types.js';
 import type { Flow } from '../types.js';
 import { FOR_EACH_RESOLUTIONS, LOOP_MAX_ITERATIONS_LIMIT } from '../spec/index.js';
-import {
-  Issues,
-  isInteger,
-  isRecord,
-  isString,
-  parseGoDuration,
-  scalarTextAt,
-  type ScalarSources,
-} from './util.js';
+import { Issues, isInteger, isRecord, parseGoDuration } from './util.js';
 
 // Throttle ceilings (Go: FOR_EACH_MAX_THROTTLE_DELAY = 5m, FOR_EACH_MAX_BATCH_DELAY = 30m), in nanoseconds.
 const MAX_THROTTLE_DELAY_NS = 5 * 60 * 1e9;
@@ -84,7 +76,7 @@ function validateLoopSubStepNext(
   const next = sub.next;
   if (next === undefined || next === null) return;
   const path = `${base}.steps[${index}].next`;
-  const subStepID = isString(sub.id) ? sub.id : `[${index}]`;
+  const subStepID = issues.stringOf(sub, 'id', `${base}.steps[${index}]`) ?? `[${index}]`;
   if (!isRecord(next)) {
     issues.error({
       field: path,
@@ -123,7 +115,10 @@ function validateLoopSubStepNext(
 
   for (const target of targets) {
     if (target.value === undefined || target.value === null) continue;
-    if (!isString(target.value)) {
+    // A Go `string`: `default: 4` names the sub-step "4". Only a mapping or a
+    // list fails to decode.
+    const value = issues.stringAt(target.value, target.field);
+    if (value === null) {
       issues.error({
         field: target.field,
         message: `loop sub-step '${subStepID}' next target must be a string`,
@@ -133,11 +128,11 @@ function validateLoopSubStepNext(
       continue;
     }
     // Empty is the documented sequential advance.
-    if (target.value === '') continue;
-    if (LOOP_SUBSTEP_NEXT_SENTINELS.has(target.value)) {
+    if (value === '') continue;
+    if (LOOP_SUBSTEP_NEXT_SENTINELS.has(value)) {
       issues.error({
         field: target.field,
-        message: `loop sub-step '${subStepID}' routes next to the reserved marker '${target.value}', which has no meaning inside a loop body`,
+        message: `loop sub-step '${subStepID}' routes next to the reserved marker '${value}', which has no meaning inside a loop body`,
         code: 'loop_substep_next_sentinel',
         stepId: stepID,
         suggestion:
@@ -145,10 +140,10 @@ function validateLoopSubStepNext(
       });
       continue;
     }
-    if (!subStepIDs.has(target.value)) {
+    if (!subStepIDs.has(value)) {
       issues.error({
         field: target.field,
-        message: `loop sub-step '${subStepID}' routes next to '${target.value}', which is not a sub-step of that loop`,
+        message: `loop sub-step '${subStepID}' routes next to '${value}', which is not a sub-step of that loop`,
         code: 'loop_substep_next_target_not_found',
         stepId: stepID,
         suggestion:
@@ -165,13 +160,12 @@ function validateThrottle(
   field: string,
   stepID: string,
   issues: Issues,
-  sources: ScalarSources | undefined,
 ): void {
   // Both delays are Go `string` fields, which yaml.v3 fills from ANY scalar by
   // its source text: `delay: 100` is "100" (no unit, refused), `delay: 0` is
   // "0" (saves) and `delay: 0.0` is "0.0" (refused). A number used to be
   // skipped here, which accepted all three.
-  const delay = scalarTextAt(throttle.delay, `${field}.delay`, sources);
+  const delay = issues.stringOf(throttle, 'delay', field);
   if (delay !== null && delay !== '') {
     const ns = parseGoDuration(delay);
     if (ns === null) {
@@ -192,7 +186,7 @@ function validateThrottle(
   }
 
   const batchSize = throttle.batch_size;
-  const batchDelay = scalarTextAt(throttle.batch_delay, `${field}.batch_delay`, sources);
+  const batchDelay = issues.stringOf(throttle, 'batch_delay', field);
   const hasBatchDelay = batchDelay !== null && batchDelay !== '';
   if (batchSize !== undefined && isInteger(batchSize) && batchSize < 0) {
     issues.error({
@@ -230,16 +224,13 @@ function validateThrottle(
   }
 }
 
-function validateForEach(
-  step: Record<string, unknown>,
-  stepID: string,
-  issues: Issues,
-  sources: ScalarSources | undefined,
-): void {
+function validateForEach(step: Record<string, unknown>, stepID: string, issues: Issues): void {
   const fe = step.for_each as ForEachDefinition;
   const base = `steps.${stepID}.for_each`;
 
-  if (!isString(fe.items) || fe.items === '') {
+  // Go `string` fields: `items: 5` is present, `resolution: 1` is the invalid
+  // resolution "1".
+  if (!issues.nonEmptyStringOf(fe, 'items', base)) {
     issues.error({
       field: `${base}.items`,
       message: 'for_each requires a non-empty items expression',
@@ -267,10 +258,11 @@ function validateForEach(
     });
   }
 
-  if (isString(fe.resolution) && fe.resolution !== '' && !FOR_EACH_RESOLUTIONS.has(fe.resolution)) {
+  const resolution = issues.stringOf(fe, 'resolution', base);
+  if (resolution !== null && resolution !== '' && !FOR_EACH_RESOLUTIONS.has(resolution)) {
     issues.error({
       field: `${base}.resolution`,
-      message: `Invalid for_each resolution '${fe.resolution}'`,
+      message: `Invalid for_each resolution '${resolution}'`,
       code: 'for_each_invalid_resolution',
       stepId: stepID,
       suggestion: `Use one of: ${[...FOR_EACH_RESOLUTIONS].join(', ')}`,
@@ -278,13 +270,7 @@ function validateForEach(
   }
 
   if (isRecord(fe.throttle)) {
-    validateThrottle(
-      fe.throttle as ThrottleDefinition,
-      `${base}.throttle`,
-      stepID,
-      issues,
-      sources,
-    );
+    validateThrottle(fe.throttle as ThrottleDefinition, `${base}.throttle`, stepID, issues);
   }
 }
 
@@ -292,7 +278,7 @@ function validateLoop(step: Record<string, unknown>, stepID: string, issues: Iss
   const loop = step.loop as LoopDefinition;
   const base = `steps.${stepID}.loop`;
 
-  if (!isString(loop.while) || loop.while === '') {
+  if (!issues.nonEmptyStringOf(loop, 'while', base)) {
     issues.error({
       field: `${base}.while`,
       message: 'loop requires a non-empty while condition',
@@ -339,8 +325,9 @@ function validateLoop(step: Record<string, unknown>, stepID: string, issues: Iss
         });
         return;
       }
-      const id = sub.id;
-      if (!isString(id) || id === '') {
+      // A Go `string`: `id: 3` is the sub-step "3".
+      const id = issues.stringOf(sub, 'id', subPath);
+      if (id === null || id === '') {
         issues.error({
           field: `${subPath}.id`,
           message: `loop sub-step at index ${i} requires an 'id'`,
@@ -379,7 +366,7 @@ function validateLoop(step: Record<string, unknown>, stepID: string, issues: Iss
           });
         }
       }
-      if (!isString(sub.executor) || sub.executor === '') {
+      if (!issues.nonEmptyStringOf(sub, 'executor', subPath)) {
         issues.error({
           field: `${subPath}.executor`,
           message: `loop sub-step at index ${i} requires an 'executor'`,
@@ -406,7 +393,7 @@ function validateLoop(step: Record<string, unknown>, stepID: string, issues: Iss
     });
   }
 
-  if (isString(step.executor) && step.executor !== '') {
+  if (issues.nonEmptyStringOf(step, 'executor', `steps.${stepID}`)) {
     issues.error({
       field: `steps.${stepID}.executor`,
       message: 'A loop step must not define its own executor (it defines sub-steps)',
@@ -416,18 +403,14 @@ function validateLoop(step: Record<string, unknown>, stepID: string, issues: Iss
   }
 }
 
-export function validateLoopForEachThrottle(
-  flow: Flow,
-  issues: Issues,
-  sources?: ScalarSources,
-): void {
+export function validateLoopForEachThrottle(flow: Flow, issues: Issues): void {
   const steps = flow.steps;
   if (!isRecord(steps)) return;
 
   for (const [stepID, step] of Object.entries(steps)) {
     if (!isRecord(step)) continue;
     if (step.for_each !== undefined && step.for_each !== null && isRecord(step.for_each)) {
-      validateForEach(step, stepID, issues, sources);
+      validateForEach(step, stepID, issues);
     }
     if (step.loop !== undefined && step.loop !== null && isRecord(step.loop)) {
       validateLoop(step, stepID, issues);

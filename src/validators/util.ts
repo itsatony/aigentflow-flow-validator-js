@@ -4,10 +4,49 @@
 
 import type { ValidationIssue } from '../types.js';
 
-/** Accumulates errors and warnings during a validation pass. */
+/**
+ * Accumulates errors and warnings during a validation pass, and carries the
+ * pass's scalar source spellings so every rule reads a Go `string` field the
+ * same way ({@link Issues.stringAt}).
+ */
 export class Issues {
   readonly errors: ValidationIssue[] = [];
   readonly warnings: ValidationIssue[] = [];
+
+  /**
+   * @param sources source spellings of number/boolean scalars by field path,
+   *   present when the document was parsed from YAML text (see parse.ts).
+   */
+  constructor(readonly sources?: ScalarSources) {}
+
+  /**
+   * THE reader for every value the reference decodes into a Go `string` field
+   * — a step reference (`next.default: 2` is the step "2"), an enum
+   * (`action: 1` is the invalid action "1", not an absent one), a name, a
+   * duration. yaml.v3 fills such a field from ANY scalar by its source text, so
+   * a number or boolean is returned as that text. null for an absent value, a
+   * YAML null, a mapping or a list — the only things that are "not a string".
+   *
+   * Reading such a value with `isString` made a number either invisible (an
+   * existence check skipped: looser than the reference) or absent (a present
+   * step reported missing: stricter).
+   */
+  stringAt(v: unknown, path: string): string | null {
+    if (v === null || v === undefined) return null;
+    return scalarTextAt(v, path, this.sources);
+  }
+
+  /** {@link stringAt} for `m[key]`, where `parentPath` is `m`'s own field path. */
+  stringOf(m: object, key: string, parentPath: string): string | null {
+    const v = (m as Record<string, unknown>)[key];
+    return this.stringAt(v, parentPath === '' ? key : `${parentPath}.${key}`);
+  }
+
+  /** A present, non-empty Go `string` field (`name: 123` is present). */
+  nonEmptyStringOf(m: object, key: string, parentPath: string): boolean {
+    const s = this.stringOf(m, key, parentPath);
+    return s !== null && s !== '';
+  }
 
   error(issue: Omit<ValidationIssue, 'severity'>): void {
     this.errors.push({ ...issue, severity: 'error' });

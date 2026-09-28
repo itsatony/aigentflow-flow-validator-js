@@ -10,7 +10,7 @@
 
 import type { Flow, ResponseExpectationField } from '../types.js';
 import { DATA_TYPES } from '../spec/index.js';
-import { Issues, isRecord, isString } from './util.js';
+import { Issues, isRecord } from './util.js';
 
 const TYPE_ARRAY = 'array';
 const ASYNC_EXECUTOR_PREFIX = 'async://';
@@ -48,9 +48,10 @@ function warnIfUnread(
   issues: Issues,
 ): void {
   if (Object.keys(re).length === 0) return;
-  const evaluation = step.response_evaluation;
-  if (evaluation !== undefined && evaluation !== null && evaluation !== '') return;
-  if (isString(step.executor) && step.executor.startsWith(ASYNC_EXECUTOR_PREFIX)) return;
+  const evaluation = issues.stringOf(step, 'response_evaluation', `steps.${stepID}`);
+  if (evaluation !== null && evaluation !== '') return;
+  const executor = issues.stringOf(step, 'executor', `steps.${stepID}`);
+  if (executor !== null && executor.startsWith(ASYNC_EXECUTOR_PREFIX)) return;
   issues.warn({
     field: `steps.${stepID}.response_expectation`,
     message: `response_expectation on step ${goQuote(stepID)} is never checked: the engine reads it only when response_evaluation is set, and this step sets none, so required, type and fallback do nothing. Add response_evaluation: "raw-text" to check these fields against the executor's response unchanged, or remove response_expectation.`,
@@ -92,15 +93,17 @@ export function validateResponseExpectations(flow: Flow, issues: Issues): void {
       }
       const field = rawField as ResponseExpectationField;
 
-      if (!isString(field.type) || !DATA_TYPES.has(field.type)) {
+      // A Go `string`: `type: 1` is the invalid type "1".
+      const type = issues.stringOf(field, 'type', base);
+      if (type === null || !DATA_TYPES.has(type)) {
         issues.error({
           field: `${base}.type`,
-          message: `Invalid data type: ${field.type ?? '(none)'}`,
+          message: `Invalid data type: ${type ?? String(field.type ?? '(none)')}`,
           code: 'invalid_data_type',
           stepId: stepID,
           suggestion: `Use one of: ${[...DATA_TYPES].join(', ')}`,
         });
-      } else if (field.type === TYPE_ARRAY && (field.items === undefined || field.items === null)) {
+      } else if (type === TYPE_ARRAY && (field.items === undefined || field.items === null)) {
         issues.error({
           field: `${base}.items`,
           message: `Array field '${fieldName}' in step '${stepID}' must define 'items'`,

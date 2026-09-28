@@ -60,14 +60,15 @@ export function validateFlowObject(flow: unknown, opts: ValidateOptions = {}): V
 }
 
 // `sources` carries the source spelling of number/boolean scalars, which only a
-// YAML text has. Without it (validateFlowObject) a number is judged by its
-// JavaScript rendering — see PARITY.md divergence #13.
+// YAML text has; every rule reads a Go `string` field through
+// `issues.stringAt`, which consults it. Without it (validateFlowObject) a
+// number is judged by its JavaScript rendering — PARITY.md divergence #13.
 function validateParsed(
   flow: unknown,
   opts: ValidateOptions,
   sources: ScalarSources | undefined,
 ): ValidationResult {
-  const issues = new Issues();
+  const issues = new Issues(sources);
 
   if (flow === null || typeof flow !== 'object' || Array.isArray(flow)) {
     issues.error({
@@ -97,19 +98,19 @@ function validateParsed(
   validateExecutors(f, issues);
   validateQuerySchema(f, issues);
   validateResponseExpectations(f, issues);
-  validateErrorStrategies(f, issues, sources);
+  validateErrorStrategies(f, issues);
   validateConnectivity(f, issues);
   validateNextLogic(f, issues);
   validateExpressionFunctions(f, issues);
-  validateLoopForEachThrottle(f, issues, sources);
-  validateOrchestratorCampaign(f, issues, opts, sources);
+  validateLoopForEachThrottle(f, issues);
+  validateOrchestratorCampaign(f, issues, opts);
   validateCredentialBindings(f, issues);
   validateInputSchema(f, issues);
   validateOutputSchemas(f, issues);
   validateQualityGates(f, issues);
   validateProcessingOperations(f, issues);
   validateStepMaxDuration(f, issues);
-  validateSaveDoorExtras(f, issues, sources);
+  validateSaveDoorExtras(f, issues);
   // Last among the structural rules: it skips a location another rule has
   // already reported with more specific advice.
   validateUnknownKeys(f, issues);
