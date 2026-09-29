@@ -242,3 +242,58 @@ export const SERVER_OWNED_QUERY_KEYS = {
   stepFieldFormat: spec.serverOwnedQueryKeys.stepFieldFormat,
   loopStepFieldFormat: spec.serverOwnedQueryKeys.loopStepFieldFormat,
 } as const;
+
+/** One row of the reference's per-protocol credential/endpoint family table. */
+export interface CredentialEndpointFamily {
+  readonly protocol: string;
+  readonly configKeys: readonly string[];
+  readonly secretParams: readonly string[];
+  readonly endpointParams: readonly string[];
+  readonly defaultEndpoints: readonly string[];
+  readonly configApiKeyParam: string;
+  readonly configBaseUrlParam: string;
+  readonly implicitServerCredential: boolean;
+  readonly expandsServerEnvReferences: boolean;
+  /** The family's server-variable set, evaluated from the reference's scope tables. */
+  readonly serverEnv: readonly string[];
+  /** A family judged like ai:// (nexus): an endpoint with no key of the flow's own. */
+  readonly storedKeyShape?: {
+    readonly ownKeyParams: readonly string[];
+    readonly ownCredentialsMapParam: string;
+    readonly provider: string;
+  };
+}
+
+/**
+ * The data of `credential_endpoint_unpaired` (AIgentFlow DC-FORGE-231 and
+ * DC-FORGE-233): the ai:// provider rule's names and sets, the per-protocol
+ * family table, the default ports, and the reference's field formats (`%s`
+ * filled in order). A new family is a change to this data only.
+ */
+export const CREDENTIAL_ENDPOINT_PAIRING = {
+  stepFieldFormat: spec.credentialEndpointPairing.stepFieldFormat,
+  loopStepFieldFormat: spec.credentialEndpointPairing.loopStepFieldFormat,
+  executorConfigBaseUrlFieldFormat: spec.credentialEndpointPairing.executorConfigBaseUrlFieldFormat,
+  executorConfigKeyFieldFormat: spec.credentialEndpointPairing.executorConfigKeyFieldFormat,
+  executorConfigExtraFieldFormat: spec.credentialEndpointPairing.executorConfigExtraFieldFormat,
+  executorConfigApiKeyField: spec.credentialEndpointPairing.executorConfigApiKeyField,
+  executorConfigBaseUrlField: spec.credentialEndpointPairing.executorConfigBaseUrlField,
+  protocolSeparator: spec.credentialEndpointPairing.protocolSeparator,
+  defaultPorts: spec.credentialEndpointPairing.defaultPorts as Readonly<Record<string, string>>,
+  ai: {
+    protocol: spec.credentialEndpointPairing.ai.protocol,
+    genericKeyParam: spec.credentialEndpointPairing.ai.genericKeyParam,
+    providerKeyParamSuffix: spec.credentialEndpointPairing.ai.providerKeyParamSuffix,
+    providerBaseUrlParamSuffix: spec.credentialEndpointPairing.ai.providerBaseUrlParamSuffix,
+    keylessProviders: spec.credentialEndpointPairing.ai.keylessProviders as readonly string[],
+    executorConfigProviders: spec.credentialEndpointPairing.ai
+      .executorConfigProviders as readonly string[],
+  },
+  familyKeySeparator: spec.credentialEndpointPairing.familyKeySeparator,
+  protocolAliases: spec.credentialEndpointPairing.protocolAliases as Readonly<
+    Record<string, string>
+  >,
+  families: spec.credentialEndpointPairing.families as Readonly<
+    Record<string, CredentialEndpointFamily>
+  >,
+} as const;
