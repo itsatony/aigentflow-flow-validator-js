@@ -173,6 +173,7 @@ interface ValidationIssue {
 - **Orchestrator / campaign** — exons presence, trigger types, timer intervals, tool names; campaign requires an orchestrator and at least one child flow, each naming a `flow_id` or `flow_name`; `max_credits_per_child` >= 0.
 - **Orchestrator `.exons` frontmatter** — the document must open with a closed `---` frontmatter spec (`orchestrator_exons_parse_failed`) that sets `execution.provider` (`orchestrator_exons_no_provider`) and declares no `requirements.resources` (`exons_resources_unhonoured`); a tool that `orchestrator.tools` and the definition's `tools.allow` disagree about is never offered (`orchestrator_tool_withheld`, warning). The document body is not parsed: that needs the `.exons` engine (see PARITY.md).
 - **`executor_config` environment references** — a `${NAME}` value may name only the variables of the provider or protocol it is written under (`executor_config_env_scope`).
+- **Server-owned query keys** — a step's or loop sub-step's `query:` may not declare `aiv_api_key`, `aiv_base_url` or `aiv_delegation`, which only the server sets (`server_owned_query_key`).
 - **Credential bindings** — `stored/{provider}/{name}` format, `inject_as`, `credential`/`credentials` mutual exclusion.
 - **Expression functions** — exactly one of `package`/`function`.
 - **`input_schema`** — version, field-name pattern, type enum, per-type constraints, `pattern` compilation, `visible_when` predicate + reference resolution, duplicate-name detection, file-ordering lint.

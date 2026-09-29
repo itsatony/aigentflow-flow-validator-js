@@ -701,6 +701,46 @@ const CASES: Case[] = [
     expectWarningCodes: ['potential_infinite_loop'],
     forbidWarningCodes: ['unreachable_step'],
   },
+  // 0.15.1 (AIgentFlow CFX-05): a step or loop sub-step query may not declare
+  // a server-owned parameter. One fixture per key per surface, so dropping a key
+  // from the spec set, or either surface from the scan, goes red here.
+  {
+    file: 'invalid-server-owned-query-key-api-key.yaml',
+    valid: false,
+    expectErrorCodes: ['server_owned_query_key'],
+  },
+  {
+    file: 'invalid-server-owned-query-key-base-url.yaml',
+    valid: false,
+    expectErrorCodes: ['server_owned_query_key'],
+  },
+  {
+    file: 'invalid-server-owned-query-key-delegation.yaml',
+    valid: false,
+    expectErrorCodes: ['server_owned_query_key'],
+  },
+  {
+    file: 'invalid-server-owned-query-key-loop-api-key.yaml',
+    valid: false,
+    expectErrorCodes: ['server_owned_query_key'],
+  },
+  {
+    file: 'invalid-server-owned-query-key-loop-base-url.yaml',
+    valid: false,
+    expectErrorCodes: ['server_owned_query_key'],
+  },
+  {
+    file: 'invalid-server-owned-query-key-loop-delegation.yaml',
+    valid: false,
+    expectErrorCodes: ['server_owned_query_key'],
+  },
+  {
+    // The counter-fixture: similar names, another case, a nested key, the name
+    // as a value, and a flow input parameter of that name all save.
+    file: 'valid-server-owned-query-key-lookalikes.yaml',
+    valid: true,
+    forbidErrorCodes: ['server_owned_query_key'],
+  },
 ];
 
 describe('conformance fixtures', () => {

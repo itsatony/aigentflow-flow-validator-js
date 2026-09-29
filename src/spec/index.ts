@@ -230,3 +230,15 @@ export const EXECUTOR_CONFIG_ENV_SCOPES = {
   extraKey: spec.executorConfigEnvScopes.extraKey,
   scopes: spec.executorConfigEnvScopes.scopes as Readonly<Record<string, readonly string[]>>,
 } as const;
+
+/**
+ * Executor parameters only the server's credential resolver may set (AIgentFlow
+ * CFX-05, `server_owned_query_key`). A step's or loop sub-step's `query:` that
+ * declares one is refused. `keys` is matched exactly and case-sensitively; the
+ * two formats are the reference's field paths, `%s` filled in order.
+ */
+export const SERVER_OWNED_QUERY_KEYS = {
+  keys: spec.serverOwnedQueryKeys.keys as readonly string[],
+  stepFieldFormat: spec.serverOwnedQueryKeys.stepFieldFormat,
+  loopStepFieldFormat: spec.serverOwnedQueryKeys.loopStepFieldFormat,
+} as const;
