@@ -4,7 +4,20 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.788.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), plus `server_owned_query_key` (package 0.15.1, below) from the AIgentFlow release after v2.790.0, and `credential_endpoint_unpaired` (package 0.15.2, below) from AIgentFlow v2.793.0 and the release after it.
+**Tracks AIgentFlow flow schema: `v2.802.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), plus `server_owned_query_key` (package 0.15.1, below) from the AIgentFlow release after v2.790.0, and `credential_endpoint_unpaired` (package 0.15.2, below) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3, below) from AIgentFlow v2.802.0.
+
+> package 0.15.3 — **the optional top-level `display_name`** (AIgentFlow #187). The spec
+> gains `display_name: scalar` on `Flow` and `specVersion` becomes `2.802.0`.
+>
+> | Rule (reference)                                    | Code                    | Severity | Module                         |
+> | --------------------------------------------------- | ----------------------- | -------- | ------------------------------ |
+> | `validateBasicStructure`, display_name length bound | `display_name_too_long` | error    | `validators/basicStructure.ts` |
+>
+> - A free-form label of at most 80 characters, counted in **Unicode code points** (Go's
+>   `utf8.RuneCountInString`), not UTF-16 units: 80 emoji pass here although they are 160
+>   UTF-16 units. Field `display_name`; absent or empty is fine.
+> - A non-string scalar (`display_name: 123`) is read by its source text, as every other Go
+>   `string` field is; a mapping or list is not judged by this rule, as for `description`.
 
 > package 0.15.2 — **an endpoint a server-supplied credential will never be sent to**, in
 > step with the Go port (go-aigentflow-validator v0.6.2). The spec (new section
