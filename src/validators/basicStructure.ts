@@ -14,6 +14,10 @@ import { Issues, isRecord, stepNames } from './util.js';
 const RESERVED_STEP_ID_CHAR = '.';
 const RESERVED_STEP_ID_ORCHESTRATOR = 'orchestrator';
 
+// Upper bound of the optional `display_name`, counted in Unicode code points
+// (Go's utf8.RuneCountInString), never in UTF-16 units.
+const DISPLAY_NAME_MAX_LEN = 80;
+
 export function validateBasicStructure(flow: Flow, issues: Issues): void {
   if (!issues.nonEmptyStringOf(flow, 'aigentflow_version', '')) {
     issues.error({
@@ -31,6 +35,20 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
       code: 'missing_required_field',
       suggestion: 'Add a descriptive name to your flow',
     });
+  }
+
+  // Optional human-friendly label. Absent or empty is fine; only length is judged.
+  const displayName = issues.stringOf(flow, 'display_name', '');
+  if (displayName !== null) {
+    const n = [...displayName].length;
+    if (n > DISPLAY_NAME_MAX_LEN) {
+      issues.error({
+        field: 'display_name',
+        message: `display_name is ${n} characters; the limit is ${DISPLAY_NAME_MAX_LEN}`,
+        code: 'display_name_too_long',
+        suggestion: "Shorten display_name; it is a label, put prose in 'description'",
+      });
+    }
   }
 
   // A Go `string`: `start: 1` names the step "1".

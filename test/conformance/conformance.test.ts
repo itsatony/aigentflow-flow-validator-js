@@ -800,6 +800,18 @@ const CASES: Case[] = [
     valid: true,
     forbidWarningCodes: ['credential_endpoint_unpaired'],
   },
+  { file: 'valid-display-name.yaml', valid: true, forbidErrorCodes: ['display_name_too_long'] },
+  {
+    // 80 code points but 82 UTF-16 units: the limit counts code points.
+    file: 'valid-display-name-80-code-points.yaml',
+    valid: true,
+    forbidErrorCodes: ['display_name_too_long'],
+  },
+  {
+    file: 'invalid-display-name-81.yaml',
+    valid: false,
+    expectErrorCodes: ['display_name_too_long'],
+  },
 ];
 
 describe('conformance fixtures', () => {
