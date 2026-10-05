@@ -1,6 +1,6 @@
 {
   "$comment": "Vendored enum surface mirrored from the AIgentFlow Go reference implementation. Regenerate / review on every flow-YAML schema change. See PARITY.md. Values here are public protocol/type names only.",
-  "specVersion": "2.802.0",
+  "specVersion": "2.811.0",
   "inputSchemaVersion": 1,
   "executorSchemes": [
     "a2a",
@@ -1062,6 +1062,7 @@
         "pattern": "scalar",
         "required": "scalar",
         "type": "scalar",
+        "untrusted": "scalar",
         "visible_when": "VisibleWhenPredicate"
       },
       "LoopDefinition": {
@@ -1071,6 +1072,7 @@
         "while": "scalar"
       },
       "LoopStepDefinition": {
+        "allow_untrusted": "list<scalar>",
         "condition": "scalar",
         "credential": "scalar",
         "credentials": "map<StepCredentialBinding>",
@@ -1083,7 +1085,8 @@
         "post_processing": "list<any>",
         "pre_processing": "list<any>",
         "query": "map<any>",
-        "response_evaluation": "scalar"
+        "response_evaluation": "scalar",
+        "trusted_output": "scalar"
       },
       "MockBinaryAsset": {
         "filename": "scalar",
@@ -1171,6 +1174,7 @@
         "properties": "map<PropertyDefinition>",
         "required": "scalar",
         "type": "scalar",
+        "untrusted": "scalar",
         "validation": "scalar"
       },
       "StepCredentialBinding": {
@@ -1178,6 +1182,7 @@
         "source": "scalar"
       },
       "StepDefinition": {
+        "allow_untrusted": "list<scalar>",
         "condition": "scalar",
         "credential": "scalar",
         "credentials": "map<StepCredentialBinding>",
@@ -1195,7 +1200,8 @@
         "quality_gate": "QualityGateDefinition",
         "query": "map<any>",
         "response_evaluation": "scalar",
-        "response_expectation": "map<FieldExpectationDefinition>"
+        "response_expectation": "map<FieldExpectationDefinition>",
+        "trusted_output": "scalar"
       },
       "ThrottleDefinition": {
         "batch_delay": "scalar",
