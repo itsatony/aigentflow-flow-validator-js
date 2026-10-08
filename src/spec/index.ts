@@ -297,3 +297,36 @@ export const CREDENTIAL_ENDPOINT_PAIRING = {
     Record<string, CredentialEndpointFamily>
   >,
 } as const;
+
+/** One credential-shaped literal the `examples:` block refuses. */
+export interface ExampleSecretPattern {
+  readonly name: string;
+  readonly expr: string;
+  readonly flags: string;
+}
+
+/**
+ * The data of the `examples:` rules: limits, closed vocabularies, the id / tag /
+ * sha256 / media-type patterns, the reserved reference schemes, the
+ * credential-shaped-literal set and each code's severity. Every number and
+ * pattern the rules use is read from here, never typed into the module.
+ */
+export const EXAMPLES = {
+  limits: spec.examples.limits,
+  idPattern: new RegExp(spec.examples.idPattern),
+  tagPattern: new RegExp(spec.examples.tagPattern),
+  sha256Pattern: new RegExp(spec.examples.sha256Pattern),
+  mediaTypePattern: new RegExp(spec.examples.mediaTypePattern),
+  // The reference writes this pattern case-insensitively (`(?i)`); the spec
+  // carries the bare expression, so the flag is applied here.
+  signedUrlQueryKeyPattern: new RegExp(spec.examples.signedUrlQueryKeyPattern, 'i'),
+  origins: new Set<string>(spec.examples.origins),
+  sideEffects: new Set<string>(spec.examples.sideEffects),
+  statuses: new Set<string>(spec.examples.statuses),
+  reservedRefSchemes: new Set<string>(spec.examples.reservedRefSchemes),
+  secretPatterns: (spec.examples.secretPatterns as readonly ExampleSecretPattern[]).map((p) => ({
+    name: p.name,
+    re: new RegExp(p.expr, p.flags),
+  })),
+  codes: spec.examples.codes as Readonly<Record<string, 'error' | 'warning'>>,
+} as const;

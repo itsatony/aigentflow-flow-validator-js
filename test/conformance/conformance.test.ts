@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { validateFlow } from '../../src/index.js';
+import { EXAMPLES } from '../../src/spec/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(here, 'fixtures');
@@ -44,7 +45,19 @@ interface Case {
    * looser one instead: valid, with none of `expectErrorCodes`.
    */
   exonsEngineOnly?: boolean;
+  /**
+   * The reference refuses this fixture and this validator deliberately does not
+   * (a documented, looser divergence in PARITY.md). `valid` and
+   * `expectErrorCodes` state the REFERENCE's verdict; this suite asserts the
+   * looser one: valid, with none of `expectErrorCodes`.
+   */
+  looserHere?: boolean;
 }
+
+// Every warning of the `examples:` block, from the spec: the all-correct flows must raise none of them.
+const EXAMPLE_WARNING_CODES = Object.entries(EXAMPLES.codes)
+  .filter(([, severity]) => severity === 'warning')
+  .map(([code]) => code);
 
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
@@ -815,6 +828,438 @@ const CASES: Case[] = [
     valid: false,
     expectErrorCodes: ['display_name_too_long'],
   },
+  {
+    file: 'examples-invalid-examples-too-many.yaml',
+    valid: false,
+    expectErrorCodes: ['examples_too_many'],
+  },
+  {
+    file: 'examples-invalid-examples-block-too-large.yaml',
+    valid: false,
+    expectErrorCodes: ['examples_block_too_large'],
+  },
+  {
+    file: 'examples-invalid-example-id-missing.yaml',
+    valid: false,
+    expectErrorCodes: ['example_id_missing'],
+  },
+  {
+    file: 'examples-invalid-example-id-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_id_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-id-slash.yaml',
+    valid: false,
+    expectErrorCodes: ['example_id_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-id-duplicate.yaml',
+    valid: false,
+    expectErrorCodes: ['example_id_duplicate'],
+  },
+  {
+    file: 'examples-invalid-example-title-missing.yaml',
+    valid: false,
+    expectErrorCodes: ['example_title_missing'],
+  },
+  {
+    file: 'examples-invalid-example-title-too-long.yaml',
+    valid: false,
+    expectErrorCodes: ['example_title_too_long'],
+  },
+  {
+    file: 'examples-invalid-example-guidance-too-long.yaml',
+    valid: false,
+    expectErrorCodes: ['example_guidance_too_long'],
+  },
+  {
+    file: 'examples-warn-example-guidance-missing.yaml',
+    valid: true,
+    expectWarningCodes: ['example_guidance_missing'],
+  },
+  {
+    file: 'examples-invalid-example-notes-too-long.yaml',
+    valid: false,
+    expectErrorCodes: ['example_notes_too_long'],
+  },
+  {
+    file: 'examples-invalid-example-tag-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_tag_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-tag-duplicate.yaml',
+    valid: false,
+    expectErrorCodes: ['example_tag_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-tags-too-many.yaml',
+    valid: false,
+    expectErrorCodes: ['example_tag_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-weight-range.yaml',
+    valid: false,
+    expectErrorCodes: ['example_weight_range'],
+  },
+  {
+    file: 'examples-invalid-example-weight-too-big.yaml',
+    valid: false,
+    expectErrorCodes: ['example_weight_range'],
+  },
+  {
+    file: 'examples-invalid-example-holdout-in-public-flow.yaml',
+    valid: false,
+    expectErrorCodes: ['example_holdout_in_public_flow'],
+  },
+  {
+    file: 'examples-invalid-example-input-conflict.yaml',
+    valid: false,
+    expectErrorCodes: ['example_input_conflict'],
+  },
+  {
+    file: 'examples-invalid-example-input-missing.yaml',
+    valid: false,
+    expectErrorCodes: ['example_input_missing'],
+  },
+  {
+    file: 'examples-invalid-example-input-too-large.yaml',
+    valid: false,
+    expectErrorCodes: ['example_input_too_large'],
+  },
+  {
+    file: 'examples-invalid-example-input-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_input_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-input-unknown-field.yaml',
+    valid: false,
+    expectErrorCodes: ['example_input_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-input-required-missing.yaml',
+    valid: false,
+    expectErrorCodes: ['example_input_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-input-enum-violation.yaml',
+    valid: false,
+    expectErrorCodes: ['example_input_invalid'],
+  },
+  {
+    file: 'examples-warn-example-input-unvalidated.yaml',
+    valid: true,
+    expectWarningCodes: ['example_input_unvalidated'],
+  },
+  {
+    file: 'examples-invalid-example-input-undeclared-query.yaml',
+    valid: false,
+    expectErrorCodes: ['example_input_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-file-input-needs-ref.yaml',
+    valid: false,
+    expectErrorCodes: ['example_file_input_needs_ref'],
+  },
+  {
+    file: 'examples-invalid-example-secret-value.yaml',
+    valid: false,
+    expectErrorCodes: ['example_secret_value'],
+  },
+  {
+    file: 'examples-invalid-example-secret-like-value.yaml',
+    valid: false,
+    expectErrorCodes: ['example_secret_like_value'],
+  },
+  {
+    file: 'examples-invalid-example-ref-scheme.yaml',
+    valid: false,
+    expectErrorCodes: ['example_ref_scheme'],
+  },
+  {
+    file: 'examples-invalid-example-ref-scheme-reserved.yaml',
+    valid: false,
+    expectErrorCodes: ['example_ref_scheme_reserved'],
+  },
+  {
+    file: 'examples-invalid-example-ref-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_ref_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-ref-fragment.yaml',
+    valid: false,
+    expectErrorCodes: ['example_ref_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-ref-url-too-long.yaml',
+    valid: false,
+    expectErrorCodes: ['example_ref_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-ref-sha256-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_ref_sha256_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-ref-media-type-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_ref_media_type_invalid'],
+  },
+  {
+    file: 'examples-warn-example-ref-unpinned.yaml',
+    valid: true,
+    expectWarningCodes: ['example_ref_unpinned'],
+  },
+  {
+    file: 'examples-warn-example-ref-signed-url.yaml',
+    valid: true,
+    expectWarningCodes: ['example_ref_signed_url'],
+  },
+  {
+    file: 'examples-invalid-example-expected-missing.yaml',
+    valid: false,
+    expectErrorCodes: ['example_expected_missing'],
+  },
+  {
+    file: 'examples-invalid-example-expected-empty.yaml',
+    valid: false,
+    expectErrorCodes: ['example_expected_empty'],
+  },
+  {
+    file: 'examples-invalid-example-expected-status-alone.yaml',
+    valid: false,
+    expectErrorCodes: ['example_expected_empty'],
+  },
+  {
+    file: 'examples-invalid-example-expected-conflict.yaml',
+    valid: false,
+    expectErrorCodes: ['example_expected_conflict'],
+  },
+  {
+    file: 'examples-invalid-example-expected-failed-with-fields.yaml',
+    valid: false,
+    expectErrorCodes: ['example_expected_conflict'],
+  },
+  {
+    file: 'examples-invalid-example-expected-field-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['example_expected_field_unknown'],
+  },
+  {
+    file: 'examples-invalid-example-expected-exact-key-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['example_expected_field_unknown'],
+  },
+  {
+    file: 'examples-warn-example-expected-field-unchecked.yaml',
+    valid: true,
+    expectWarningCodes: ['example_expected_field_unchecked'],
+  },
+  {
+    file: 'examples-invalid-example-field-matcher-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_field_matcher_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-matcher-two-operators.yaml',
+    valid: false,
+    expectErrorCodes: ['example_field_matcher_invalid'],
+  },
+  {
+    // divergence #21: a pattern is judged by length only, so a syntax error is not refused here
+    file: 'examples-invalid-example-matcher-bad-regex.yaml',
+    valid: false,
+    expectErrorCodes: ['example_field_matcher_invalid'],
+    looserHere: true,
+  },
+  {
+    file: 'examples-invalid-example-matcher-approx-no-tolerance.yaml',
+    valid: false,
+    expectErrorCodes: ['example_field_matcher_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-matcher-negative-tolerance.yaml',
+    valid: false,
+    expectErrorCodes: ['example_field_matcher_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-rubric-empty.yaml',
+    valid: false,
+    expectErrorCodes: ['example_rubric_empty'],
+  },
+  {
+    file: 'examples-invalid-example-rubric-too-long.yaml',
+    valid: false,
+    expectErrorCodes: ['example_rubric_too_long'],
+  },
+  {
+    file: 'examples-invalid-example-reference-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_reference_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-reference-neither.yaml',
+    valid: false,
+    expectErrorCodes: ['example_reference_invalid'],
+  },
+  {
+    file: 'examples-warn-example-reference-binary.yaml',
+    valid: true,
+    expectWarningCodes: ['example_reference_binary'],
+  },
+  {
+    file: 'examples-invalid-example-must-not-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_must_not_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-must-not-contain-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_must_not_contain_invalid'],
+  },
+  {
+    file: 'examples-warn-example-expectation-contradiction.yaml',
+    valid: true,
+    expectWarningCodes: ['example_expectation_contradiction'],
+  },
+  {
+    file: 'examples-invalid-example-status-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_status_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-min-score-range.yaml',
+    valid: false,
+    expectErrorCodes: ['example_min_score_range'],
+  },
+  {
+    file: 'examples-invalid-example-expectation-min-score-range.yaml',
+    valid: false,
+    expectErrorCodes: ['example_min_score_range'],
+  },
+  {
+    file: 'examples-invalid-example-side-effects-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_side_effects_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-checkpoint-step-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['example_checkpoint_step_unknown'],
+  },
+  {
+    file: 'examples-invalid-example-checkpoint-step-composite.yaml',
+    valid: false,
+    expectErrorCodes: ['example_checkpoint_step_composite'],
+  },
+  {
+    file: 'examples-invalid-example-checkpoint-status.yaml',
+    valid: false,
+    expectErrorCodes: ['example_checkpoint_status'],
+  },
+  {
+    file: 'examples-warn-example-checkpoint-field-unchecked.yaml',
+    valid: true,
+    expectWarningCodes: ['example_expected_field_unchecked'],
+  },
+  {
+    file: 'examples-invalid-example-checkpoint-field-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['example_expected_field_unknown'],
+  },
+  {
+    file: 'examples-invalid-example-variants-too-many.yaml',
+    valid: false,
+    expectErrorCodes: ['example_variants_too_many'],
+  },
+  {
+    file: 'examples-invalid-example-variant-id-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_variant_id_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-variant-id-duplicate.yaml',
+    valid: false,
+    expectErrorCodes: ['example_variant_id_duplicate'],
+  },
+  {
+    file: 'examples-invalid-example-variant-origin-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_variant_origin_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-variant-empty.yaml',
+    valid: false,
+    expectErrorCodes: ['example_variant_empty'],
+  },
+  {
+    file: 'examples-invalid-example-variant-input-conflict.yaml',
+    valid: false,
+    expectErrorCodes: ['example_variant_input_conflict'],
+  },
+  {
+    file: 'examples-invalid-example-variant-input-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['example_variant_input_invalid'],
+  },
+  {
+    file: 'examples-invalid-example-variant-patch-secret.yaml',
+    valid: false,
+    expectErrorCodes: ['example_secret_value'],
+  },
+  {
+    file: 'examples-warn-example-variant-unchecked.yaml',
+    valid: true,
+    expectWarningCodes: ['example_variant_unchecked'],
+  },
+  {
+    file: 'examples-warn-examples-all-held-out.yaml',
+    valid: true,
+    expectWarningCodes: ['examples_all_held_out'],
+  },
+  {
+    file: 'examples-warn-examples-published-with-public-flow.yaml',
+    valid: true,
+    expectWarningCodes: ['examples_published_with_public_flow'],
+  },
+  {
+    file: 'examples-warn-examples-unreadable-by-judge.yaml',
+    valid: true,
+    expectWarningCodes: ['examples_unreadable_by_judge'],
+  },
+  {
+    file: 'examples-valid-base.yaml',
+    valid: true,
+    forbidWarningCodes: EXAMPLE_WARNING_CODES,
+  },
+  {
+    file: 'examples-valid-variants.yaml',
+    valid: true,
+    forbidWarningCodes: EXAMPLE_WARNING_CODES,
+  },
+  {
+    file: 'examples-valid-checkpoints.yaml',
+    valid: true,
+    forbidWarningCodes: EXAMPLE_WARNING_CODES,
+  },
+  {
+    file: 'examples-valid-secret-omitted.yaml',
+    valid: true,
+    forbidWarningCodes: EXAMPLE_WARNING_CODES,
+  },
+  {
+    file: 'examples-valid-exact.yaml',
+    valid: true,
+    forbidWarningCodes: EXAMPLE_WARNING_CODES,
+  },
+  {
+    file: 'examples-valid-prose-and-public-hosts.yaml',
+    valid: true,
+    forbidWarningCodes: EXAMPLE_WARNING_CODES,
+  },
 ];
 
 describe('conformance fixtures', () => {
@@ -824,6 +1269,14 @@ describe('conformance fixtures', () => {
       const result = validateFlow(yaml);
       const errorCodes = new Set(result.errors.map((e) => e.code));
       const warningCodes = new Set(result.warnings.map((w) => w.code));
+
+      if (c.looserHere) {
+        expect(result.valid, `errors: ${[...errorCodes].join(', ')}`).toBe(true);
+        for (const code of c.expectErrorCodes ?? []) {
+          expect(errorCodes, `looser here: '${code}' must NOT be raised`).not.toContain(code);
+        }
+        return;
+      }
 
       if (c.exonsEngineOnly) {
         // No .exons engine here (divergence #16): the flow must be accepted,
