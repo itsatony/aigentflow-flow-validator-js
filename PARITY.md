@@ -4,7 +4,20 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.811.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), plus `server_owned_query_key` (package 0.15.1, below) from the AIgentFlow release after v2.790.0, and `credential_endpoint_unpaired` (package 0.15.2, below) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3, below) from AIgentFlow v2.802.0, and the untrusted-input marker keys (package 0.16.0, below) from AIgentFlow v2.811.0.
+**Tracks AIgentFlow flow schema: `v2.811.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the `examples:` block (package 0.17.0, below). Earlier additions: `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+
+> package 0.17.0 — **the `examples:` block**, in step with the reference. The spec is
+> regenerated (`specVersion` 2.811.0): `knownKeys` gains `ExampleDefinition`,
+> `Expectation`, `Checkpoint`, `FieldMatcher`, `FileRef`, `ExampleReference` and
+> `ExampleVariant`, `Flow.examples`, and the `trusted_output` / `allow_untrusted` /
+> `untrusted` keys the previous spec lacked; and a new top-level `examples` section
+> carries every limit, vocabulary, pattern, the credential-shaped-literal set and each
+> code's severity. Rules and divergences are under [The examples block](#the-examples-block).
+>
+> | Rule (reference)                                           | Codes                                           | Severity       | Module                                                |
+> | ---------------------------------------------------------- | ----------------------------------------------- | -------------- | ----------------------------------------------------- |
+> | the `examples:` walker (every rule, one pass over a block) | 58 `example_*` / `examples_*` codes, spec table | error, warning | `validators/examples.ts`, spec `examples`, `goUrl.ts` |
+> | the reference's blocked-host rule                          | `example_ref_blocked_host`                      | error          | **not ported** (divergence #19)                       |
 
 > package 0.16.0 — **the untrusted-input marker keys** (AIgentFlow v2.811.0).
 > The spec's `knownKeys` gain `untrusted` on `QueryDefinition` and `InputSchemaField`, and
@@ -16,6 +29,8 @@ discipline for keeping the two in sync.
 > `trusted_output` declassifies a step's output — is engine behaviour at run time and out
 > of scope for static validation. Fixtures: `valid-untrusted-inputs.yaml`,
 > `invalid-untrusted-misspelt.yaml`; focused test `v0160-untrusted-inputs.test.ts`.
+> ||||||| /tmp/b.txt
+> **Tracks AIgentFlow flow schema: `v2.802.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), plus `server_owned_query_key` (package 0.15.1, below) from the AIgentFlow release after v2.790.0, and `credential_endpoint_unpaired` (package 0.15.2, below) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3, below) from AIgentFlow v2.802.0.
 
 > package 0.15.3 — **the optional top-level `display_name`** (AIgentFlow #187). The spec
 > gains `display_name: scalar` on `Flow` and `specVersion` becomes `2.802.0`.
@@ -964,6 +979,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | `executor_config` `${NAME}` references outside the key's scope (`executor_config_env_scope`)                            | `ValidateExecutorConfigEnvScopes` (parser.go)                                                           | `validators/executorConfigEnv.ts`                         | `v0150-save-door.test.ts`, `conformance.test.ts`           |
 | A step or loop sub-step `query:` declaring a server-owned key (`server_owned_query_key`)                                | `validateNoServerOwnedStepQueryKeys` (validation.go), `IsServerOwnedParamKey`                           | `validators/serverOwnedQueryKeys.ts`                      | `v0151-save-door.test.ts`, `conformance.test.ts`           |
 | An endpoint a server-supplied credential will never be sent to (`credential_endpoint_unpaired`, warning)                | `validateCredentialEndpointPairing`, `validateFamilyCredentialEndpointPairing` (validation.go)          | `validators/credentialEndpoint.ts`, `validators/goUrl.ts` | `v0152-credential-endpoint.test.ts`, `conformance.test.ts` |
+| The `examples:` block: 58 codes, one walker (ids, inputs, references, expectations, checkpoints, variants)              | the examples walker (`ValidateExamples`)                                                                | `validators/examples.ts`, `validators/goUrl.ts`           | `examples.test.ts`, `conformance.test.ts`                  |
 | Orchestrator `.exons` frontmatter: spec, provider, `requirements.resources`, `tools.allow` withholds                    | `validateOrchestrator` (parser.go), `validateOrchestratorToolAllowWithholds`                            | `validators/exons.ts`                                     | `v0150-save-door.test.ts`, `conformance.test.ts`           |
 | Credential bindings (`stored/...`, inject_as, exclusivity)                                                              | `validateStepCredentialBindings`                                                                        | `validators/credentialBindings.ts`                        | `validate.test.ts`                                         |
 | `input_schema` definition + ordering lint                                                                               | `ValidateInputSchemaDefinition`, `LintInputSchemaFieldOrdering`                                         | `validators/inputSchema.ts`                               | `validate.test.ts`                                         |
@@ -1178,6 +1194,135 @@ number their shared divergences alike._
     - **JS only, looser: a `!!binary` value** is a string to yaml.v3 and bytes here.
     - **Not ported, verdict-neutral:** Go validates a bracketed IPv6 host with
       `netip.ParseAddr`; a bracketed host is never a default's host either way.
+
+19. **`example_ref_blocked_host` is reference-only (0.16.0).** The reference refuses a file
+    reference whose host is private or local (`localhost`, loopback, link-local and cloud
+    metadata addresses, RFC 1918 and carrier-grade ranges, the unspecified address, and any
+    name ending `.internal`, `.local` or `.localhost`). It reuses the server's own address
+    tables, so a second literal table here would be another copy to keep in step; it is also
+    advice, because the control is the run-time dialer. `https://localhost/a.json` therefore
+    passes here (looser). The code is still listed in the spec's `examples.codes` table (it is
+    the reference's code), and no fixture in this repository raises it.
+
+20. **The example's inline input is judged by a NARROWED check (0.16.0; looser).** The
+    reference judges an example's `input` (and a variant's patched input) with its full
+    run-time input validator. This port has no value validator, so it judges only: an unknown
+    field against `input_schema` (or against the declared `query` keys when there is no
+    schema), a required field that is missing (honouring `visible_when`, and skipping a
+    required `secret` field, which the person running the evaluation supplies), a value of the
+    wrong KIND (`string`, `multiline`, `secret`, `enum` and `date` are strings; `number` is any
+    YAML number, `.nan` and the infinities included, as the reference admits them; `bool` is a
+    boolean; `array_of_strings` is a list of strings; `file` is a mapping whose keys are only
+    `url`, `sha256`, `media_type` and `note`, else `example_file_input_needs_ref`) and an enum
+    value outside its list. Not judged: `min_length` / `max_length`, `min` / `max`,
+    `min_items` / `max_items`, `pattern`, the `YYYY-MM-DD` shape and calendar of a `date`, the
+    256-key cap and the string-length cap. A document the reference accepts is never refused
+    here; one it refuses only for those constraints is accepted here. The message wording of
+    the four judged failures is the reference's, and the same `(code, field)` is reported.
+    A date or timestamp a loader resolved to a date object (`validateFlowObject`) is read as the
+    string a JSON body would carry; the `yaml` package this validator parses with leaves such a
+    scalar a string, so for parsed text this is the identity.
+
+21. **A field matcher's `matches` pattern is judged by length only (0.16.0; looser).** The
+    reference compiles the pattern with its regular-expression engine (RE2), and RE2 and a
+    JavaScript `RegExp` disagree about what is valid (`(?P<n>x)` is valid RE2 and a JS syntax
+    error), so a compile check here could refuse what the reference accepts. This port judges
+    the length (the spec's `limits.maxPatternLength`, counted in UTF-8 bytes as Go counts it)
+    and the "exactly one operator" rule, and nothing about the pattern's syntax: `(` passes.
+
+22. **Counts and wording that differ in the margin (0.16.0).**
+    - The byte counts behind `example_input_too_large` and `examples_block_too_large` are
+      measured over the JSON of the parsed document (for the block, with empty values
+      omitted, as the reference's typed structs omit them), not over the reference's typed
+      marshalling, which also escapes `<`, `>` and `&`. The count here is never larger than the
+      reference's, so the verdict can differ only within a few bytes of the limit, and only
+      looser; the number printed in the message can differ by those bytes.
+    - `example_expectation_contradiction` compares with simple case folding per code point,
+      as `strings.EqualFold` does; a code point whose fold orbit has three members is not
+      followed.
+    - A float in a message (`weight`, `min_score`) is printed as Go prints a `float64` with
+      `%v` (shortest form, an exponent below `1e-4` and from `1e6`).
+    - The recursion bound of 32 on a nested value is the reference's own and is not in the
+      spec.
+
+---
+
+## The examples block
+
+An `examples:` list records concrete cases inside the flow document: an input, what a good
+result looks like, why the case matters. The engine never reads it; the validator is the only
+reader here, so every rule is a judgement of the DOCUMENT at save time, pure and offline (no
+reference is fetched and no host is resolved). One walker, `validators/examples.ts`, reports
+every finding of a block in one pass; each finding's `field` is an index path
+(`examples[2].expected.fields.total`, `examples[0].variants[1].id`), never an id-based one,
+because an id can be invalid or duplicate while it is being reported.
+
+**What is judged**, in the order the walker reads it:
+
+- **The set.** At most 50 examples (`examples_too_many`); the block's JSON at most 256 KiB
+  (`examples_block_too_large`); a warning when every example is held out
+  (`examples_all_held_out`) and when the flow is public (`examples_published_with_public_flow`).
+- **Identity and prose.** `id` required, matching the spec's `idPattern`, unique
+  (`example_id_missing` / `_invalid` / `_duplicate`); `title` non-blank, at most 80 code points;
+  `guidance` at most 2000 code points, and a warning when it is absent
+  (`example_guidance_missing`); `notes` at most 2000; `tags` at most 8, each matching
+  `tagPattern`, none repeated (`example_tag_invalid`); `weight` above 0 and at most 10;
+  `min_score` from 0 to 1; `side_effects` `refuse` or `allow`; `hold_out` refused on a public
+  flow (`example_holdout_in_public_flow`).
+- **Input.** Exactly one of `input` / `input_ref` (`example_input_conflict`,
+  `example_input_missing`; `input: {}` is a present, empty input); an inline input at most 32 KiB
+  and judged as divergence #20 describes (`example_input_invalid`, `example_file_input_needs_ref`,
+  `example_input_unvalidated` when the flow declares neither `input_schema` nor `query`).
+  A value for a `secret` field is refused (`example_secret_value`), because examples are saved
+  inside the flow.
+- **File references** (`input_ref`, a file-typed input, `expected.reference.ref`): `url` at most
+  2048 bytes and parseable as Go parses a URL; a reserved scheme (`artifact`, `trove`, `aiv`,
+  `s3`, `gs`) is refused by name (`example_ref_scheme_reserved`), any other non-`https` scheme
+  too (`example_ref_scheme`); a login, a fragment or an empty host is `example_ref_invalid`;
+  `sha256` is 64 lower-case hex digits, `media_type` is `type/subtype`, `note` at most 300;
+  warnings for a reference with no `sha256` (`example_ref_unpinned`) and for a signed-link query
+  key (`example_ref_signed_url`).
+- **Expectations** (`expected`, a checkpoint, a variant's replacing `expected`): `status` one of
+  `completed`, `failed`, `paused_for_human`; `fields` and `exact` are mutually exclusive and
+  absent when the case is meant to end `failed` or `paused_for_human`
+  (`example_expected_conflict`); every `fields` / `exact` key is an output of the flow (a
+  checkpoint: a field of the step's `output_schema`), or a warning when no list is declared;
+  each field matcher has exactly one operator and `approx` pairs with a non-negative
+  `tolerance` (`example_field_matcher_invalid`); `rubric` non-blank and at most 4000;
+  `reference` has exactly one of `text` / `ref`, text at most 32 KiB, and a warning for a
+  reference that is not text; `must_not` at most 12 statements of at most 300, none blank;
+  `must_not_contain` at most 20 literals of 1 to 200; a warning when a field's `equals` is also
+  forbidden by `must_not_contain`; an expectation must check something
+  (`example_expected_empty`; `status: completed` alone checks nothing), and a missing
+  `expected` is `example_expected_missing`. A reference the judge cannot read, alone, is the
+  warning `examples_unreadable_by_judge`.
+- **Checkpoints.** The key must be a step of the flow, and not a `for_each`, `loop` or
+  `next.parallel` step (`example_checkpoint_step_unknown`, `_composite`); a checkpoint cannot
+  name a `status` (`example_checkpoint_status`).
+- **Variants.** At most 10; `id` matching `idPattern` and unique within the example;
+  `origin` required with no default, `author` or `synthetic`; a variant must change the input
+  or the expectation, and sets `input_patch` or `input_ref`, not both. The patch is an RFC 7386
+  merge patch applied to the parent's inline input (a mapping merges, `null` deletes, anything
+  else replaces; the input is never mutated) and the patched input is judged like the example's
+  own (`example_variant_input_invalid`); a patch giving a secret a value is refused
+  (`example_secret_value`), one deleting it with `null` is fine; a patch on a parent whose
+  input is `input_ref` cannot be checked (`example_variant_unchecked`).
+- **Credential-shaped literals.** Every string leaf of an example, a checkpoint and a variant
+  (title, guidance, notes, input, rubric, reference text, must_not, matcher operands, `exact`,
+  patches) is matched against the spec's eight patterns (`example_secret_like_value`). The
+  patterns are data (`examples.secretPatterns`, each with its flags); ordinary hyphenated slugs
+  and prose must not match, and a test holds that.
+- **Unknown keys.** A typo at example, expectation, matcher, file-reference or variant depth is
+  `unknown_yaml_key`, from the regenerated `knownKeys`: nothing is hand-listed.
+
+Severities are the spec's `examples.codes` table, held to the walker by a test (each code's
+fixture asserts the walker's severity equals the table's).
+
+**Measured.** The conformance corpus is shared byte for byte with the Go port; every fixture
+that carries an expected `(code, field, message)` agrees here, but the one divergence #21 names.
+Mutants of the rules (a secret pattern dropped, the id check disabled, the duplicate check,
+the weight bound, the origin vocabulary, the unknown-checkpoint code, the https-only scheme
+rule, the empty-expectation rule, the merge patch's null-delete) are each killed by a test.
 
 ---
 

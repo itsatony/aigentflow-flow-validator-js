@@ -166,11 +166,12 @@ function parseHost(host: string): string | null {
   return unescapeText(host, Mode.Host);
 }
 
-/** Go's `parseAuthority`, returning the host only. */
-function parseAuthority(authority: string): string | null {
+/** Go's `parseAuthority`: the host, and whether the authority carries userinfo (`u.User != nil`). */
+function parseAuthority(authority: string): { host: string; hasUser: boolean } | null {
   const at = authority.lastIndexOf('@');
   const host = parseHost(at < 0 ? authority : authority.slice(at + 1));
-  if (host === null || at < 0) return host;
+  if (host === null) return null;
+  if (at < 0) return { host, hasUser: false };
   const userinfo = authority.slice(0, at);
   if (!validUserinfo(userinfo)) return null;
   const colon = userinfo.indexOf(':');
@@ -178,7 +179,7 @@ function parseAuthority(authority: string): string | null {
   for (const part of parts) {
     if (unescapeText(part, Mode.UserPassword) === null) return null;
   }
-  return host;
+  return { host, hasUser: true };
 }
 
 /** Go's `getScheme`: null for "missing protocol scheme". */
@@ -207,36 +208,64 @@ function containsCTL(s: string): boolean {
   return false;
 }
 
+/** What {@link goParseURLParts} extracts from a URL Go accepts. */
+export interface GoURLParts {
+  scheme: string;
+  /** `u.Host`: the host with its port, after any userinfo. */
+  host: string;
+  /** `u.User != nil`: an `@` in the authority, even an empty userinfo. */
+  hasUser: boolean;
+  /** `u.RawQuery`: the text after the first `?`. */
+  rawQuery: string;
+  /** `u.Fragment`, still escaped (callers judge only its emptiness). */
+  fragment: string;
+}
+
 /**
  * Go's `url.Parse`, reduced to what it yields for `Scheme` and `Host`; null
  * where Go returns an error.
  */
 export function goParseSchemeHost(rawURL: string): { scheme: string; host: string } | null {
+  const u = goParseURLParts(rawURL);
+  return u === null ? null : { scheme: u.scheme, host: u.host };
+}
+
+/**
+ * Go's `url.Parse`, reduced to the parts the `examples:` file-reference rule
+ * reads (scheme, host, userinfo presence, query, fragment); null where Go
+ * returns an error.
+ */
+export function goParseURLParts(rawURL: string): GoURLParts | null {
   const hash = rawURL.indexOf('#');
   const main = hash < 0 ? rawURL : rawURL.slice(0, hash);
   const frag = hash < 0 ? '' : rawURL.slice(hash + 1);
 
   if (containsCTL(main)) return null;
-  if (main === '*') return { scheme: '', host: '' };
+  if (main === '*') {
+    return { scheme: '', host: '', hasUser: false, rawQuery: '', fragment: frag };
+  }
   const split = getScheme(main);
   if (split === null) return null;
   const scheme = split.scheme.toLowerCase(); // ASCII by construction
   let rest = split.rest;
   const questionMarks = rest.split('?').length - 1;
+  let rawQuery = '';
   if (rest.endsWith('?') && questionMarks === 1) {
     rest = rest.slice(0, -1);
   } else if (questionMarks > 0) {
+    rawQuery = rest.slice(rest.indexOf('?') + 1);
     rest = rest.slice(0, rest.indexOf('?'));
   }
 
   if (!rest.startsWith('/')) {
-    if (scheme !== '') return finish({ scheme, host: '' }, frag); // opaque
+    if (scheme !== '') return finish({ scheme, host: '', hasUser: false, rawQuery }, frag); // opaque
     const slash = rest.indexOf('/');
     const segment = slash < 0 ? rest : rest.slice(0, slash);
     if (segment.includes(':')) return null;
   }
 
   let host = '';
+  let hasUser = false;
   if ((scheme !== '' || !rest.startsWith('///')) && rest.startsWith('//')) {
     let authority = rest.slice(2);
     rest = '';
@@ -247,18 +276,33 @@ export function goParseSchemeHost(rawURL: string): { scheme: string; host: strin
     }
     const parsed = parseAuthority(authority);
     if (parsed === null) return null;
-    host = parsed;
+    host = parsed.host;
+    hasUser = parsed.hasUser;
   }
   if (unescapeText(rest, Mode.Path) === null) return null;
-  return finish({ scheme, host }, frag);
+  return finish({ scheme, host, hasUser, rawQuery }, frag);
 }
 
-function finish(
-  u: { scheme: string; host: string },
-  frag: string,
-): { scheme: string; host: string } | null {
+function finish(u: Omit<GoURLParts, 'fragment'>, frag: string): GoURLParts | null {
   if (frag !== '' && unescapeText(frag, Mode.Fragment) === null) return null;
-  return u;
+  return { ...u, fragment: frag };
+}
+
+/**
+ * The KEYS of Go's `url.Values` for a raw query (`u.Query()`): pairs split on
+ * `&`, a pair containing `;` skipped, a key that does not unescape skipped,
+ * `+` read as a space.
+ */
+export function goQueryKeys(rawQuery: string): string[] {
+  const keys: string[] = [];
+  for (const pair of rawQuery.split('&')) {
+    if (pair === '' || pair.includes(';')) continue;
+    const eq = pair.indexOf('=');
+    const rawKey = eq < 0 ? pair : pair.slice(0, eq);
+    const key = unescapeText(rawKey.replace(/\+/g, ' '), Mode.Path);
+    if (key !== null) keys.push(key);
+  }
+  return keys;
 }
 
 /**

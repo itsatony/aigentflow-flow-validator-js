@@ -32,6 +32,7 @@ import { validateExecutorConfigEnvScopes } from './validators/executorConfigEnv.
 import { validateServerOwnedQueryKeys } from './validators/serverOwnedQueryKeys.js';
 import { validateCredentialEndpointPairing } from './validators/credentialEndpoint.js';
 import { validateOrchestratorExons } from './validators/exons.js';
+import { validateExamples } from './validators/examples.js';
 import type { ScalarSources } from './validators/util.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
@@ -118,6 +119,7 @@ function validateParsed(
   validateExecutorConfigEnvScopes(f, issues);
   validateServerOwnedQueryKeys(f, issues);
   validateCredentialEndpointPairing(f, issues);
+  validateExamples(f, issues);
   // The orchestrator's inline .exons frontmatter. A step's inline `query.exons`
   // needs an .exons ENGINE to judge (`exons_attributes`) and is not judged here
   // at all — PARITY.md, divergence #16.

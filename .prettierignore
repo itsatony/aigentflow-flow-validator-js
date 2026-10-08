@@ -4,3 +4,7 @@ coverage/
 # Vendored byte-for-byte from the Go port (go-aigentflow-validator), whose parity
 # check compares the two files byte for byte. Reformatting it here is drift.
 src/spec/aigentflow-spec.json
+# The examples-*.yaml conformance fixtures are shared byte for byte with the Go port
+# (its parity check compares the files), so they are kept as authored, not reformatted.
+test/conformance/fixtures/examples-*.yaml
+test/conformance/examples-cases.json
