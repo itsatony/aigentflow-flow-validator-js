@@ -4,7 +4,18 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.802.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), plus `server_owned_query_key` (package 0.15.1, below) from the AIgentFlow release after v2.790.0, and `credential_endpoint_unpaired` (package 0.15.2, below) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3, below) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.811.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), plus `server_owned_query_key` (package 0.15.1, below) from the AIgentFlow release after v2.790.0, and `credential_endpoint_unpaired` (package 0.15.2, below) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3, below) from AIgentFlow v2.802.0, and the untrusted-input marker keys (package 0.16.0, below) from AIgentFlow v2.811.0.
+
+> package 0.16.0 — **the untrusted-input marker keys** (AIgentFlow v2.811.0).
+> The spec's `knownKeys` gain `untrusted` on `QueryDefinition` and `InputSchemaField`, and
+> `trusted_output` / `allow_untrusted` on `StepDefinition` and `LoopStepDefinition`;
+> `specVersion` becomes `2.811.0`. No new rule: a misspelling of any of them is
+> `unknown_yaml_key`, as for every other key. What the keys DO — a marked input is sealed
+> in model-facing steps and placed only fenced in the user message, a tainted value in a
+> sensitive data-executor parameter refuses the step unless `allow_untrusted` names it,
+> `trusted_output` declassifies a step's output — is engine behaviour at run time and out
+> of scope for static validation. Fixtures: `valid-untrusted-inputs.yaml`,
+> `invalid-untrusted-misspelt.yaml`; focused test `v0160-untrusted-inputs.test.ts`.
 
 > package 0.15.3 — **the optional top-level `display_name`** (AIgentFlow #187). The spec
 > gains `display_name: scalar` on `Flow` and `specVersion` becomes `2.802.0`.

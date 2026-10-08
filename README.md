@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.802.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.811.0"`).
 
 ### Options
 

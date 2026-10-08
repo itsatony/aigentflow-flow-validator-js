@@ -91,7 +91,10 @@ export interface PropertyDefinition {
   max_items?: number;
 }
 
-export type QueryDefinition = PropertyDefinition;
+export interface QueryDefinition extends PropertyDefinition {
+  /** AIgentFlow v2.811.0: the parameter carries data from outside; every run marks it. */
+  untrusted?: boolean;
+}
 
 export interface ErrorStrategyDefinition {
   action?: string;
@@ -208,6 +211,10 @@ export interface StepDefinition {
   credentials?: Record<string, CredentialBinding | null>;
   output_schema?: InputSchema;
   quality_gate?: QualityGateDefinition;
+  /** AIgentFlow v2.811.0: declassify this step's output (untrusted-input taint). */
+  trusted_output?: boolean;
+  /** AIgentFlow v2.811.0: sensitive parameters this step may build from outside data. */
+  allow_untrusted?: string[];
   [key: string]: unknown;
 }
 
@@ -240,6 +247,8 @@ export interface InputSchemaField {
   accept?: string[];
   max_size?: number;
   visible_when?: VisibleWhenPredicate;
+  /** AIgentFlow v2.811.0: the field carries data from outside; every run marks it. */
+  untrusted?: boolean;
 }
 
 export interface InputSchema {

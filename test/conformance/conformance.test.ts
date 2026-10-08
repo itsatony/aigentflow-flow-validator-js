@@ -801,6 +801,9 @@ const CASES: Case[] = [
     forbidWarningCodes: ['credential_endpoint_unpaired'],
   },
   { file: 'valid-display-name.yaml', valid: true, forbidErrorCodes: ['display_name_too_long'] },
+  // 0.16.0: AIgentFlow v2.811.0's untrusted-input marker keys.
+  { file: 'valid-untrusted-inputs.yaml', valid: true, forbidErrorCodes: ['unknown_yaml_key'] },
+  { file: 'invalid-untrusted-misspelt.yaml', valid: false, expectErrorCodes: ['unknown_yaml_key'] },
   {
     // 80 code points but 82 UTF-16 units: the limit counts code points.
     file: 'valid-display-name-80-code-points.yaml',
