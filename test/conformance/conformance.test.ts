@@ -785,11 +785,6 @@ const CASES: Case[] = [
     expectWarningCodes: ['credential_endpoint_unpaired'],
   },
   {
-    file: 'warn-credential-endpoint-nexus.yaml',
-    valid: true,
-    expectWarningCodes: ['credential_endpoint_unpaired'],
-  },
-  {
     // The author's own key beside the author's own URL, on every arm.
     file: 'valid-credential-endpoint-own-key-own-url.yaml',
     valid: true,

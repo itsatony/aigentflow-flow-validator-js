@@ -204,6 +204,7 @@ describe('executors', () => {
     'ollama',
     'vllm',
     'aigentchat',
+    'nexus',
     'external',
     'https',
   ])('warns on %s://, which AIgentFlow does not register', (scheme) => {
