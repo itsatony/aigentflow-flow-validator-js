@@ -4,7 +4,23 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.811.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the `examples:` block (package 0.17.0, below). Earlier additions: `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.819.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which removes the AigentChat executor (package 0.18.0, below). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+
+> package 0.18.0 — **the AigentChat executor is removed**, in step with the reference
+> (AIgentFlow v2.819.0; `specVersion` 2.819.0). The reference no longer registers the
+> `nexus://` protocol or its `aigentchat://` alias, so the spec drops: `nexus` from
+> `executorSchemes` (42 protocols); the `nexus` and `aigentchat` keys of
+> `executorConfigEnvScopes.scopes`; the `nexus` row of `credentialEndpointPairing.families`
+> together with `protocolAliases` and the row-level `storedKeyShape` shape (no row uses
+> them now, so the validator code for them is gone too). A `nexus://` or `aigentchat://`
+> step is now an ordinary unknown scheme: `unknown_executor_scheme` (warning), no
+> credential/endpoint pairing, and a `${AIGENTFLOW_NEXUS_*}` reference under an
+> `executor_config.nexus` key is judged like any key with an empty scope
+> (`executor_config_env_scope`). `executor_config.*.service_channel` and
+> `enable_streaming` stay known keys; the reference keeps them declared but inert.
+> Fixtures: `warn-credential-endpoint-nexus.yaml` is deleted, and the nexus steps and
+> scope entry are removed from `valid-credential-endpoint-own-key-own-url.yaml` and
+> `valid-executor-config-env-scope.yaml`.
 
 > package 0.17.0 — **the `examples:` block**, in step with the reference. The spec is
 > regenerated (`specVersion` 2.811.0): `knownKeys` gains `ExampleDefinition`,
@@ -72,7 +88,7 @@ discipline for keeping the two in sync.
 >   is exactly `${NAME}` for one of the row's server variables on a row whose plugin
 >   expands references, and its endpoint (same order) is a literal: not templated, not a
 >   reference, and not of the same origin as the row's default. Implicit-credential
->   families are not judged; `nexus://` and `aigentchat://` get the ai:// shape.
+>   families are not judged.
 > - **The default-origin comparison needs Go's URL semantics**, so `validators/goUrl.ts`
 >   ports `net/url.Parse` (what it refuses, and the scheme and host it extracts),
 >   `strings.TrimSpace` (Go trims U+0085 and keeps U+FEFF) and `strings.ToLower` (simple
@@ -882,7 +898,7 @@ max_retries` and `QualityGateDefinition.max_retries` are unchanged. Removing
 >    separate target functions; widening `hasCycle` too would invent a divergence
 >    and emit a spurious `potential_infinite_loop` on any rendezvous or error
 >    redirect back to an earlier step.
-> 4. **`executorSchemes` is AIgentFlow's registered set exactly** (43 protocols,
+> 4. **`executorSchemes` is AIgentFlow's registered set exactly** (43 protocols at v2.608.0, 42 since the AigentChat executor was removed,
 >    enumerated from `NewExecutorSchemaRegistry`). `web://` was missing, so a
 >    correct step warned; nine schemes AIgentFlow does not register (`openai`,
 >    `anthropic`, `perplexity`, `vertexai`, `ollama`, `vllm`, `aigentchat`,
@@ -1182,10 +1198,10 @@ number their shared divergences alike._
     base URL), the service configuration an executor fills, and whether a client attaches
     the deployment's service credential. Neither side reads them statically.
     - **Default endpoints of rows the rule never reads are not carried** (`getmd://`, which
-      is never judged, and `nexus://`, whose shape consults no default). Verdict-neutral.
+      is never judged). Verdict-neutral.
     - **A `credentials:` mapping with a non-string key (looser, shared).** The reference
-      decodes it into `map[any]any`, which its nexus own-key check does not accept, so the
-      endpoint warns there; both ports stringify mapping keys and see a key of the step's own.
+      decoded it into `map[any]any` for the since-removed `nexus://` own-key check; with that
+      family gone the shared looseness no longer has a rule to act on.
     - **JS only, looser: an endpoint shaped like a YAML timestamp is not read as a string.**
       yaml.v3 decodes a PLAIN `2024-01-01` into `time.Time`, which the reference's
       `.(string)` rejects; the `yaml` package gives a string and the source's quoting is not

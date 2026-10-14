@@ -48,10 +48,6 @@ const FIXTURE_FIELDS: Record<string, string[]> = {
     'executor_config.s3.extra.endpoint',
     'steps.research.query.base_url',
   ],
-  'warn-credential-endpoint-nexus.yaml': [
-    'steps.agent.query.base_url',
-    'steps.alias.query.aigentchat_base_url',
-  ],
   'valid-credential-endpoint-own-key-own-url.yaml': [],
   'valid-credential-endpoint-server-endpoints.yaml': [],
   'valid-credential-endpoint-keyless-providers.yaml': [],
@@ -184,21 +180,6 @@ const SHAPES: { name: string; src: string; want: string[] }[] = [
     src: "aigentflow_version: '2.0.0'\nname: p\nversion: '1.0.0'\ndescription: d\nstart: s\nexecutor_config:\n  broker:\n    extra:\n      password: '${AIGENTFLOW_MQTT_PASSWORD}'\n      broker_url: 'tcp://evil.example.com:1883'\nsteps:\n  s:\n    loop:\n      while: '{{ false }}'\n      max_iterations: 1\n      steps:\n        - id: 7\n          executor: mqtt://broker/publish\n          query:\n            topic: t\n",
     want: ['executor_config.broker.extra.broker_url'],
   },
-  {
-    name: 'nexus: a null credentials entry and a numeric key are no key of its own',
-    src: "aigentflow_version: '2.0.0'\nname: p\nversion: '1.0.0'\ndescription: d\nstart: s\nsteps:\n  s:\n    executor: nexus://org/agent\n    query:\n      credentials: ~\n      api_key: 42\n      base_url: 'https://chat.example.com'\n",
-    want: ['steps.s.query.base_url'],
-  },
-  {
-    name: 'nexus: an empty credentials mapping is a key of its own',
-    src: "aigentflow_version: '2.0.0'\nname: p\nversion: '1.0.0'\ndescription: d\nstart: s\nsteps:\n  s:\n    executor: nexus://org/agent\n    query:\n      credentials: {}\n      base_url: 'https://chat.example.com'\n",
-    want: [],
-  },
-  {
-    name: 'nexus: only the first endpoint warns',
-    src: "aigentflow_version: '2.0.0'\nname: p\nversion: '1.0.0'\ndescription: d\nstart: s\nsteps:\n  s:\n    executor: nexus://org/agent\n    query:\n      aigentchat_base_url: 'https://a.example.com'\n      base_url: 'https://b.example.com'\n",
-    want: ['steps.s.query.aigentchat_base_url'],
-  },
 ];
 
 const HEAD = "aigentflow_version: '2.0.0'\nname: p\nversion: '1.0.0'\ndescription: d\nstart: s\n";
@@ -250,7 +231,6 @@ describe('credential_endpoint_unpaired', () => {
       'hosting',
       'mcp/http',
       'mqtt',
-      'nexus',
       'opencorporates',
       'shelly',
       'staticmap',
@@ -258,7 +238,14 @@ describe('credential_endpoint_unpaired', () => {
       'storage/trove',
     ]);
     expect(CREDENTIAL_ENDPOINT_PAIRING.ai.keylessProviders).toEqual(['ollama', 'vllm']);
-    expect(CREDENTIAL_ENDPOINT_PAIRING.families.nexus?.storedKeyShape).toBeDefined();
+  });
+
+  it('a nexus:// step is an unknown scheme: no credential/endpoint pairing is judged', () => {
+    const src =
+      HEAD +
+      'steps:\n  s:\n    executor: nexus://org/agent\n    query:\n' +
+      "      api_key: '${AIGENTFLOW_NEXUS_API_KEY}'\n      base_url: 'https://chat.example.com'\n";
+    expect(unpairedFields(src)).toEqual([]);
   });
 
   it('an executor named like an Object.prototype member is no family', () => {

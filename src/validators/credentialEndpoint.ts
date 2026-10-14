@@ -26,8 +26,7 @@
 //     the family's server variables (on a family whose plugin expands
 //     references) beside an endpoint that is certainly the author's: not
 //     templated, not a reference, not the family's default origin. A family
-//     with an implicit service credential is not judged; nexus:// and its
-//     alias aigentchat:// get the ai:// shape.
+//     with an implicit service credential is not judged.
 //
 // Values are read as the reference reads them: a step `query:` and an `extra:`
 // block are Go `any` there, so only a YAML string counts; `api_key` and
@@ -213,12 +212,10 @@ function warnStoredShape(issues: Issues, field: string, provider: string): void 
 function familyOf(executor: string): { key: string; family: CredentialEndpointFamily } | null {
   const sep = executor.indexOf(CFG.protocolSeparator);
   if (sep <= 0) return null;
-  let protocol = executor.slice(0, sep);
+  const protocol = executor.slice(0, sep);
   const rest = executor.slice(sep + CFG.protocolSeparator.length);
   const slash = rest.indexOf('/');
   const driver = slash < 0 ? rest : rest.slice(0, slash);
-  const alias = own(CFG.protocolAliases, protocol);
-  if (typeof alias === 'string') protocol = alias;
   const candidates =
     driver === '' ? [protocol] : [protocol + CFG.familyKeySeparator + driver, protocol];
   for (const key of candidates) {
@@ -323,25 +320,11 @@ function familyAuthorEndpoint(
   return null;
 }
 
-function storedShapeHasOwnKey(family: CredentialEndpointFamily, query: unknown): boolean {
-  const shape = family.storedKeyShape;
-  if (shape === undefined) return false;
-  if (shape.ownKeyParams.some((key) => nonEmptyString(query, key) !== null)) return true;
-  return isRecord(own(query, shape.ownCredentialsMapParam));
-}
-
 function validateFamilies(flow: Flow, steps: CredStep[], issues: Issues): void {
   for (const step of steps) {
     const found = familyOf(step.executor);
     if (found === null || found.family.implicitServerCredential) continue;
     const { key: familyKey, family } = found;
-    if (family.storedKeyShape !== undefined) {
-      if (storedShapeHasOwnKey(family, step.query)) continue;
-      const key = family.endpointParams.find((k) => nonEmptyEndpoint(step.query, k) !== null);
-      if (key !== undefined)
-        warnStoredShape(issues, step.field(key), family.storedKeyShape.provider);
-      continue;
-    }
     const secret = familySecret(flow, family, step, issues);
     if (secret === null || secret.envName === null) continue;
     const endpointField = familyAuthorEndpoint(flow, family, step, issues);

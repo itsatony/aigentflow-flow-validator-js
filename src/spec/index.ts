@@ -256,12 +256,6 @@ export interface CredentialEndpointFamily {
   readonly expandsServerEnvReferences: boolean;
   /** The family's server-variable set, evaluated from the reference's scope tables. */
   readonly serverEnv: readonly string[];
-  /** A family judged like ai:// (nexus): an endpoint with no key of the flow's own. */
-  readonly storedKeyShape?: {
-    readonly ownKeyParams: readonly string[];
-    readonly ownCredentialsMapParam: string;
-    readonly provider: string;
-  };
 }
 
 /**
@@ -290,9 +284,6 @@ export const CREDENTIAL_ENDPOINT_PAIRING = {
       .executorConfigProviders as readonly string[],
   },
   familyKeySeparator: spec.credentialEndpointPairing.familyKeySeparator,
-  protocolAliases: spec.credentialEndpointPairing.protocolAliases as Readonly<
-    Record<string, string>
-  >,
   families: spec.credentialEndpointPairing.families as Readonly<
     Record<string, CredentialEndpointFamily>
   >,
