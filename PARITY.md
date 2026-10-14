@@ -4,8 +4,21 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.819.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which removes the AigentChat executor (package 0.18.0, below). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.820.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0, below). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
 
+> package 0.19.0 — **`orchestrator.region` and `orchestrator.enforce_region`**, in step
+> with the reference (AIgentFlow v2.820.0; `specVersion` 2.820.0). Both are new keys of
+> the `orchestrator:` block (a `string` and a `bool`), added to the known-key table.
+> One rule ported: `enforce_region: true` with an absent, null, empty or
+> whitespace-only `region` is an **error**, `orchestrator_enforce_region_needs_region`
+> (field `orchestrator.enforce_region`), because the provider would refuse every turn.
+> The reference raises it from its parser's orchestrator validation as a plain
+> flow-validation error with no machine-readable code; this package's code and field
+> are its own naming, the same as for `orchestrator_mode_invalid`. Only a YAML boolean
+> `true` arms the rule. The runtime effect (the region reaching the provider request) is
+> engine behaviour and out of scope. New conformance fixtures:
+> `valid-orchestrator-region.yaml`, `invalid-orchestrator-enforce-region-no-region.yaml`.
+>
 > package 0.18.0 — **the AigentChat executor is removed**, in step with the reference
 > (AIgentFlow v2.819.0; `specVersion` 2.819.0). The reference no longer registers the
 > `nexus://` protocol or its `aigentchat://` alias, so the spec drops: `nexus` from

@@ -287,6 +287,17 @@ const CASES: Case[] = [
     expectErrorCodes: ['orchestrator_owner_needs_yield'],
   },
   {
+    // enforce_region needs a region to enforce; with both set the flow is clean.
+    file: 'valid-orchestrator-region.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_key', 'unknown_field'],
+  },
+  {
+    file: 'invalid-orchestrator-enforce-region-no-region.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_enforce_region_needs_region'],
+  },
+  {
     // v2.642.0 (DC-FORGE-72): the expression-function catalog is compiled in and
     // nothing is loaded at run time, so `package:` is refused outright.
     file: 'invalid-expression-function-package.yaml',
@@ -817,6 +828,40 @@ const CASES: Case[] = [
     file: 'valid-display-name-80-code-points.yaml',
     valid: true,
     forbidErrorCodes: ['display_name_too_long'],
+  },
+  {
+    file: 'valid-display-name-80-runes.yaml',
+    valid: true,
+    forbidErrorCodes: ['display_name_too_long'],
+  },
+  {
+    file: 'valid-display-name-80-runes-multibyte.yaml',
+    valid: true,
+    forbidErrorCodes: ['display_name_too_long'],
+  },
+  {
+    file: 'invalid-display-name-81-runes.yaml',
+    valid: false,
+    expectErrorCodes: ['display_name_too_long'],
+  },
+  {
+    file: 'invalid-display-name-81-runes-multibyte.yaml',
+    valid: false,
+    expectErrorCodes: ['display_name_too_long'],
+  },
+  {
+    // Orchestrator region pinned and enforced together: clean.
+    file: 'valid-orchestrator-region-enforced.yaml',
+    valid: true,
+    forbidErrorCodes: ['orchestrator_enforce_region_needs_region'],
+  },
+  {
+    // The removed AigentChat schemes are ordinary unknown schemes: a warning, and no
+    // credential/endpoint judgement.
+    file: 'warn-removed-executor-nexus.yaml',
+    valid: true,
+    expectWarningCodes: ['unknown_executor_scheme'],
+    forbidWarningCodes: ['credential_endpoint_unpaired'],
   },
   {
     file: 'invalid-display-name-81.yaml',

@@ -265,6 +265,10 @@ export interface OrchestratorDefinition {
   exons?: string;
   agentic?: boolean;
   mode?: string;
+  /** Provider region the orchestrator's model calls are pinned to (e.g. `eu`). */
+  region?: string;
+  /** Makes the provider refuse a call carrying no region. Requires `region`. */
+  enforce_region?: boolean;
   triggers?: OrchestratorTrigger[];
   tools?: string[];
   max_turns?: number;

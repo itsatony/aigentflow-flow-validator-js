@@ -1452,6 +1452,30 @@ describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
     }
   });
 
+  it('refuses orchestrator.enforce_region without a region, and only then', () => {
+    for (const extra of [
+      { enforce_region: true },
+      { enforce_region: true, region: '' },
+      { enforce_region: true, region: '   ' },
+      { enforce_region: true, region: null },
+    ]) {
+      const r = validateFlowObject(orchFlow(extra));
+      expect(codes(r), JSON.stringify(extra)).toContain('orchestrator_enforce_region_needs_region');
+      expect(r.valid).toBe(false);
+    }
+    for (const extra of [
+      { enforce_region: true, region: 'eu' },
+      { enforce_region: false },
+      { region: 'eu' },
+      {},
+    ]) {
+      const r = validateFlowObject(orchFlow(extra));
+      expect(codes(r), JSON.stringify(extra)).not.toContain(
+        'orchestrator_enforce_region_needs_region',
+      );
+    }
+  });
+
   it('warns on a loop sub-step id that is one of the loop result summary fields', () => {
     for (const id of ['iterations', 'break', 'vars', 'duration_ms']) {
       const r = validateFlowObject({
