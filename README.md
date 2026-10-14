@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.820.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.821.0"`).
 
 ### Options
 
@@ -190,7 +190,7 @@ interface ValidationIssue {
 These need a live server / org context and are intentionally out of scope:
 
 - **Credentials** — whether a bound credential actually exists or is authorised.
-- **Model compliance** — the `compliance:` block is enforced against the provider catalogue at flow-create time on the server.
+- **Model compliance** — the `compliance:` block is enforced against the provider catalogue at flow-create time on the server. (The one catalogue-free part, the warning `compliance_residency_unenforced` for an EU-only residency beside an unpinned call, is checked here.)
 - **`.exons` document bodies** — whether an inline `.exons` document parses and whether its tags can render (`exons_attributes`) needs the `.exons` template engine, which this package does not embed.
 - **Template field resolution** — whether `.data.x.y` will actually be populated at runtime (we validate syntax, not data flow).
 - **Publish gates** — `visibility`/`classification`/template-metadata publish rules are server- and org-context dependent.

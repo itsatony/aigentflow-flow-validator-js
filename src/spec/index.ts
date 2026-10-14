@@ -289,6 +289,31 @@ export const CREDENTIAL_ENDPOINT_PAIRING = {
   >,
 } as const;
 
+/**
+ * The data of `compliance_residency_unenforced` (AIgentFlow v2.821.0): the
+ * EU-only residency codes, the region-lane providers, the parameter names and
+ * the reference's site, field and message formats.
+ */
+export const COMPLIANCE_RESIDENCY = {
+  code: spec.complianceResidency.code,
+  euResidencyCodes: spec.complianceResidency.euResidencyCodes as readonly string[],
+  regionLaneProviders: spec.complianceResidency.regionLaneProviders as readonly string[],
+  aiProtocol: spec.complianceResidency.aiProtocol,
+  protocolSeparator: spec.complianceResidency.protocolSeparator,
+  regionParam: spec.complianceResidency.regionParam,
+  enforceRegionParam: spec.complianceResidency.enforceRegionParam,
+  baseUrlParamSuffix: spec.complianceResidency.baseUrlParamSuffix,
+  enforceRegionTrueStrings: spec.complianceResidency.enforceRegionTrueStrings as readonly string[],
+  stepFieldFormat: spec.complianceResidency.stepFieldFormat,
+  loopStepFieldFormat: spec.complianceResidency.loopStepFieldFormat,
+  orchestratorField: spec.complianceResidency.orchestratorField,
+  siteStepFormat: spec.complianceResidency.siteStepFormat,
+  siteLoopStepFormat: spec.complianceResidency.siteLoopStepFormat,
+  siteOrchestrator: spec.complianceResidency.siteOrchestrator,
+  messageFormat: spec.complianceResidency.messageFormat,
+  suggestion: spec.complianceResidency.suggestion,
+} as const;
+
 /** One credential-shaped literal the `examples:` block refuses. */
 export interface ExampleSecretPattern {
   readonly name: string;
