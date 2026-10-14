@@ -287,6 +287,17 @@ const CASES: Case[] = [
     expectErrorCodes: ['orchestrator_owner_needs_yield'],
   },
   {
+    // enforce_region needs a region to enforce; with both set the flow is clean.
+    file: 'valid-orchestrator-region.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_key', 'unknown_field'],
+  },
+  {
+    file: 'invalid-orchestrator-enforce-region-no-region.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_enforce_region_needs_region'],
+  },
+  {
     // v2.642.0 (DC-FORGE-72): the expression-function catalog is compiled in and
     // nothing is loaded at run time, so `package:` is refused outright.
     file: 'invalid-expression-function-package.yaml',

@@ -177,6 +177,24 @@ export function validateOrchestratorCampaign(
       });
     }
 
+    // enforce_region makes the provider refuse a call that carries no region, so
+    // declaring it without naming one would fail every turn closed; the reference
+    // refuses it at save. `region` is a Go string (any scalar, null = empty) and
+    // is judged after trimming whitespace.
+    if (orch.enforce_region === true) {
+      const region = issues.stringOf(orch, 'region', 'orchestrator');
+      if (region === null || region.trim() === '') {
+        issues.error({
+          field: 'orchestrator.enforce_region',
+          message:
+            'orchestrator: enforce_region requires region (name the region the model must run in, e.g. region: eu)',
+          code: 'orchestrator_enforce_region_needs_region',
+          suggestion:
+            'Add `region: eu` (or the region the model must run in), or drop enforce_region',
+        });
+      }
+    }
+
     if (Array.isArray(orch.triggers)) {
       orch.triggers.forEach((rawTrigger: unknown, i: number) => {
         if (!isRecord(rawTrigger)) return;
