@@ -1300,6 +1300,30 @@ const CASES: Case[] = [
     valid: true,
     forbidWarningCodes: EXAMPLE_WARNING_CODES,
   },
+  {
+    // AIgentFlow v2.821.0: a warning, never an error, so the flow stays valid.
+    file: 'warn-compliance-residency-unenforced.yaml',
+    valid: true,
+    expectWarningCodes: ['compliance_residency_unenforced'],
+  },
+  {
+    file: 'warn-compliance-residency-unenforced-loop.yaml',
+    valid: true,
+    expectWarningCodes: ['compliance_residency_unenforced'],
+  },
+  {
+    // The controls, and the assertions that matter: a rule whose whole risk is a
+    // false positive. Every call here is pinned, or on a provider with no region
+    // lane, so the warning must not appear.
+    file: 'valid-compliance-residency-pinned.yaml',
+    valid: true,
+    forbidWarningCodes: ['compliance_residency_unenforced'],
+  },
+  {
+    file: 'valid-compliance-residency-silent-providers.yaml',
+    valid: true,
+    forbidWarningCodes: ['compliance_residency_unenforced'],
+  },
 ];
 
 describe('conformance fixtures', () => {
