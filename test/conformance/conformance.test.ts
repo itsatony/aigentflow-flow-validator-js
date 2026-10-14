@@ -830,6 +830,40 @@ const CASES: Case[] = [
     forbidErrorCodes: ['display_name_too_long'],
   },
   {
+    file: 'valid-display-name-80-runes.yaml',
+    valid: true,
+    forbidErrorCodes: ['display_name_too_long'],
+  },
+  {
+    file: 'valid-display-name-80-runes-multibyte.yaml',
+    valid: true,
+    forbidErrorCodes: ['display_name_too_long'],
+  },
+  {
+    file: 'invalid-display-name-81-runes.yaml',
+    valid: false,
+    expectErrorCodes: ['display_name_too_long'],
+  },
+  {
+    file: 'invalid-display-name-81-runes-multibyte.yaml',
+    valid: false,
+    expectErrorCodes: ['display_name_too_long'],
+  },
+  {
+    // Orchestrator region pinned and enforced together: clean.
+    file: 'valid-orchestrator-region-enforced.yaml',
+    valid: true,
+    forbidErrorCodes: ['orchestrator_enforce_region_needs_region'],
+  },
+  {
+    // The removed AigentChat schemes are ordinary unknown schemes: a warning, and no
+    // credential/endpoint judgement.
+    file: 'warn-removed-executor-nexus.yaml',
+    valid: true,
+    expectWarningCodes: ['unknown_executor_scheme'],
+    forbidWarningCodes: ['credential_endpoint_unpaired'],
+  },
+  {
     file: 'invalid-display-name-81.yaml',
     valid: false,
     expectErrorCodes: ['display_name_too_long'],
