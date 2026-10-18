@@ -243,6 +243,23 @@ export const SERVER_OWNED_QUERY_KEYS = {
   loopStepFieldFormat: spec.serverOwnedQueryKeys.loopStepFieldFormat,
 } as const;
 
+/**
+ * `flow_data_key_reserved`: top-level `data:` keys that name engine state. `exact`
+ * maps a name to its reason; `prefixes` are checked in order, first match wins.
+ * `messageFormat` takes the quoted key then the reason; `fieldFormat` the key.
+ */
+export const FLOW_DATA_RESERVED_KEYS = {
+  code: spec.flowDataReservedKeys.code,
+  fieldFormat: spec.flowDataReservedKeys.fieldFormat,
+  messageFormat: spec.flowDataReservedKeys.messageFormat,
+  suggestion: spec.flowDataReservedKeys.suggestion,
+  exact: spec.flowDataReservedKeys.exact as Readonly<Record<string, string>>,
+  prefixes: spec.flowDataReservedKeys.prefixes as readonly {
+    readonly prefix: string;
+    readonly reason: string;
+  }[],
+} as const;
+
 /** One row of the reference's per-protocol credential/endpoint family table. */
 export interface CredentialEndpointFamily {
   readonly protocol: string;

@@ -803,6 +803,57 @@ const CASES: Case[] = [
     valid: true,
     forbidErrorCodes: ['server_owned_query_key'],
   },
+  // 0.22.0: a top-level data: key naming engine state is refused (flow_data_key_reserved).
+  {
+    file: 'invalid-flow-data-key-reserved-org-id.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-reserved-memory.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-reserved-underscore.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-reserved-dot.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-reserved-memory-prefix.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-reserved-orchestrator-prefix.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-reserved-campaign-prefix.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-reserved-voiceagent-prefix.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-reserved-current-flow.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'valid-flow-data-key-lookalikes.yaml',
+    valid: true,
+    forbidErrorCodes: ['flow_data_key_reserved'],
+  },
   // 0.15.2 (AIgentFlow DC-FORGE-231 / DC-FORGE-233): an endpoint a
   // server-supplied credential will never be sent to. A WARNING, so each warn-*
   // fixture is valid, and the counter-fixtures FORBID the code: the whole risk
