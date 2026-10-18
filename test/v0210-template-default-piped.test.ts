@@ -131,3 +131,15 @@ describe('strict_templates', () => {
     expect(validateFlow(doc('5')).valid).toBe(false);
   });
 });
+
+describe('template_default_piped: hostile nesting', () => {
+  it('does not overflow the stack on thousands of open parentheses', () => {
+    const hostile = `{{ ${'('.repeat(50_000)}.x | default "w"${')'.repeat(50_000)} }}`;
+    expect(() => pipedDefaultPipelines(hostile)).not.toThrow();
+  });
+  it('still flags a pipeline within the nesting bound', () => {
+    expect(
+      pipedDefaultPipelines(`{{ ${'('.repeat(10)}.x | default "w"${')'.repeat(10)} }}`).length,
+    ).toBeGreaterThan(0);
+  });
+});

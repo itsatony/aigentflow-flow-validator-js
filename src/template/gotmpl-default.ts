@@ -21,6 +21,13 @@ const FUNCTION_NAME = 'default';
 const PIPE = '|';
 const OPEN_PAREN = '(';
 const CLOSE_PAREN = ')';
+/**
+ * Parenthesis nesting past which a pipeline is left unexamined. The validator runs on untrusted
+ * flow documents (browser, CLI, a service), and a template of thousands of `(` would otherwise
+ * overflow the stack; Go's own template parser caps nesting too, so such a template never
+ * runs. Real templates nest a handful of levels.
+ */
+const MAX_NESTING_DEPTH = 100;
 
 /** Control keywords whose remainder is a pipeline (longest first). */
 const PIPELINE_KEYWORDS = /^(?:else\s+if|else\s+with|if|range|with|template|block)(?![\w$.])/;
@@ -41,9 +48,16 @@ export function pipedDefaultPipelines(src: string): string[] {
   const { actions, fatal } = lexActions(src);
   if (fatal) return [];
   const found = new Set<string>();
-  for (const action of actions) {
-    if (action.isComment || action.body === '') continue;
-    scanAction(action.body, found);
+  try {
+    for (const action of actions) {
+      if (action.isComment || action.body === '') continue;
+      scanAction(action.body, found);
+    }
+  } catch (err) {
+    // A rule must never take the validator down: a template this module cannot walk is simply
+    // not examined (the syntax check has its own say about it).
+    if (!(err instanceof RangeError)) throw err;
+    return [];
   }
   return [...found].sort();
 }
@@ -66,7 +80,7 @@ function scanAction(body: string, found: Set<string>): void {
     }
   }
   if (rest === '') return;
-  parsePipeline(rest, 0, false, found);
+  parsePipeline(rest, 0, false, found, 0);
 }
 
 /**
@@ -74,7 +88,14 @@ function scanAction(body: string, found: Set<string>): void {
  * that closes it. Every pipeline met on the way (this one and any parenthesised
  * one) is checked and recorded in `found`.
  */
-function parsePipeline(src: string, start: number, nested: boolean, found: Set<string>): Parsed {
+function parsePipeline(
+  src: string,
+  start: number,
+  nested: boolean,
+  found: Set<string>,
+  depth: number,
+): Parsed {
+  if (depth > MAX_NESTING_DEPTH) return { text: src.slice(start), end: src.length };
   let i = start;
   const n = src.length;
   let decl = '';
@@ -110,7 +131,7 @@ function parsePipeline(src: string, start: number, nested: boolean, found: Set<s
       continue;
     }
     if (c === OPEN_PAREN) {
-      const inner = parsePipeline(src, i + 1, true, found);
+      const inner = parsePipeline(src, i + 1, true, found, depth + 1);
       current.push(`(${inner.text})`);
       i = inner.end;
       continue;
