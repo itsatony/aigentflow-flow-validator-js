@@ -26,6 +26,7 @@ import { validateTemplates } from './validators/templates.js';
 import { validateProcessingOperations } from './validators/processingOperations.js';
 import { validateStepMaxDuration } from './validators/stepMaxDuration.js';
 import { validateRetiredKeys } from './validators/retiredKeys.js';
+import { validateFlowDataKeys } from './validators/flowDataKeys.js';
 import { validateSaveDoorExtras } from './validators/saveDoor.js';
 import { validateUnknownKeys } from './validators/unknownKeys.js';
 import { validateExecutorConfigEnvScopes } from './validators/executorConfigEnv.js';
@@ -119,6 +120,7 @@ function validateParsed(
   validateSaveDoorExtras(f, issues);
   validateExecutorConfigEnvScopes(f, issues);
   validateServerOwnedQueryKeys(f, issues);
+  validateFlowDataKeys(f, issues);
   validateCredentialEndpointPairing(f, issues);
   validateExamples(f, issues);
   // The orchestrator's inline .exons frontmatter. A step's inline `query.exons`

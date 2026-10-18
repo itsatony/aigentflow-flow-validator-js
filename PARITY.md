@@ -4,7 +4,33 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.827.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0, below). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.828.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the rule `flow_data_key_reserved` (package 0.22.0, below). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+
+> package 0.22.0 — **`flow_data_key_reserved`**, in step with the reference (AIgentFlow
+> v2.828.0; `specVersion` 2.828.0). One new **error**: a key of the top-level `data:` map
+> may not name engine state. `data:` is seeded into the mission's `.data` namespace, which
+> is also where the engine keeps its own bookkeeping, so a flow declaring such a key would
+> pre-seed or forge it (a taint list, the current flow, the mission's organization).
+>
+> | Rule (reference)                                               | Code                     | Severity | Module                                                    |
+> | -------------------------------------------------------------- | ------------------------ | -------- | --------------------------------------------------------- |
+> | `FlowDataKeyReservation`, `validateFlowDataKeysAreNotReserved` | `flow_data_key_reserved` | error    | `validators/flowDataKeys.ts`, spec `flowDataReservedKeys` |
+>
+> - **Reserved** (exact, case-sensitive; spec `flowDataReservedKeys`): `memory`,
+>   `orchestrator`, `campaign`, `voiceagent`, `org_id`, `current_flow`, `modified_flow`,
+>   `modification_history`, `modification_pending`, `modification_requests`,
+>   `bottleneck_state`; or a key starting with `_`, `.`, `memory.`, `orchestrator.`,
+>   `campaign.` or `voiceagent.`. Each carries the reference's reason. A key that merely
+>   contains a reserved word (`memory_notes`, `orgid`, `my_memory`) or differs in case is legal.
+> - **Finding.** Field `data.<key>`, one per key, sorted by key; the message is the
+>   reference's `data: key "<key>" is reserved: <reason>. It would write into the engine's
+own state, so it is not seeded.` and the suggestion its text (spec keys `messageFormat`,
+>   `suggestion`). There is no loop-body twin, so no demotion.
+> - **Divergence from the reference's run door.** The reference tolerates this code when a
+>   stored flow is _run_ (the key is skipped, the flow still runs) and refuses it at save.
+>   This validator answers "would this save", so it is an error here, as for every other
+>   save-door rule. Key order is JavaScript's UTF-16 code-unit order, Go's is byte order;
+>   they differ only for keys with characters outside the Basic Multilingual Plane.
 
 > package 0.21.0 — **`here://`, `strict_templates` and `template_default_piped`**, in step
 > with the reference (AIgentFlow v2.827.0; `specVersion` 2.827.0). Three changes.
@@ -1084,6 +1110,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | `tool_discovery` vocabulary, mock scenario `delay`, empty `output:` entry                                               | `validateToolDiscoveryVocabulary`, `validateMockScenarioDelays`, `validateOutputParameters` (parser.go) | `validators/saveDoor.ts`                                  | `validate.test.ts`, `conformance.test.ts`                     |
 | `executor_config` `${NAME}` references outside the key's scope (`executor_config_env_scope`)                            | `ValidateExecutorConfigEnvScopes` (parser.go)                                                           | `validators/executorConfigEnv.ts`                         | `v0150-save-door.test.ts`, `conformance.test.ts`              |
 | A step or loop sub-step `query:` declaring a server-owned key (`server_owned_query_key`)                                | `validateNoServerOwnedStepQueryKeys` (validation.go), `IsServerOwnedParamKey`                           | `validators/serverOwnedQueryKeys.ts`                      | `v0151-save-door.test.ts`, `conformance.test.ts`              |
+| A top-level `data:` key naming engine state (`flow_data_key_reserved`)                                                  | `FlowDataKeyReservation`, `validateFlowDataKeysAreNotReserved` (validation.flowdata.go)                 | `validators/flowDataKeys.ts`                              | `v0220-flow-data-keys.test.ts`, `conformance.test.ts`         |
 | An endpoint a server-supplied credential will never be sent to (`credential_endpoint_unpaired`, warning)                | `validateCredentialEndpointPairing`, `validateFamilyCredentialEndpointPairing` (validation.go)          | `validators/credentialEndpoint.ts`, `validators/goUrl.ts` | `v0152-credential-endpoint.test.ts`, `conformance.test.ts`    |
 | The `examples:` block: 58 codes, one walker (ids, inputs, references, expectations, checkpoints, variants)              | the examples walker (`ValidateExamples`)                                                                | `validators/examples.ts`, `validators/goUrl.ts`           | `examples.test.ts`, `conformance.test.ts`                     |
 | Orchestrator `.exons` frontmatter: spec, provider, `requirements.resources`, `tools.allow` withholds                    | `validateOrchestrator` (parser.go), `validateOrchestratorToolAllowWithholds`                            | `validators/exons.ts`                                     | `v0150-save-door.test.ts`, `conformance.test.ts`              |
