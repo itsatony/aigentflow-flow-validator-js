@@ -14,8 +14,9 @@ import type {
   StepDefinition,
   ValidateOptions,
 } from '../types.js';
-import { TEMPLATE_FUNCTIONS } from '../spec/index.js';
+import { TEMPLATE_FUNCTIONS, TEMPLATE_DEFAULT_PIPED } from '../spec/index.js';
 import { checkGoTemplateSyntax } from '../template/gotmpl-syntax.js';
+import { pipedDefaultPipelines } from '../template/gotmpl-default.js';
 import { Issues, isArray, isRecord, isString } from './util.js';
 import {
   PROCESSING_OP_GUARD_KEY,
@@ -87,6 +88,21 @@ function checkTemplateString(
         suggestion: 'Check Go template syntax: https://pkg.go.dev/text/template',
       });
     }
+  }
+  // The reference walks a parse tree, which exists only for a template that
+  // parses: with any finding above there is nothing to walk, so say nothing.
+  if (errors.length > 0) return;
+  // A flow that RUNS with the wrong data is a save-time judgement: an error at
+  // the top level, a warning in a loop body, exactly like the syntax error.
+  for (const pipe of pipedDefaultPipelines(value)) {
+    report({
+      field,
+      message: TEMPLATE_DEFAULT_PIPED.messageFormat.replace('%s', () => pipe),
+      code: TEMPLATE_DEFAULT_PIPED.code,
+      stepId: stepID,
+      context: `Template: ${value}`,
+      suggestion: TEMPLATE_DEFAULT_PIPED.suggestion,
+    });
   }
 }
 

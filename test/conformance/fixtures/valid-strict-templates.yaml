@@ -1,0 +1,15 @@
+aigentflow_version: '2.0.0'
+name: strict-templates
+version: '1.0.0'
+description: A flow that opts in to strict template rendering.
+strict_templates: true
+start: greet
+steps:
+  greet:
+    executor: function://text/template
+    query:
+      message: 'Hello, {{ default .query.name "world" }}!'
+    next:
+      default: 'null'
+output:
+  - message

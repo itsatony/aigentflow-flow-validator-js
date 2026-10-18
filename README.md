@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.821.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.827.0"`).
 
 ### Options
 
@@ -183,7 +183,7 @@ interface ValidationIssue {
 - **`tool_discovery`** — `eager`/`lazy`/`off` on the flow, the orchestrator, and a step `query` (empty and templated values skipped).
 - **Mock scenarios** — each `delay` must be a Go duration (`100ms`, not `100`), judged by its written spelling: `0` saves, `0.0` does not.
 - **`output:`** — no empty-string entries.
-- **Templates** — Go `text/template` **syntax** across query, processing, and conditions.
+- **Templates** — Go `text/template` **syntax** across query, processing, and conditions; and a value piped into `default` (`{{ .x | default "w" }}`, error; warning in a loop body — `default` takes the value first: `{{ default .x "w" }}`).
 
 ## What it does **not** check
 

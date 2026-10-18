@@ -34,7 +34,7 @@ const ELSE_CONTEXTS = new Set(['if', 'range', 'with']);
 const KEYWORDS = new Set(['if', 'range', 'with', 'block', 'define', 'template', 'else', 'end']);
 const LITERALS = new Set(['true', 'false', 'nil']);
 
-interface Action {
+export interface Action {
   /** Raw inner text between the delimiters (trim markers stripped). */
   body: string;
   /** True for comment actions (the Go `comment` action form). */
@@ -45,7 +45,7 @@ interface Action {
  * Split template source into actions, respecting quoted strings and comments.
  * Returns the actions plus a fatal error if a `{{` is never closed.
  */
-function lexActions(src: string): { actions: Action[]; fatal?: TemplateSyntaxError } {
+export function lexActions(src: string): { actions: Action[]; fatal?: TemplateSyntaxError } {
   const actions: Action[] = [];
   let i = 0;
   const n = src.length;
@@ -127,7 +127,7 @@ function skipSpaces(src: string, idx: number): number {
 }
 
 /** Returns the index of the closing quote, or -1 if unterminated. */
-function scanString(src: string, start: number, quote: string): number {
+export function scanString(src: string, start: number, quote: string): number {
   let i = start + 1;
   const raw = quote === '`'; // backtick raw strings have no escapes
   while (i < src.length) {

@@ -18,6 +18,23 @@ const RESERVED_STEP_ID_ORCHESTRATOR = 'orchestrator';
 // (Go's utf8.RuneCountInString), never in UTF-16 units.
 const DISPLAY_NAME_MAX_LEN = 80;
 
+// The YAML 1.1 boolean spellings yaml.v3 still accepts for a Go `bool` field when
+// they are written as a plain (unquoted) scalar. This port cannot tell a quoted
+// scalar from a plain one, so it accepts them either way (the looser direction).
+const YAML11_BOOL_WORDS: ReadonlySet<string> = new Set(
+  ['y', 'yes', 'on', 'n', 'no', 'off'].flatMap((w) => [
+    w,
+    w.toUpperCase(),
+    w[0]!.toUpperCase() + w.slice(1),
+  ]),
+);
+
+/** A Go `bool` field: a boolean, a YAML null (zero value) or a YAML 1.1 word. */
+function isBoolLike(v: unknown): boolean {
+  if (v === null || typeof v === 'boolean') return true;
+  return typeof v === 'string' && YAML11_BOOL_WORDS.has(v);
+}
+
 export function validateBasicStructure(flow: Flow, issues: Issues): void {
   if (!issues.nonEmptyStringOf(flow, 'aigentflow_version', '')) {
     issues.error({
@@ -49,6 +66,17 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
         suggestion: "Shorten display_name; it is a label, put prose in 'description'",
       });
     }
+  }
+
+  // Optional opt-in to fail a render that reads a missing key. A Go `bool`: the
+  // engine's behaviour is out of scope here, only the value's kind is judged.
+  if (flow.strict_templates !== undefined && !isBoolLike(flow.strict_templates)) {
+    issues.error({
+      field: 'strict_templates',
+      message: 'strict_templates must be a boolean (true or false)',
+      code: 'invalid_type',
+      suggestion: "Write 'strict_templates: true' or remove the key",
+    });
   }
 
   // A Go `string`: `start: 1` names the step "1".

@@ -293,6 +293,44 @@ const CASES: Case[] = [
     forbidWarningCodes: ['unknown_key', 'unknown_field'],
   },
   {
+    // here:// is a known scheme. A rule whose risk is a false positive: a warning
+    // never changes the verdict, so the code is forbidden by name.
+    file: 'valid-executor-here.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'valid-strict-templates.yaml',
+    valid: true,
+    forbidErrorCodes: ['unknown_yaml_key', 'invalid_type', 'template_default_piped'],
+    forbidWarningCodes: ['template_default_piped'],
+  },
+  {
+    file: 'invalid-strict-templates-type.yaml',
+    valid: false,
+    expectErrorCodes: ['invalid_type'],
+  },
+  {
+    // `default` is value first; every spelling of a pipe into it is an error.
+    file: 'invalid-template-default-piped.yaml',
+    valid: false,
+    expectErrorCodes: ['template_default_piped'],
+  },
+  {
+    // Positional, like template_syntax_error: inside a loop body it warns.
+    file: 'warn-template-default-piped-loop.yaml',
+    valid: true,
+    expectWarningCodes: ['template_default_piped'],
+    forbidErrorCodes: ['template_default_piped'],
+  },
+  {
+    // The control: shapes that merely contain the word, or call it correctly.
+    file: 'valid-template-default-clean.yaml',
+    valid: true,
+    forbidErrorCodes: ['template_default_piped'],
+    forbidWarningCodes: ['template_default_piped', 'template_syntax_error'],
+  },
+  {
     file: 'invalid-orchestrator-enforce-region-no-region.yaml',
     valid: false,
     expectErrorCodes: ['orchestrator_enforce_region_needs_region'],

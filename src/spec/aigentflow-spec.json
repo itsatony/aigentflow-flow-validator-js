@@ -1,6 +1,6 @@
 {
   "$comment": "Vendored enum surface mirrored from the AIgentFlow Go reference implementation. Regenerate / review on every flow-YAML schema change. See PARITY.md. Values here are public protocol/type names only.",
-  "specVersion": "2.821.0",
+  "specVersion": "2.827.0",
   "inputSchemaVersion": 1,
   "executorSchemes": [
     "a2a",
@@ -24,6 +24,7 @@
     "geocoding",
     "geovisualize",
     "getmd",
+    "here",
     "homeassistant",
     "hosting",
     "http",
@@ -839,6 +840,13 @@
       }
     }
   },
+  "templateDefaultPiped": {
+    "$comment": "template_default_piped (ERROR at the top level, WARNING inside a loop body, like template_syntax_error). The template function `default` takes the value FIRST; a pipeline that passes a value into it as a non-first command hands the piped value as the LAST argument, so the fallback is always the result. Flagged: any pipeline (in any action, including if / else if / range / with / template / block conditions, parenthesised sub-pipelines and variable declarations) in which a command whose first word is the bare identifier `default` is not the FIRST command. Never flagged: a field, a variable, a string literal, a comment, `default` as the first command. The message fills %s with the pipeline.",
+    "code": "template_default_piped",
+    "function": "default",
+    "messageFormat": "`default` takes the value FIRST, and a pipe passes the piped value LAST: `%s` is `default <fallback> <value>`, so the fallback is always the result",
+    "suggestion": "write the value first and the fallback second, as a call: `{{ default .x \"fallback\" }}`"
+  },
   "complianceResidency": {
     "$comment": "compliance_residency_unenforced (WARNING, never an error; needs no catalogue). When compliance.residency is non-empty and every code (trimmed, upper-cased) is in euResidencyCodes, each top-level step and loop sub-step whose executor starts with aiProtocol+protocolSeparator, then the orchestrator (provider = its exons execution.provider), warns when its provider (literal, lower-cased; skipped when empty or containing templateActionOpen) is in regionLaneProviders and the call is not pinned. Pinned = query region (orchestrator.region) a non-empty string after trimming; OR enforce_region true (query: bool true or the strings in enforceRegionTrueStrings; orchestrator: bool true); OR the author named the endpoint: query <provider>+baseUrlParamSuffix a non-empty string after trimming, or executor_config.<provider>.base_url non-empty after trimming. The provider segment of ai://<provider>/<operation> exists only when a slash follows it. regionLaneProviders is the set of providers whose adapter routes on `region`; a provider outside it has no region lane and is never warned. Message, suggestion and site formats fill %s and %q (a Go-quoted string) in order; the message's last placeholder is the residency list as written, printed [A B]. Reference: validateResidencyEnforcement (validation.residency.go).",
     "code": "compliance_residency_unenforced",
@@ -1202,6 +1210,7 @@
         "rate_limit": "FlowRateLimitConfig",
         "start": "scalar",
         "steps": "map<StepDefinition>",
+        "strict_templates": "scalar",
         "tags": "list<scalar>",
         "template": "FlowTemplateMetadata",
         "tool_discovery": "scalar",
