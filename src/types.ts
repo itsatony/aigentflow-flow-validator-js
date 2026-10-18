@@ -305,6 +305,7 @@ export interface Flow {
   input_schema?: InputSchema;
   classification?: Record<string, unknown>;
   is_template?: boolean;
+  strict_templates?: boolean;
   template?: Record<string, unknown> | null;
   [key: string]: unknown;
 }

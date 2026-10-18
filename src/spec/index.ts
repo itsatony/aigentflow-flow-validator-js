@@ -346,3 +346,11 @@ export const EXAMPLES = {
   })),
   codes: spec.examples.codes as Readonly<Record<string, 'error' | 'warning'>>,
 } as const;
+
+/** The piped-`default` rule: code, function name, message and suggestion. */
+export const TEMPLATE_DEFAULT_PIPED = {
+  code: spec.templateDefaultPiped.code,
+  function: spec.templateDefaultPiped.function,
+  messageFormat: spec.templateDefaultPiped.messageFormat,
+  suggestion: spec.templateDefaultPiped.suggestion,
+};

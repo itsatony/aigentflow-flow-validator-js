@@ -1,0 +1,25 @@
+aigentflow_version: '2.0.0'
+name: template-default-piped
+version: '1.0.0'
+description: >-
+  `default` takes the value FIRST. Every spelling below pipes a value into it,
+  which makes the fallback the result whether or not the value is set.
+start: only
+steps:
+  only:
+    executor: function://text/template
+    query:
+      plain: 'Hello, {{ .query.name | default "world" }}!'
+      number: '{{ .query.n | default 10 }}'
+      midchain: '{{ .query.name | default "w" | upper }}'
+      parenthesised: '{{ (.query.name | default "w") }}'
+      in_if: '{{ if .query.a }}{{ .query.b | default "x" }}{{ end }}'
+      in_range: '{{ range .query.items }}{{ . | default "x" }}{{ end }}'
+      in_with: '{{ with .query.a }}{{ . | default "x" }}{{ end }}'
+      in_define: '{{ define "d" }}{{ .x | default "w" }}{{ end }}{{ template "d" . }}'
+      declared: '{{ $v := .query.a | default "w" }}{{ $v }}'
+      as_argument: '{{ upper (.query.a | default "w") }}'
+    next:
+      default: 'null'
+output:
+  - plain
