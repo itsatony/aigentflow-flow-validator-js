@@ -4,10 +4,10 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.826.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0, below). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.827.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0, below). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
 
 > package 0.21.0 — **`here://`, `strict_templates` and `template_default_piped`**, in step
-> with the reference (AIgentFlow v2.826.0; `specVersion` 2.826.0). Three changes.
+> with the reference (AIgentFlow v2.827.0; `specVersion` 2.827.0). Three changes.
 >
 > 1. **The `here` executor scheme** (`here://maps/{geocode|reverse_geocode|route|places}`) is
 >    added to `executorSchemes`, between `getmd` and `homeassistant`; a `here://` step no longer
