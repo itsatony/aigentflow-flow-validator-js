@@ -763,6 +763,59 @@ const CASES: Case[] = [
     expectWarningCodes: ['potential_infinite_loop'],
     forbidWarningCodes: ['unreachable_step'],
   },
+  // A cycle is a potential infinite loop only when control cannot leave it. The
+  // valid fixtures forbid the warning (valid: true cannot express a false
+  // positive); the warn fixtures must keep it.
+  {
+    file: 'valid-cycle-ask-again-exit.yaml',
+    valid: true,
+    forbidWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'valid-cycle-self-loop-exit.yaml',
+    valid: true,
+    forbidWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'valid-cycle-condition-null.yaml',
+    valid: true,
+    forbidWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'valid-cycle-no-default-ends.yaml',
+    valid: true,
+    forbidWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'valid-cycle-contains-step-without-next.yaml',
+    valid: true,
+    forbidWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'valid-cycle-parallel-exit.yaml',
+    valid: true,
+    forbidWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'valid-cycle-unreachable-not-reported.yaml',
+    valid: true,
+    forbidWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'warn-cycle-two-steps-no-exit.yaml',
+    valid: true,
+    expectWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'warn-cycle-self-loop-no-exit.yaml',
+    valid: true,
+    expectWarningCodes: ['potential_infinite_loop'],
+  },
+  {
+    file: 'warn-cycle-after-exiting-cycle.yaml',
+    valid: true,
+    expectWarningCodes: ['potential_infinite_loop'],
+  },
   // 0.15.1 (AIgentFlow CFX-05): a step or loop sub-step query may not declare
   // a server-owned parameter. One fixture per key per surface, so dropping a key
   // from the spec set, or either surface from the scan, goes red here.
