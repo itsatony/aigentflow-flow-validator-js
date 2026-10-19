@@ -854,6 +854,27 @@ const CASES: Case[] = [
     valid: true,
     forbidErrorCodes: ['flow_data_key_reserved'],
   },
+  // 0.23.0: a function:// operation outside the built-in set is refused (unknown_function_operation).
+  {
+    file: 'invalid-function-operation-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_function_operation'],
+  },
+  {
+    file: 'invalid-function-operation-unknown-loop-substep.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_function_operation'],
+  },
+  {
+    file: 'valid-function-operation-builtins.yaml',
+    valid: true,
+    forbidErrorCodes: ['unknown_function_operation'],
+  },
+  {
+    file: 'valid-function-operation-templated.yaml',
+    valid: true,
+    forbidErrorCodes: ['unknown_function_operation'],
+  },
   // 0.15.2 (AIgentFlow DC-FORGE-231 / DC-FORGE-233): an endpoint a
   // server-supplied credential will never be sent to. A WARNING, so each warn-*
   // fixture is valid, and the counter-fixtures FORBID the code: the whole risk

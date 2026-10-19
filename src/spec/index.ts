@@ -371,3 +371,17 @@ export const TEMPLATE_DEFAULT_PIPED = {
   messageFormat: spec.templateDefaultPiped.messageFormat,
   suggestion: spec.templateDefaultPiped.suggestion,
 };
+
+/**
+ * `unknown_function_operation`: the closed set of built-in `function://` operations
+ * (authority + "/" + path, sorted). `messageFormat` takes the quoted step id, the
+ * operation, then the comma-joined list; `suggestionFormat` takes the list.
+ */
+export const FUNCTION_OPERATIONS = {
+  code: spec.functionOperations.code,
+  scheme: spec.functionOperations.scheme,
+  messageFormat: spec.functionOperations.messageFormat,
+  suggestionFormat: spec.functionOperations.suggestionFormat,
+  operations: new Set<string>(spec.functionOperations.operations),
+  sorted: spec.functionOperations.operations as readonly string[],
+} as const;

@@ -72,7 +72,7 @@ steps:
       max_iterations: 2
       steps:
         - id: b
-          executor: function://text/template
+          executor: function://utils/log
           query:
             m: '${message}'
     next:
@@ -85,7 +85,7 @@ version: '1.0.0'
 start: s
 steps:
   s:
-    executor: function://text/template
+    executor: function://utils/log
     query:
       m: '${message}'
     next:

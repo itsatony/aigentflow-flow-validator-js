@@ -4,7 +4,31 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.828.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the rule `flow_data_key_reserved` (package 0.22.0, below). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.831.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+
+> package 0.23.0 — **`unknown_function_operation`**, in step with the reference (AIgentFlow
+> v2.831.0; `specVersion` 2.831.0). One new **error**: a step or loop sub-step whose executor
+> is `function://<a>/<b>` where `<a>/<b>` is not one of the 32 registered built-ins. Before
+> this, `function://utils/noop` validated and then failed every run with "function
+> 'utils/noop' not found".
+>
+> | Rule (reference)                             | Code                         | Severity | Module                                               |
+> | -------------------------------------------- | ---------------------------- | -------- | ---------------------------------------------------- |
+> | `validateFunctionOperationKnown` (parser.go) | `unknown_function_operation` | error    | `validators/executors.ts`, spec `functionOperations` |
+>
+> - **Operation** = authority + `/` + path of the executor URL (so `binary-processor/validate-and-store`).
+>   The set is closed and sorted in spec `functionOperations.operations`. Templated executors
+>   (containing `{{`), unparsable URLs (`invalid_executor_url` owns them) and other schemes are
+>   skipped; the scheme match is exact and case-sensitive.
+> - **Finding.** Field `steps.<id>.executor` (loop sub-step: `steps.<id>.loop.steps[i].executor`,
+>   step id `<id>.<sub>`); message `step "<id>" uses function://<op>, which is not a built-in
+function. Available: <sorted list, ", ">`; the suggestion carries the list.
+> - **Divergence 23** (below): the reference tolerates this code on its load door.
+> - **`unknown_executor_scheme` text (still a warning).** For `decide` the message appends
+>   `Decision models run through ai://{provider}/decide (for example ai://openai/decide), not
+through a scheme of their own.`; for any other unknown scheme with a known scheme within
+>   edit distance 2 (case-insensitive; the closest, ties to the alphabetically first) it
+>   appends `Did you mean '<scheme>'?`. No verdict changes.
 
 > package 0.22.0 — **`flow_data_key_reserved`**, in step with the reference (AIgentFlow
 > v2.828.0; `specVersion` 2.828.0). One new **error**: a key of the top-level `data:` map
@@ -1110,6 +1134,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | `tool_discovery` vocabulary, mock scenario `delay`, empty `output:` entry                                               | `validateToolDiscoveryVocabulary`, `validateMockScenarioDelays`, `validateOutputParameters` (parser.go) | `validators/saveDoor.ts`                                  | `validate.test.ts`, `conformance.test.ts`                     |
 | `executor_config` `${NAME}` references outside the key's scope (`executor_config_env_scope`)                            | `ValidateExecutorConfigEnvScopes` (parser.go)                                                           | `validators/executorConfigEnv.ts`                         | `v0150-save-door.test.ts`, `conformance.test.ts`              |
 | A step or loop sub-step `query:` declaring a server-owned key (`server_owned_query_key`)                                | `validateNoServerOwnedStepQueryKeys` (validation.go), `IsServerOwnedParamKey`                           | `validators/serverOwnedQueryKeys.ts`                      | `v0151-save-door.test.ts`, `conformance.test.ts`              |
+| A `function://` operation outside the built-in set (`unknown_function_operation`)                                       | `validateFunctionOperationKnown` (parser.go)                                                            | `validators/executors.ts`                                 | `v0230-function-operation.test.ts`, `conformance.test.ts`     |
 | A top-level `data:` key naming engine state (`flow_data_key_reserved`)                                                  | `FlowDataKeyReservation`, `validateFlowDataKeysAreNotReserved` (validation.flowdata.go)                 | `validators/flowDataKeys.ts`                              | `v0220-flow-data-keys.test.ts`, `conformance.test.ts`         |
 | An endpoint a server-supplied credential will never be sent to (`credential_endpoint_unpaired`, warning)                | `validateCredentialEndpointPairing`, `validateFamilyCredentialEndpointPairing` (validation.go)          | `validators/credentialEndpoint.ts`, `validators/goUrl.ts` | `v0152-credential-endpoint.test.ts`, `conformance.test.ts`    |
 | The `examples:` block: 58 codes, one walker (ids, inputs, references, expectations, checkpoints, variants)              | the examples walker (`ValidateExamples`)                                                                | `validators/examples.ts`, `validators/goUrl.ts`           | `examples.test.ts`, `conformance.test.ts`                     |
@@ -1379,6 +1404,11 @@ number their shared divergences alike._
       `%v` (shortest form, an exponent below `1e-4` and from `1e6`).
     - The recursion bound of 32 on a nested value is the reference's own and is not in the
       spec.
+
+23. **`unknown_function_operation` is tolerated on the reference's load door (0.23.0).** The
+    reference refuses an unknown `function://` operation when a flow is _saved_ but loads
+    (and then fails at run time) a stored flow that already carries one. This validator
+    answers "would this save", so it is an error here, as for every other save-door rule.
 
 ---
 

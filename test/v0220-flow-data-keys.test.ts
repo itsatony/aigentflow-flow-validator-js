@@ -16,7 +16,7 @@ data:
 ${lines.map((l) => `  ${l}`).join('\n')}
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
 `;
 
 const reservedFindings = (lines: string[]) =>
@@ -139,7 +139,7 @@ version: 1.0.0
 start: only
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
 `);
     expect(none.errors.some((e) => e.code === CODE)).toBe(false);
   });

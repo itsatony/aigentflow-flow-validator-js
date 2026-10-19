@@ -15,7 +15,7 @@ version: 1.0.0
 start: only
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
 `;
 
 const loopFlow = (subSteps: string): string => `aigentflow_version: "2.0.0"
@@ -61,7 +61,7 @@ describe('server_owned_query_key', () => {
   it('addresses a loop sub-step by its id and names the loop step', () => {
     const r = validateFlow(
       loopFlow(
-        '        - id: fetch\n          executor: function://text/noop\n          query:\n            aiv_api_key: k\n',
+        '        - id: fetch\n          executor: function://utils/log\n          query:\n            aiv_api_key: k\n',
       ),
     );
     expect(findings(r)).toEqual([
@@ -72,7 +72,7 @@ describe('server_owned_query_key', () => {
   it('reads a numeric sub-step id by its source text', () => {
     const r = validateFlow(
       loopFlow(
-        '        - id: 07\n          executor: function://text/noop\n          query:\n            aiv_delegation: x\n',
+        '        - id: 07\n          executor: function://utils/log\n          query:\n            aiv_delegation: x\n',
       ),
     );
     expect(findings(r)).toEqual([
@@ -83,7 +83,7 @@ describe('server_owned_query_key', () => {
   it('addresses a sub-step without an id by the empty string (the reference refuses it at parse)', () => {
     const r = validateFlow(
       loopFlow(
-        '        - executor: function://text/noop\n          query:\n            aiv_base_url: https://h.example\n',
+        '        - executor: function://utils/log\n          query:\n            aiv_base_url: https://h.example\n',
       ),
     );
     expect(findings(r)).toEqual([

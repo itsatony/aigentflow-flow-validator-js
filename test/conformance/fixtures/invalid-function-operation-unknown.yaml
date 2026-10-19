@@ -1,0 +1,14 @@
+aigentflow_version: '2.0.0'
+name: function-operation-unknown
+version: '1.0.0'
+description: A function:// executor naming an operation that is not registered fails every run, so the save door refuses it.
+start: first
+steps:
+  first:
+    executor: function://utils/noop
+    query:
+      message: hi
+    next:
+      default: 'null'
+output:
+  - done

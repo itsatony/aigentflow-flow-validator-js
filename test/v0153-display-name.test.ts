@@ -12,7 +12,7 @@ display_name: ${JSON.stringify(displayName)}
 start: only
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
 `;
 
 describe('display_name', () => {

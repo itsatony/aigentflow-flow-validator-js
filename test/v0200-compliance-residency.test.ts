@@ -117,7 +117,7 @@ describe('compliance_residency_unenforced', () => {
       'ai:///chat',
       'ai://openai',
       'exons://agent/execute',
-      'function://text/template',
+      'function://utils/log',
       'AI://openai/chat',
     ]) {
       expect(warnings(flow({ stepExecutor: e })), e).toHaveLength(0);

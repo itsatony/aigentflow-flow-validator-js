@@ -97,7 +97,7 @@ const SHAPES: { name: string; src: string; want: string[] }[] = [
   },
   {
     name: 'ai: executor_config base_url warns with no step using the provider',
-    src: "aigentflow_version: '2.0.0'\nname: p\nversion: '1.0.0'\ndescription: d\nstart: s\nexecutor_config:\n  cohere:\n    base_url: 8080\n  not_a_provider:\n    base_url: 'https://x.example.com'\nsteps:\n  s:\n    executor: function://text/template\n    query:\n      message: hi\n",
+    src: "aigentflow_version: '2.0.0'\nname: p\nversion: '1.0.0'\ndescription: d\nstart: s\nexecutor_config:\n  cohere:\n    base_url: 8080\n  not_a_provider:\n    base_url: 'https://x.example.com'\nsteps:\n  s:\n    executor: function://utils/log\n    query:\n      message: hi\n",
     want: ['executor_config.cohere.base_url'],
   },
   {

@@ -1,0 +1,21 @@
+aigentflow_version: '2.0.0'
+name: function-operation-unknown-loop-substep
+version: '1.0.0'
+description: The same refusal applies to a loop sub-step executor.
+start: first
+steps:
+  first:
+    loop:
+      while: '{{ lt (atoi .loop.vars.n) 3 }}'
+      max_iterations: 5
+      vars:
+        n: '0'
+      steps:
+        - id: body
+          executor: function://utils/noop
+          query:
+            message: hi
+    next:
+      default: 'null'
+output:
+  - done
