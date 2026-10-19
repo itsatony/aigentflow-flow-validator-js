@@ -204,30 +204,110 @@ export function validateConnectivity(flow: Flow, issues: Issues): void {
     }
   }
 
-  // Cycle detection (DFS with recursion stack).
-  const visited = new Set<string>();
-  const recStack = new Set<string>();
-  const hasCycle = (stepID: string): boolean => {
-    if (recStack.has(stepID)) return true;
-    if (visited.has(stepID)) return false;
-    visited.add(stepID);
-    recStack.add(stepID);
-    const step = steps[stepID];
-    if (isRecord(step) && isRecord(step.next)) {
-      const next = step.next as NextLogicDefinition;
-      for (const target of cycleTargets(next, `steps.${stepID}.next`, issues)) {
-        if (hasCycle(target)) return true;
-      }
-    }
-    recStack.delete(stepID);
-    return false;
-  };
-  if (hasCycle(start)) {
+  // Cycle detection: only a cycle with no way out is potentially infinite.
+  if (cycleWithoutExit(steps, start, issues)) {
     issues.warn({
       field: 'steps',
-      message: 'Potential infinite loop detected in step flow',
+      message: 'Potential infinite loop detected in step flow: a cycle of steps has no way out',
       code: 'potential_infinite_loop',
-      suggestion: 'Review your step transitions to ensure they eventually terminate',
+      suggestion:
+        'Give one step in the cycle a `next.conditions` branch that leaves it (or end the flow there)',
     });
   }
+}
+
+/**
+ * Every target the cycle analysis follows from a step (`next.default` and
+ * `next.conditions[].goto`), INCLUDING the terminal markers, which the exit
+ * check needs to see (`cycleTargets` drops them).
+ */
+function cycleEdges(step: unknown, stepID: string, issues: Issues): string[] {
+  if (!isRecord(step) || !isRecord(step.next)) return [];
+  const next = step.next as NextLogicDefinition;
+  const nextPath = `steps.${stepID}.next`;
+  const out: string[] = [];
+  const def = issues.stringOf(next, 'default', nextPath);
+  if (def !== null && def !== '') out.push(def);
+  if (Array.isArray(next.conditions)) {
+    (next.conditions as NextCondition[]).forEach((cond, i) => {
+      if (!isRecord(cond)) return;
+      const goto = issues.stringOf(cond, 'goto', `${nextPath}.conditions[${i}]`);
+      if (goto !== null && goto !== '') out.push(goto);
+    });
+  }
+  return out;
+}
+
+/**
+ * Whether control can leave the strongly connected set from this step: the flow
+ * can end here (no next, or no default so the flow ends when no condition
+ * matches), it fans out (parallel edges are not followed, so a fan-out counts as
+ * an exit rather than being guessed at), or a branch names a terminal marker or a
+ * step outside the set.
+ */
+function stepLeavesCycle(
+  steps: Record<string, unknown>,
+  stepID: string,
+  inCycle: Set<string>,
+  issues: Issues,
+): boolean {
+  const step = steps[stepID];
+  if (!isRecord(step) || !isRecord(step.next)) return true;
+  const next = step.next as NextLogicDefinition;
+  if (next.parallel !== undefined && next.parallel !== null) return true;
+  const def = issues.stringOf(next, 'default', `steps.${stepID}.next`);
+  if (def === null || def === '') return true;
+  for (const target of cycleEdges(step, stepID, issues)) {
+    if (isMarker(target) || !inCycle.has(target)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a cycle reachable from `start` has no exit: Tarjan's strongly
+ * connected components over default + condition edges. It cannot prove an exit
+ * condition ever fires; that is undecidable from the YAML.
+ */
+function cycleWithoutExit(steps: Record<string, unknown>, start: string, issues: Issues): boolean {
+  let index = 0;
+  const indices = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  let found = false;
+
+  const strong = (id: string): void => {
+    indices.set(id, index);
+    low.set(id, index);
+    index++;
+    stack.push(id);
+    onStack.add(id);
+
+    for (const target of cycleEdges(steps[id], id, issues)) {
+      if (isMarker(target) || !Object.prototype.hasOwnProperty.call(steps, target)) continue;
+      if (!indices.has(target)) {
+        strong(target);
+        low.set(id, Math.min(low.get(id) as number, low.get(target) as number));
+      } else if (onStack.has(target)) {
+        low.set(id, Math.min(low.get(id) as number, indices.get(target) as number));
+      }
+    }
+
+    if (low.get(id) !== indices.get(id)) return;
+    const component: string[] = [];
+    for (;;) {
+      const top = stack.pop() as string;
+      onStack.delete(top);
+      component.push(top);
+      if (top === id) break;
+    }
+    const inCycle = new Set(component);
+    const cyclic = component.length > 1 || cycleEdges(steps[id], id, issues).includes(id);
+    if (!cyclic) return;
+    if (component.some((member) => stepLeavesCycle(steps, member, inCycle, issues))) return;
+    found = true;
+  };
+
+  if (Object.prototype.hasOwnProperty.call(steps, start)) strong(start);
+  return found;
 }

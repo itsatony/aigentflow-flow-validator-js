@@ -6,6 +6,22 @@ discipline for keeping the two in sync.
 
 **Tracks AIgentFlow flow schema: `v2.831.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
 
+> package 0.24.0 — **`potential_infinite_loop` fires only on a cycle with no way out**, in step
+> with the reference. It used to fire on every cycle reachable from the start step, so a deliberate
+> ask-again loop (a step that routes back until a condition sends it onward) carried a warning that
+> told the author nothing. The reference now computes the strongly connected sets (Tarjan) over
+> `next.default` and `next.conditions[].goto` edges reachable from start (markers `null` /
+> `orchestrator` and unknown steps are not followed; `end` is an ordinary step) and warns once when
+> a cyclic set (more than one step, or a self-loop) has no exit. A member leaves the set when it has
+> no `next`, its `next` has `parallel` (a fan-out is treated as an exit, not guessed at), its
+> `next.default` is empty (when no condition matches the flow ends), or any default or condition
+> target is `null`, `orchestrator` or a step outside the set. Code and severity are unchanged; the
+> message now ends "a cycle of steps has no way out" and the suggestion asks for a `next.conditions`
+> branch that leaves the cycle. It cannot prove an exit ever fires; that is undecidable from the
+> YAML. Module: `validators/connectivity.ts`. Gates: ten `valid-cycle-*` / `warn-cycle-*` fixtures
+> (the valid ones use `forbidWarningCodes`, the only way to assert a false-positive risk), shared
+> byte for byte with the Go port. On the 227 bundled example flows both ports report 0 findings.
+
 > package 0.23.0 — **`unknown_function_operation`**, in step with the reference (AIgentFlow
 > v2.831.0; `specVersion` 2.831.0). One new **error**: a step or loop sub-step whose executor
 > is `function://<a>/<b>` where `<a>/<b>` is not one of the 32 registered built-ins. Before
