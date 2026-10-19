@@ -180,7 +180,7 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
           message: 'Executor is required for each step',
           code: 'missing_required_field',
           stepId: stepID,
-          suggestion: "Specify an executor URL (e.g., 'function://demo/processor')",
+          suggestion: "Specify an executor URL (e.g., 'function://utils/log')",
         });
       } else if (executorText === null) {
         issues.error({

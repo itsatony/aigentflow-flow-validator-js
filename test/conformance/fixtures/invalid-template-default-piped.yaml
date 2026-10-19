@@ -7,7 +7,7 @@ description: >-
 start: only
 steps:
   only:
-    executor: function://text/template
+    executor: function://utils/log
     query:
       plain: 'Hello, {{ .query.name | default "world" }}!'
       number: '{{ .query.n | default 10 }}'

@@ -17,6 +17,6 @@ data:
   org: 'x'
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
     next:
       default: 'null'

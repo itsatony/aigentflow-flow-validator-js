@@ -8,6 +8,6 @@ data:
   '__untrusted_steps': ['forged']
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
     next:
       default: 'null'

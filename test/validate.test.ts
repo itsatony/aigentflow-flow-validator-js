@@ -13,7 +13,7 @@ const MINIMAL = {
   aigentflow_version: '2.0.0',
   name: 'minimal',
   start: 'a',
-  steps: { a: { executor: 'function://text/noop' } },
+  steps: { a: { executor: 'function://utils/log' } },
 };
 
 describe('basic structure', () => {
@@ -841,7 +841,7 @@ describe('input_schema', () => {
 
 describe('processing-operation shape', () => {
   function opFlow(ops: unknown[], phase = 'post_processing') {
-    return { ...MINIMAL, steps: { a: { executor: 'function://text/noop', [phase]: ops } } };
+    return { ...MINIMAL, steps: { a: { executor: 'function://utils/log', [phase]: ops } } };
   }
 
   it('warns about an operation type the engine does not dispatch', () => {
@@ -932,7 +932,7 @@ describe('templates + summary', () => {
         ...MINIMAL,
         steps: {
           a: {
-            executor: 'function://text/noop',
+            executor: 'function://utils/log',
             query: { v: '{{ divf (addf (mulf 2 0.5) 1) (float64 "2") }} {{ subf 3 1 }}' },
           },
         },
@@ -943,7 +943,7 @@ describe('templates + summary', () => {
     const control = validateFlowObject(
       {
         ...MINIMAL,
-        steps: { a: { executor: 'function://text/noop', query: { v: '{{ addg 1 2 }}' } } },
+        steps: { a: { executor: 'function://utils/log', query: { v: '{{ addg 1 2 }}' } } },
       },
       { strictRegistries: true },
     );
@@ -1136,19 +1136,19 @@ describe('loop bodies (DC-FORGE-78)', () => {
     const sites: Array<[string, Record<string, unknown>, string]> = [
       [
         'query',
-        { id: 'b', executor: 'function://text/noop', query: { m: '{{ .x ' } },
+        { id: 'b', executor: 'function://utils/log', query: { m: '{{ .x ' } },
         'loop.steps[0].query',
       ],
       [
         'condition',
-        { id: 'b', executor: 'function://text/noop', condition: '{{ .x ' },
+        { id: 'b', executor: 'function://utils/log', condition: '{{ .x ' },
         'loop.steps[0].condition',
       ],
       [
         'pre_processing',
         {
           id: 'b',
-          executor: 'function://text/noop',
+          executor: 'function://utils/log',
           pre_processing: [{ 'data.set': { k: '{{ .x ' } }],
         },
         'loop.steps[0].pre_processing[0]',
@@ -1157,7 +1157,7 @@ describe('loop bodies (DC-FORGE-78)', () => {
         'post_processing',
         {
           id: 'b',
-          executor: 'function://text/noop',
+          executor: 'function://utils/log',
           post_processing: [{ 'data.set': { k: '{{ .x ' } }],
         },
         'loop.steps[0].post_processing[0]',
@@ -1166,7 +1166,7 @@ describe('loop bodies (DC-FORGE-78)', () => {
         'next.conditions',
         {
           id: 'b',
-          executor: 'function://text/noop',
+          executor: 'function://utils/log',
           next: { conditions: [{ if: '{{ .x ', goto: 'b' }] },
         },
         'loop.steps[0].next.conditions[0].if',
@@ -1186,7 +1186,7 @@ describe('loop bodies (DC-FORGE-78)', () => {
     // before the walk existed. The code survives the demotion; only severity
     // changes — dropping the finding would be worse than an error.
     const r = validateFlowObject(
-      loopFlow({ id: 'b', executor: 'function://text/noop', query: { m: '{{ .x ' } }),
+      loopFlow({ id: 'b', executor: 'function://utils/log', query: { m: '{{ .x ' } }),
     );
     expect(r.valid).toBe(true);
     expect(r.errors.filter((e) => e.field.includes('loop.steps['))).toHaveLength(0);
@@ -1198,7 +1198,7 @@ describe('loop bodies (DC-FORGE-78)', () => {
       const inBody = validateFlowObject(
         loopFlow({
           id: 'b',
-          executor: 'function://text/noop',
+          executor: 'function://utils/log',
           post_processing: [{ [op]: { if: 'true' } }],
         }),
       );
@@ -1209,7 +1209,7 @@ describe('loop bodies (DC-FORGE-78)', () => {
       const topLevel = validateFlowObject({
         ...MINIMAL,
         steps: {
-          a: { executor: 'function://text/noop', post_processing: [{ [op]: { if: 'true' } }] },
+          a: { executor: 'function://utils/log', post_processing: [{ [op]: { if: 'true' } }] },
         },
       });
       expect(warnCodes(topLevel), `${op} is NOT dispatchable at the top level`).toContain(
@@ -1228,7 +1228,7 @@ describe('loop bodies (DC-FORGE-78)', () => {
       '{{ int .query.t }}',
     ]) {
       const r = validateFlowObject(
-        { ...MINIMAL, steps: { a: { executor: 'function://text/noop', query: { m: expr } } } },
+        { ...MINIMAL, steps: { a: { executor: 'function://utils/log', query: { m: expr } } } },
         { strictRegistries: true },
       );
       expect(codes(r), `${expr} must be accepted`).not.toContain('template_function_unknown');
@@ -1236,7 +1236,7 @@ describe('loop bodies (DC-FORGE-78)', () => {
     const invented = validateFlowObject(
       {
         ...MINIMAL,
-        steps: { a: { executor: 'function://text/noop', query: { m: '{{ env.API_KEY }}' } } },
+        steps: { a: { executor: 'function://utils/log', query: { m: '{{ env.API_KEY }}' } } },
       },
       { strictRegistries: true },
     );
@@ -1382,8 +1382,8 @@ describe('retired limit keys (AIF DC-FORGE-150, v2.721.0)', () => {
     const r = validateFlowObject({
       ...MINIMAL,
       steps: {
-        a: { executor: 'function://text/noop', max_retries: 0, next: { default: 'b' } },
-        b: { executor: 'function://text/noop', max_retries: 3 },
+        a: { executor: 'function://utils/log', max_retries: 0, next: { default: 'b' } },
+        b: { executor: 'function://utils/log', max_retries: 3 },
       },
     });
     expect(retired(r).map((e) => [e.field, e.stepId])).toEqual([
@@ -1400,7 +1400,7 @@ describe('retired limit keys (AIF DC-FORGE-150, v2.721.0)', () => {
           loop: {
             while: '{{ lt .loop.index 3 }}',
             max_iterations: 3,
-            steps: [{ id: 'inner', executor: 'function://text/noop', max_retries: 2 }],
+            steps: [{ id: 'inner', executor: 'function://utils/log', max_retries: 2 }],
           },
         },
       },
@@ -1417,7 +1417,7 @@ describe('retired limit keys (AIF DC-FORGE-150, v2.721.0)', () => {
       error_strategy: { action: 'retry', max_retries: 2 },
       steps: {
         a: {
-          executor: 'function://text/noop',
+          executor: 'function://utils/log',
           error_strategy: { action: 'retry', max_retries: 0 },
           quality_gate: { rubric: 'ok', threshold: 0.5, on_fail: 'retry', max_retries: 1 },
           query: { budget: 5, max_retries: 4 },
@@ -1486,7 +1486,7 @@ describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
             loop: {
               while: 'true',
               max_iterations: 2,
-              steps: [{ id, executor: 'function://text/noop' }],
+              steps: [{ id, executor: 'function://utils/log' }],
             },
           },
         },
@@ -1504,7 +1504,7 @@ describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
           loop: {
             while: 'true',
             max_iterations: 2,
-            steps: [{ id: 'iteration', executor: 'function://text/noop' }],
+            steps: [{ id: 'iteration', executor: 'function://utils/log' }],
           },
         },
       },
@@ -1559,7 +1559,7 @@ describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
 describe('unknown template functions by default (PARITY.md divergence #4)', () => {
   const flow = {
     ...MINIMAL,
-    steps: { a: { executor: 'function://text/noop', query: { m: '{{query.source_text}}' } } },
+    steps: { a: { executor: 'function://utils/log', query: { m: '{{query.source_text}}' } } },
   };
 
   it('warns by default and keeps the verdict valid', () => {
@@ -1577,7 +1577,7 @@ describe('unknown template functions by default (PARITY.md divergence #4)', () =
   it('says nothing about a registered function', () => {
     const r = validateFlowObject({
       ...MINIMAL,
-      steps: { a: { executor: 'function://text/noop', query: { m: '{{ addf 1.5 2 }}' } } },
+      steps: { a: { executor: 'function://utils/log', query: { m: '{{ addf 1.5 2 }}' } } },
     });
     expect(warnCodes(r)).not.toContain('template_function_unknown');
   });
@@ -1589,7 +1589,7 @@ describe('unknown template functions by default (PARITY.md divergence #4)', () =
 describe('save-door refusals (reference FlowParser.ValidateFlow)', () => {
   const withQuery = (query: Record<string, unknown>) => ({
     ...MINIMAL,
-    steps: { a: { executor: 'function://text/noop', query } },
+    steps: { a: { executor: 'function://utils/log', query } },
   });
   const orchestrator = {
     agentic: true,
@@ -1601,7 +1601,7 @@ describe('save-door refusals (reference FlowParser.ValidateFlow)', () => {
     const flow = (id: string) => ({
       ...MINIMAL,
       start: id,
-      steps: { [id]: { executor: 'function://text/noop' } },
+      steps: { [id]: { executor: 'function://utils/log' } },
     });
     const r = validateFlowObject(flow('orchestrator'));
     expect(r.errors.find((e) => e.code === 'reserved_step_id_orchestrator')?.field).toBe(

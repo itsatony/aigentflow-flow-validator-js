@@ -15,7 +15,7 @@ version: 1.0.0
 start: only
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
 `;
 
 const codes = (issues: ValidationResult['errors']): string[] => issues.map((i) => i.code);
@@ -278,7 +278,7 @@ describe('orchestrator frontmatter shapes (Go port v0.6.0 verdicts)', () => {
     it(name, () => {
       const src =
         "aigentflow_version: '2.0.0'\nname: f\nversion: '1.0.0'\nstart: s\nsteps:\n  s:\n" +
-        '    executor: function://text/template\norchestrator:\n  agentic: true\n  exons: ' +
+        '    executor: function://utils/log\norchestrator:\n  agentic: true\n  exons: ' +
         quote(doc) +
         '\n';
       const r = validateFlow(src);

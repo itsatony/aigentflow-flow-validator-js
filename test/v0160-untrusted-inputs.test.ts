@@ -28,7 +28,7 @@ input_schema:
       untrusted: true
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
 `;
     expect(unknownKeyFields(yaml)).toEqual([]);
   });
@@ -61,7 +61,7 @@ version: 1.0.0
 start: only
 steps:
   only:
-    executor: function://text/noop
+    executor: function://utils/log
     allow_untrusts: [url]
 `;
     expect(unknownKeyFields(yaml).length).toBeGreaterThan(0);
