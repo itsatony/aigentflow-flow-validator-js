@@ -928,6 +928,113 @@ const CASES: Case[] = [
     valid: true,
     forbidErrorCodes: ['unknown_function_operation'],
   },
+  // 0.25.0: the atlas:// executor scheme and its seven rules.
+  {
+    file: 'invalid-atlas-operation-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_operation_unknown'],
+  },
+  {
+    file: 'invalid-atlas-operation-agent-resource.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_operation_unknown'],
+  },
+  {
+    file: 'invalid-atlas-agent-missing.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_agent_missing'],
+  },
+  {
+    file: 'invalid-atlas-agent-not-literal.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_agent_not_literal'],
+  },
+  {
+    file: 'invalid-atlas-capabilities-not-literal.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_capabilities_not_literal'],
+  },
+  {
+    file: 'invalid-atlas-prompt-missing.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_prompt_missing'],
+  },
+  { file: 'invalid-atlas-prompt-both.yaml', valid: false, expectErrorCodes: ['atlas_prompt_both'] },
+  {
+    file: 'invalid-atlas-capability-ref-invalid.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_capability_ref_invalid'],
+  },
+  {
+    file: 'valid-atlas-agent-run-prompt.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'atlas_agent_missing',
+      'atlas_agent_not_literal',
+      'atlas_capabilities_not_literal',
+      'atlas_capability_ref_invalid',
+      'atlas_operation_unknown',
+      'atlas_prompt_both',
+      'atlas_prompt_missing',
+    ],
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'valid-atlas-agent-run-prompt-template.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'atlas_agent_missing',
+      'atlas_agent_not_literal',
+      'atlas_capabilities_not_literal',
+      'atlas_capability_ref_invalid',
+      'atlas_operation_unknown',
+      'atlas_prompt_both',
+      'atlas_prompt_missing',
+    ],
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'valid-atlas-capability-call.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'atlas_agent_missing',
+      'atlas_agent_not_literal',
+      'atlas_capabilities_not_literal',
+      'atlas_capability_ref_invalid',
+      'atlas_operation_unknown',
+      'atlas_prompt_both',
+      'atlas_prompt_missing',
+    ],
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'valid-atlas-templated-values.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'atlas_agent_missing',
+      'atlas_agent_not_literal',
+      'atlas_capabilities_not_literal',
+      'atlas_capability_ref_invalid',
+      'atlas_operation_unknown',
+      'atlas_prompt_both',
+      'atlas_prompt_missing',
+    ],
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'valid-atlas-capability-args-templated.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'atlas_agent_missing',
+      'atlas_agent_not_literal',
+      'atlas_capabilities_not_literal',
+      'atlas_capability_ref_invalid',
+      'atlas_operation_unknown',
+      'atlas_prompt_both',
+      'atlas_prompt_missing',
+    ],
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
   // 0.15.2 (AIgentFlow DC-FORGE-231 / DC-FORGE-233): an endpoint a
   // server-supplied credential will never be sent to. A WARNING, so each warn-*
   // fixture is valid, and the counter-fixtures FORBID the code: the whole risk

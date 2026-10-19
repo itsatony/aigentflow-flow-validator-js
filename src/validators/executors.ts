@@ -22,6 +22,7 @@
 
 import type { Flow, LoopSubStep, StepDefinition } from '../types.js';
 import {
+  ATLAS_EXECUTOR,
   EXECUTOR_SCHEMES,
   EXECUTOR_URL_PATTERN,
   FUNCTION_OPERATIONS,
@@ -113,6 +114,76 @@ function checkExecutor(executor: string, field: string, stepID: string, issues: 
   checkFunctionOperation(executor, field, stepID, templated, issues);
 }
 
+// `atlas://` rules. Runs only for an untemplated, parsable `atlas://` URL (the
+// scheme match is exact). The URL says which Atlas operation the step performs;
+// the query is checked against what that operation needs. `stepField` is the step
+// itself, as the findings are about the step as a whole.
+function checkAtlasStep(
+  executor: string,
+  query: unknown,
+  stepField: string,
+  stepID: string,
+  issues: Issues,
+): void {
+  if (executor.includes(TEMPLATE_ACTION_OPEN)) return;
+  const m = EXECUTOR_URL_PATTERN.exec(executor);
+  if (m === null || m[1] !== ATLAS_EXECUTOR.scheme) return;
+  const provider = m[2]!;
+  const resource = m[3]!;
+  const quoted = JSON.stringify(stepID);
+  const report = (
+    rule: { code: string; messageFormat: string; suggestion: string },
+    ...args: string[]
+  ): void => {
+    let message = rule.messageFormat.replace('%s', () => quoted);
+    for (const a of args) message = message.replace('%s', () => a);
+    issues.error({
+      field: stepField,
+      message,
+      code: rule.code,
+      stepId: stepID,
+      suggestion: rule.suggestion,
+    });
+  };
+  const q: Record<string, unknown> = isRecord(query) ? query : {};
+
+  if (provider === ATLAS_EXECUTOR.providerCapability) {
+    if (!ATLAS_EXECUTOR.capabilityRefPattern.test(resource)) {
+      report(ATLAS_EXECUTOR.capabilityRefInvalid, resource);
+    }
+  } else if (
+    provider === ATLAS_EXECUTOR.providerAgent &&
+    resource === ATLAS_EXECUTOR.agentResource
+  ) {
+    const agent = q.agent;
+    if (typeof agent !== 'string' || agent === '') {
+      report(ATLAS_EXECUTOR.agentMissing);
+    } else if (agent.includes(TEMPLATE_ACTION_OPEN)) {
+      report(ATLAS_EXECUTOR.agentNotLiteral);
+    }
+    const prompt = q.prompt;
+    const promptTemplate = q.prompt_template;
+    const hasPrompt = prompt !== undefined && prompt !== null && prompt !== '';
+    const hasTemplate =
+      promptTemplate !== undefined && promptTemplate !== null && promptTemplate !== '';
+    if (!hasPrompt && !hasTemplate) report(ATLAS_EXECUTOR.promptMissing);
+    else if (hasPrompt && hasTemplate) report(ATLAS_EXECUTOR.promptBoth);
+  } else {
+    report(ATLAS_EXECUTOR.operationUnknown, executor);
+    return;
+  }
+
+  // A templated capability entry is refused wherever the list appears on an
+  // atlas:// step.
+  const caps = q.capabilities;
+  if (
+    Array.isArray(caps) &&
+    caps.some((c) => typeof c === 'string' && c.includes(TEMPLATE_ACTION_OPEN))
+  ) {
+    report(ATLAS_EXECUTOR.capabilitiesNotLiteral);
+  }
+}
+
 // `unknown_function_operation`: port of `validateFunctionOperationKnown`. Runs
 // only for an untemplated, parsable `function://` URL; the scheme match is exact,
 // as the reference's parsed type comparison is.
@@ -153,6 +224,7 @@ export function validateExecutors(flow: Flow, issues: Issues): void {
     const executor = issues.stringOf(step, 'executor', `steps.${stepID}`);
     if (executor !== null && executor !== '') {
       checkExecutor(executor, `steps.${stepID}.executor`, stepID, issues);
+      checkAtlasStep(executor, step.query, `steps.${stepID}`, stepID, issues);
     }
 
     // Loop sub-steps each carry their own executor.
@@ -171,6 +243,7 @@ export function validateExecutors(flow: Flow, issues: Issues): void {
             `${stepID}.${subID}`,
             issues,
           );
+          checkAtlasStep(subExecutor, subStep.query, subPath, `${stepID}.${subID}`, issues);
         }
       });
     }

@@ -385,3 +385,23 @@ export const FUNCTION_OPERATIONS = {
   operations: new Set<string>(spec.functionOperations.operations),
   sorted: spec.functionOperations.operations as readonly string[],
 } as const;
+
+/**
+ * `atlas://` rules. Every message format takes the quoted step id first; the
+ * operation and capability-ref messages take one more value.
+ */
+const atlas = spec.atlasExecutor;
+export const ATLAS_EXECUTOR = {
+  scheme: atlas.scheme,
+  providerAgent: atlas.providerAgent,
+  providerCapability: atlas.providerCapability,
+  agentResource: atlas.agentResource,
+  capabilityRefPattern: new RegExp(atlas.capabilityRefPattern),
+  operationUnknown: atlas.operationUnknown,
+  agentMissing: atlas.agentMissing,
+  agentNotLiteral: atlas.agentNotLiteral,
+  capabilitiesNotLiteral: atlas.capabilitiesNotLiteral,
+  promptMissing: atlas.promptMissing,
+  promptBoth: atlas.promptBoth,
+  capabilityRefInvalid: atlas.capabilityRefInvalid,
+} as const;
