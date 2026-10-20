@@ -26,8 +26,10 @@ import {
   EXECUTOR_SCHEMES,
   EXECUTOR_URL_PATTERN,
   FUNCTION_OPERATIONS,
+  REMOVED_AGENT_SURFACES,
   TEMPLATE_ACTION_OPEN,
 } from '../spec/index.js';
+import { goTrimSpace } from './exons.js';
 import { Issues, isRecord } from './util.js';
 
 const SCHEME_SEPARATOR = '://';
@@ -112,6 +114,80 @@ function checkExecutor(executor: string, field: string, stepID: string, issues: 
   }
 
   checkFunctionOperation(executor, field, stepID, templated, issues);
+}
+
+// The agent surfaces AIgentFlow removed. The scheme is the text before `://`
+// after trimming whitespace, lower-cased; a templated executor is not judged
+// (nothing can be said about what it renders to).
+function removedExecutorScheme(executor: string): string {
+  if (executor.includes(TEMPLATE_ACTION_OPEN)) return '';
+  const trimmed = goTrimSpace(executor);
+  const at = trimmed.indexOf(SCHEME_SEPARATOR);
+  return at < 0 ? '' : trimmed.slice(0, at).toLowerCase();
+}
+
+/**
+ * Judges one step's executor against the removed surfaces and reports whether
+ * the step is on a removed scheme. Such a step yields ONLY `executor_removed`,
+ * so the caller skips the scheme-specific rules (URL shape, unknown scheme).
+ * An `ai://` step whose query carries any removed parameter gets ONE finding
+ * naming them all (presence alone counts: null and false included).
+ */
+function checkRemovedSurfaces(
+  executor: string,
+  query: unknown,
+  field: string,
+  stepID: string,
+  issues: Issues,
+): boolean {
+  const cfg = REMOVED_AGENT_SURFACES;
+  const quoted = JSON.stringify(stepID);
+  const scheme = removedExecutorScheme(executor);
+  if (cfg.schemes.has(scheme)) {
+    issues.error({
+      field,
+      message: fillRemovedMessage(cfg.schemeMessageFormat, quoted, scheme),
+      code: cfg.executorRemovedCode,
+      stepId: stepID,
+      suggestion: cfg.suggestion,
+    });
+    return true;
+  }
+  if (scheme !== cfg.paramScheme || !isRecord(query)) return false;
+  const found = Object.keys(query)
+    .filter((key) => cfg.aiParams.has(key))
+    .sort();
+  if (found.length > 0) {
+    issues.error({
+      field,
+      message: fillRemovedMessage(cfg.paramsMessageFormat, quoted, found.join(', ')),
+      code: cfg.agenticParamRemovedCode,
+      stepId: stepID,
+      suggestion: cfg.suggestion,
+    });
+  }
+  return false;
+}
+
+/** Fills the spec's `%q` / `%s` placeholders in order. */
+function fillRemovedMessage(format: string, ...args: string[]): string {
+  let i = 0;
+  return format.replace(/%[qs]/g, () => args[i++] ?? '');
+}
+
+/** The flow-level keys that belonged to a removed surface (field = the key). */
+export function validateRemovedFlowKeys(flow: Flow, issues: Issues): void {
+  const cfg = REMOVED_AGENT_SURFACES;
+  for (const key of cfg.flowKeys) {
+    if (Object.prototype.hasOwnProperty.call(flow, key)) {
+      issues.error({
+        field: key,
+        message: fillRemovedMessage(cfg.flowKeyMessageFormat, JSON.stringify(key)),
+        code: cfg.executorRemovedCode,
+        suggestion: cfg.suggestion,
+      });
+    }
+  }
 }
 
 // `atlas://` rules. Runs only for an untemplated `atlas://` URL (the scheme match
@@ -242,7 +318,9 @@ export function validateExecutors(flow: Flow, issues: Issues): void {
     // A Go `string`: `executor: 42` is the URL "42", refused as a URL.
     const executor = issues.stringOf(step, 'executor', `steps.${stepID}`);
     if (executor !== null && executor !== '') {
-      checkExecutor(executor, `steps.${stepID}.executor`, stepID, issues);
+      if (!checkRemovedSurfaces(executor, step.query, `steps.${stepID}`, stepID, issues)) {
+        checkExecutor(executor, `steps.${stepID}.executor`, stepID, issues);
+      }
       checkAtlasStep(executor, step.query, `steps.${stepID}`, stepID, issues);
     }
 
@@ -256,12 +334,16 @@ export function validateExecutors(flow: Flow, issues: Issues): void {
         const subID = issues.stringOf(subStep, 'id', subPath) ?? String(i);
         const subExecutor = issues.stringOf(subStep, 'executor', subPath);
         if (subExecutor !== null && subExecutor !== '') {
-          checkExecutor(
-            subExecutor,
-            `steps.${stepID}.loop.steps[${i}].executor`,
-            `${stepID}.${subID}`,
-            issues,
-          );
+          if (
+            !checkRemovedSurfaces(subExecutor, subStep.query, subPath, `${stepID}.${subID}`, issues)
+          ) {
+            checkExecutor(
+              subExecutor,
+              `steps.${stepID}.loop.steps[${i}].executor`,
+              `${stepID}.${subID}`,
+              issues,
+            );
+          }
           checkAtlasStep(subExecutor, subStep.query, subPath, `${stepID}.${subID}`, issues);
         }
       });

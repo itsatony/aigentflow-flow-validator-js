@@ -9,7 +9,7 @@ import type { Flow, ValidateOptions, ValidationIssue, ValidationResult } from '.
 import { parseFlow, type ParseOutput } from './parse.js';
 import { Issues } from './validators/util.js';
 import { validateBasicStructure } from './validators/basicStructure.js';
-import { validateExecutors } from './validators/executors.js';
+import { validateExecutors, validateRemovedFlowKeys } from './validators/executors.js';
 import { validateQuerySchema } from './validators/querySchema.js';
 import { validateResponseExpectations } from './validators/responseExpectation.js';
 import { validateErrorStrategies } from './validators/errorStrategy.js';
@@ -103,6 +103,7 @@ function validateParsed(
 
   validateBasicStructure(f, issues);
   validateRetiredKeys(f, issues);
+  validateRemovedFlowKeys(f, issues);
   validateExecutors(f, issues);
   validateQuerySchema(f, issues);
   validateResponseExpectations(f, issues);
@@ -125,8 +126,8 @@ function validateParsed(
   validateFlowDataKeys(f, issues);
   validateCredentialEndpointPairing(f, issues);
   validateExamples(f, issues);
-  // The orchestrator's inline .exons frontmatter. A step's inline `query.exons`
-  // needs an .exons ENGINE to judge (`exons_attributes`) and is not judged here
+  // The orchestrator's inline .exons frontmatter. A tag that cannot render
+  // (`exons_attributes`) needs an .exons ENGINE to judge and is not judged here
   // at all — PARITY.md, divergence #16.
   validateOrchestratorExons(f, issues);
   validateResidencyEnforcement(f, issues);

@@ -667,18 +667,63 @@ const CASES: Case[] = [
     valid: true,
     forbidErrorCodes: ['executor_config_env_scope'],
   },
+  // The agent surfaces AIgentFlow removed (spec 2.833.0).
   {
-    // v2.777.0: tags the engine's resolver refuses. Engine-only.
-    file: 'invalid-exons-step-attributes.yaml',
+    file: 'invalid-executor-removed-exons.yaml',
     valid: false,
-    expectErrorCodes: ['exons_attributes'],
-    exonsEngineOnly: true,
+    expectErrorCodes: ['executor_removed'],
+    forbidWarningCodes: ['unknown_executor_scheme'],
   },
   {
-    // Templated, non-exons executor, non-string: none is judged.
-    file: 'valid-exons-step-attributes-skipped.yaml',
+    file: 'invalid-executor-removed-agent.yaml',
+    valid: false,
+    expectErrorCodes: ['executor_removed'],
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'invalid-executor-removed-scheme-case-whitespace.yaml',
+    valid: false,
+    expectErrorCodes: ['executor_removed'],
+    forbidErrorCodes: ['invalid_executor_url'],
+  },
+  {
+    file: 'invalid-executor-removed-loop-substep.yaml',
+    valid: false,
+    expectErrorCodes: ['executor_removed'],
+  },
+  {
+    file: 'invalid-executor-removed-exons-uploads.yaml',
+    valid: false,
+    expectErrorCodes: ['executor_removed'],
+    forbidErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    file: 'invalid-agentic-param-removed.yaml',
+    valid: false,
+    expectErrorCodes: ['agentic_param_removed'],
+  },
+  {
+    file: 'invalid-agentic-param-removed-false.yaml',
+    valid: false,
+    expectErrorCodes: ['agentic_param_removed'],
+  },
+  {
+    file: 'invalid-agentic-param-removed-null-value.yaml',
+    valid: false,
+    expectErrorCodes: ['agentic_param_removed'],
+  },
+  {
+    file: 'invalid-agentic-param-removed-loop-substep.yaml',
+    valid: false,
+    expectErrorCodes: ['agentic_param_removed'],
+  },
+  {
+    // No false positive: aiv://, atlas://, a templated executor, a non-ai scheme,
+    // chat-only ai:// parameters and the flow-level discovery keys.
+    file: 'valid-removed-surfaces-not-refused.yaml',
     valid: true,
-    forbidErrorCodes: ['exons_attributes'],
+    forbidErrorCodes: ['executor_removed', 'agentic_param_removed'],
+    forbidWarningCodes: ['unknown_executor_scheme'],
   },
   {
     file: 'invalid-orchestrator-exons-no-spec.yaml',
