@@ -114,10 +114,15 @@ function checkExecutor(executor: string, field: string, stepID: string, issues: 
   checkFunctionOperation(executor, field, stepID, templated, issues);
 }
 
-// `atlas://` rules. Runs only for an untemplated, parsable `atlas://` URL (the
-// scheme match is exact). The URL says which Atlas operation the step performs;
-// the query is checked against what that operation needs. `stepField` is the step
-// itself, as the findings are about the step as a whole.
+// `atlas://` rules. Runs only for an untemplated `atlas://` URL (the scheme match
+// is exact and case-sensitive). The URL says which Atlas operation the step
+// performs; the query is checked against what that operation needs. `stepField`
+// is the step itself, as the findings are about the step as a whole.
+//
+// The URL is split at the first slash after `atlas://` rather than through the
+// shared executor-URL shape, so a reference the shape refuses (a dot or colon in
+// a capability reference) is still judged by the atlas rules; the shape's own
+// `invalid_executor_url` finding is reported separately, as before.
 function checkAtlasStep(
   executor: string,
   query: unknown,
@@ -126,10 +131,12 @@ function checkAtlasStep(
   issues: Issues,
 ): void {
   if (executor.includes(TEMPLATE_ACTION_OPEN)) return;
-  const m = EXECUTOR_URL_PATTERN.exec(executor);
-  if (m === null || m[1] !== ATLAS_EXECUTOR.scheme) return;
-  const provider = m[2]!;
-  const resource = m[3]!;
+  const prefix = `${ATLAS_EXECUTOR.scheme}://`;
+  if (!executor.startsWith(prefix)) return;
+  const rest = executor.slice(prefix.length);
+  const slash = rest.indexOf('/');
+  const provider = slash < 0 ? rest : rest.slice(0, slash);
+  const resource = slash < 0 ? '' : rest.slice(slash + 1);
   const quoted = JSON.stringify(stepID);
   const report = (
     rule: { code: string; messageFormat: string; suggestion: string },
@@ -146,6 +153,7 @@ function checkAtlasStep(
     });
   };
   const q: Record<string, unknown> = isRecord(query) ? query : {};
+  let refusedKeys: readonly string[] = ATLAS_EXECUTOR.paramRefused.capabilityKeys;
 
   if (provider === ATLAS_EXECUTOR.providerCapability) {
     if (!ATLAS_EXECUTOR.capabilityRefPattern.test(resource)) {
@@ -155,33 +163,44 @@ function checkAtlasStep(
     provider === ATLAS_EXECUTOR.providerAgent &&
     resource === ATLAS_EXECUTOR.agentResource
   ) {
+    refusedKeys = ATLAS_EXECUTOR.paramRefused.agentKeys;
     const agent = q.agent;
-    if (typeof agent !== 'string' || agent === '') {
+    if (typeof agent !== 'string' || agent.trim() === '') {
       report(ATLAS_EXECUTOR.agentMissing);
     } else if (agent.includes(TEMPLATE_ACTION_OPEN)) {
       report(ATLAS_EXECUTOR.agentNotLiteral);
     }
-    const prompt = q.prompt;
-    const promptTemplate = q.prompt_template;
-    const hasPrompt = prompt !== undefined && prompt !== null && prompt !== '';
-    const hasTemplate =
-      promptTemplate !== undefined && promptTemplate !== null && promptTemplate !== '';
+    const hasPrompt = atlasTextPresent(q.prompt);
+    const hasTemplate = atlasTextPresent(q.prompt_template);
     if (!hasPrompt && !hasTemplate) report(ATLAS_EXECUTOR.promptMissing);
     else if (hasPrompt && hasTemplate) report(ATLAS_EXECUTOR.promptBoth);
+    if (anyTemplate(q.model)) report(ATLAS_EXECUTOR.modelNotLiteral);
   } else {
     report(ATLAS_EXECUTOR.operationUnknown, executor);
     return;
   }
 
   // A templated capability entry is refused wherever the list appears on an
-  // atlas:// step.
-  const caps = q.capabilities;
-  if (
-    Array.isArray(caps) &&
-    caps.some((c) => typeof c === 'string' && c.includes(TEMPLATE_ACTION_OPEN))
-  ) {
-    report(ATLAS_EXECUTOR.capabilitiesNotLiteral);
-  }
+  // atlas:// step, nested values included.
+  if (anyTemplate(q.capabilities)) report(ATLAS_EXECUTOR.capabilitiesNotLiteral);
+
+  // One finding per step, listing every key the platform owns that it carries.
+  const refused = refusedKeys.filter((key) => Object.prototype.hasOwnProperty.call(q, key)).sort();
+  if (refused.length > 0) report(ATLAS_EXECUTOR.paramRefused, refused.join(', '));
+}
+
+/** True when a string, or any string nested in a list or mapping, holds a template action. */
+function anyTemplate(v: unknown): boolean {
+  if (typeof v === 'string') return v.includes(TEMPLATE_ACTION_OPEN);
+  if (Array.isArray(v)) return v.some(anyTemplate);
+  if (isRecord(v)) return Object.values(v).some(anyTemplate);
+  return false;
+}
+
+/** A value that is set: not absent, null, or a string that is empty after trimming. */
+function atlasTextPresent(v: unknown): boolean {
+  if (v === undefined || v === null) return false;
+  return typeof v !== 'string' || v.trim() !== '';
 }
 
 // `unknown_function_operation`: port of `validateFunctionOperationKnown`. Runs

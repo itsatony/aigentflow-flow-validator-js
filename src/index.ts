@@ -20,6 +20,7 @@ import { validateLoopForEachThrottle } from './validators/loopForEachThrottle.js
 import { validateOrchestratorCampaign } from './validators/orchestratorCampaign.js';
 import { validateCredentialBindings } from './validators/credentialBindings.js';
 import { validateInputSchema } from './validators/inputSchema.js';
+import { validateReservedInputNames } from './validators/reservedInputs.js';
 import { validateOutputSchemas } from './validators/outputSchema.js';
 import { validateQualityGates } from './validators/qualityGate.js';
 import { validateTemplates } from './validators/templates.js';
@@ -113,6 +114,7 @@ function validateParsed(
   validateOrchestratorCampaign(f, issues, opts);
   validateCredentialBindings(f, issues);
   validateInputSchema(f, issues);
+  validateReservedInputNames(f, issues);
   validateOutputSchemas(f, issues);
   validateQualityGates(f, issues);
   validateProcessingOperations(f, issues);
