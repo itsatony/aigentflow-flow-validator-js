@@ -207,14 +207,30 @@ export const ORCHESTRATOR_TOOL_ALLOW = {
   campaignTools: spec.orchestratorToolAllow.campaignTools as readonly string[],
 } as const;
 
-/** Where an inline `.exons` document arrives at the save door. */
+/** How the orchestrator's inline `.exons` document is delimited. */
 export const EXONS = {
-  /** A step's document is judged only on an executor with this prefix. */
-  executorPrefix: spec.exons.executorPrefix,
-  /** The step `query` parameter that carries the document. */
-  documentParam: spec.exons.documentParam,
   /** The YAML frontmatter delimiter line. */
   frontmatterDelimiter: spec.exons.frontmatterDelimiter,
+} as const;
+
+/**
+ * The agent surfaces AIgentFlow removed (AIgentFlow v2.833.0): the `exons://`
+ * and `agent://` executors, the flow-level `exons_uploads` key, and the
+ * `ai://` parameters that configured its own agent loop. `executor_removed` and
+ * `agentic_param_removed` are both errors, addressed to the step.
+ */
+const removed = spec.removedAgentSurfaces;
+export const REMOVED_AGENT_SURFACES = {
+  schemes: new Set<string>(removed.removedSchemes),
+  paramScheme: removed.paramScheme,
+  aiParams: new Set<string>(removed.aiParams),
+  flowKeys: removed.flowKeys as readonly string[],
+  executorRemovedCode: removed.executorRemovedCode,
+  agenticParamRemovedCode: removed.agenticParamRemovedCode,
+  schemeMessageFormat: removed.schemeMessageFormat,
+  paramsMessageFormat: removed.paramsMessageFormat,
+  flowKeyMessageFormat: removed.flowKeyMessageFormat,
+  suggestion: removed.suggestion,
 } as const;
 
 /**

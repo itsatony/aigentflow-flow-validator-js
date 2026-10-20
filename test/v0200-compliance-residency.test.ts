@@ -116,7 +116,7 @@ describe('compliance_residency_unenforced', () => {
       'ai://{{ .query.p }}/chat',
       'ai:///chat',
       'ai://openai',
-      'exons://agent/execute',
+      'aiv://acme/helper',
       'function://utils/log',
       'AI://openai/chat',
     ]) {

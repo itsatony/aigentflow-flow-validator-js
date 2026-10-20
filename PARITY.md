@@ -4,8 +4,37 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.831.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.833.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which removes the `exons://` and `agent://` executors and the `ai://` agent-loop parameters and adds the errors `executor_removed` and `agentic_param_removed` (package 0.27.0, below). Earlier: it added the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
 
+> package 0.27.0 — **the agent surfaces are removed (BREAKING).** AIgentFlow v2.833.0 no longer
+> runs agents of its own: the `ai://<provider>/…` agent loop, the `exons://` scheme and the
+> `agent://` scheme are gone. Two new ERROR codes, both addressed to the step (`steps.<id>`, or
+> `steps.<id>.loop.steps[<index>]` for a loop sub-step), as the atlas findings are, so a host that
+> merges several verdicts drops a finding only when code and field both match.
+> `executor_removed`: a step or loop sub-step whose executor scheme (the text before `://`,
+> whitespace-trimmed, case-insensitive) is `exons` or `agent`; and a top-level `exons_uploads` key
+> (field `exons_uploads`). A step on a removed scheme yields **only** this code: no
+> `unknown_executor_scheme` warning and no executor-URL-shape error. `agentic_param_removed`: an
+> `ai://` step or loop sub-step whose `query` carries any of `agentic`, `max_tool_turns`,
+> `parallel_tool_calls`, `mcp_server_url`, `tool_auth_token`, `tool_discovery`, `discoverable_tools`,
+> `enable_signals`, `deny_tools`, `max_tool_calls`, `require_confirmation`, `guardrails`,
+> `timeout_seconds`. A key is refused on **presence**: a null value and `agentic: false` included.
+> **One** finding per step, the keys sorted in the message. Only the `ai` scheme is judged. Not
+> refused: a templated executor, `aiv://` (it keeps its own `agentic` flag), `atlas://`, any other
+> scheme, `tools` / `tool_choice` / `autofix` / `content_parts` / `stream` on `ai://`, the flow-level
+> `tool_discovery` / `discoverable_tools`, and the `orchestrator:` block's own keys. The vocabulary
+> is the spec block `removedAgentSurfaces`. Removals: `exons` and `agent` leave `executorSchemes`
+> (40 protocols; a near-miss no longer suggests them); `spec.exons` keeps only the frontmatter
+> delimiter. The rules that judge the **orchestrator's** `.exons` document stay, since the
+> orchestrator is not removed in this release; the flow-level `exons_uploads` key stays a known key
+> so it reports `executor_removed` rather than `unknown_yaml_key`. `SPEC_VERSION` is `2.833.0`.
+> Fixtures: `invalid-exons-step-attributes.yaml` and `valid-exons-step-attributes-skipped.yaml` are
+> deleted (both judged an `exons://` step's inline document); added, byte-identical to the Go
+> port's: `invalid-executor-removed-{exons,agent,scheme-case-whitespace,loop-substep,
+exons-uploads}.yaml`, `invalid-agentic-param-removed{,-false,-null-value,-loop-substep}.yaml` and
+> `valid-removed-surfaces-not-refused.yaml` (the no-false-positive control). The Go port carries the
+> same two codes (v0.17.0).
+>
 > package 0.26.0 — **three new rules, and the atlas rules brought in line with the reference.**
 > `reserved_input_name` (error): an input the flow declares under the top-level `query:` map, or as an
 > `input_schema` field name, that starts with two underscores. That namespace belongs to the platform
@@ -189,7 +218,7 @@ own state, so it is not seeded.` and the suggestion its text (spec keys `message
 > `executor_config.<provider>.base_url`). The provider is the literal segment of
 > `ai://<provider>/<operation>`, lower-cased for the lane test and printed as written; an
 > empty, slash-less or templated one is skipped, as are providers with no region lane
-> (anthropic native, scaleway, vaiembed) and `exons://` / `aiv://` steps. The
+> (anthropic native, scaleway, vaiembed) and `aiv://` steps. The
 > orchestrator's provider is `execution.provider` of its `.exons` frontmatter, read by the
 > same light frontmatter reader the save-door rules use; a document that reader cannot
 > read the way the engine would is skipped. Finding: code `compliance_residency_unenforced`,
@@ -1114,7 +1143,7 @@ max_retries` and `QualityGateDefinition.max_retries` are unchanged. Removing
 >    separate target functions; widening `hasCycle` too would invent a divergence
 >    and emit a spurious `potential_infinite_loop` on any rendezvous or error
 >    redirect back to an earlier step.
-> 4. **`executorSchemes` is AIgentFlow's registered set exactly** (43 protocols at v2.608.0, 42 since the AigentChat executor was removed,
+> 4. **`executorSchemes` is AIgentFlow's registered set exactly** (43 protocols at v2.608.0, 42 since the AigentChat executor was removed, 40 since `exons` and `agent` were,
 >    enumerated from `NewExecutorSchemaRegistry`). `web://` was missing, so a
 >    correct step warned; nine schemes AIgentFlow does not register (`openai`,
 >    `anthropic`, `perplexity`, `vertexai`, `ollama`, `vllm`, `aigentchat`,
