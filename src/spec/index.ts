@@ -404,4 +404,22 @@ export const ATLAS_EXECUTOR = {
   promptMissing: atlas.promptMissing,
   promptBoth: atlas.promptBoth,
   capabilityRefInvalid: atlas.capabilityRefInvalid,
+  modelNotLiteral: atlas.modelNotLiteral,
+  paramRefused: {
+    code: atlas.paramRefused.code,
+    messageFormat: atlas.paramRefused.messageFormat,
+    suggestion: atlas.paramRefused.suggestion,
+    agentKeys: atlas.paramRefused.agentKeys as readonly string[],
+    capabilityKeys: atlas.paramRefused.capabilityKeys as readonly string[],
+  },
+} as const;
+
+/** `reserved_input_name`: an input declared in the platform's `__` namespace. */
+export const RESERVED_INPUT_NAMES = {
+  prefix: spec.reservedInputNames.prefix,
+  code: spec.reservedInputNames.code,
+  messageFormat: spec.reservedInputNames.messageFormat,
+  suggestion: spec.reservedInputNames.suggestion,
+  queryFieldFormat: spec.reservedInputNames.queryFieldFormat,
+  schemaFieldFormat: spec.reservedInputNames.schemaFieldFormat,
 } as const;

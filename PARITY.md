@@ -6,6 +6,43 @@ discipline for keeping the two in sync.
 
 **Tracks AIgentFlow flow schema: `v2.831.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
 
+> package 0.26.0 — **three new rules, and the atlas rules brought in line with the reference.**
+> `reserved_input_name` (error): an input the flow declares under the top-level `query:` map, or as an
+> `input_schema` field name, that starts with two underscores. That namespace belongs to the platform
+> (the acting person, the credential manifest, the untrusted-input marker), and a value or default
+> written under such a name is never delivered. Every name the platform reserves today starts with
+> `__`; one leading underscore (`_private`) or an inner `__` (`a__b`) is an ordinary name. Fields:
+> `query.<name>` (names sorted) and `input_schema.fields.<name>` (file order), no step id. The schema
+> field is addressed by **name**, not by index like this port's other `input_schema` findings, because
+> the reference reports it that way and a host that merges several verdicts drops a finding only when
+> code and field both match. `atlas_model_not_literal` (error): an `atlas://agent/run` step whose
+> `query.model` holds a string containing `{{` anywhere (provider, model, reasoning_effort, or any
+> nested value). The model choice is fixed in the flow, never computed from input.
+> `atlas_param_refused` (error): **one** finding per atlas step listing, sorted, the `query` keys the
+> platform owns. An agent run refuses `api_key`, `attribution`, `base_url`, `host`, `idempotency_key`,
+> `org_id`, `person`, `untrusted_input`, `untrusted_input_override`, `url`, `user_id`; a capability step
+> refuses only `attribution`, `idempotency_key`, `untrusted_input`, `untrusted_input_override` (its
+> query is the tool's own arguments, so a `url` is legitimate there). The key sets live in the spec
+> block `atlasExecutor.paramRefused`; the reserved-name prefix in the new top-level block
+> `reservedInputNames`.
+>
+> _Alignments (the reference is authoritative; the old behaviour was looser)._ `agent`, `prompt` and
+> `prompt_template` are present only when they are non-empty strings **after trimming whitespace**: an
+> `agent` that is not a string (`42`) is missing, `prompt: "   "` is absent, and `prompt: ""` next to a
+> `prompt_template` is **not** `atlas_prompt_both`. The `{{` check on `capabilities` is deep (any
+> string entry or nested string) and applies to every `atlas://` step with a valid operation. The
+> capability reference pattern is now `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$` (a dot or colon is refused).
+> An `atlas://` URL that the shared executor-URL shape refuses is no longer skipped by the atlas
+> rules: it is split at the first slash after `atlas://` and judged (a reference with a dot is
+> `atlas_capability_ref_invalid`, `atlas://agent/run/extra` is `atlas_operation_unknown`); the shape's own
+> `invalid_executor_url` finding is still reported beside it. The scheme match stays exact. The
+> `atlas_agent_missing` message now ends "missing, empty or not a string". `specVersion` is unchanged
+> (`2.831.0`). Modules: `validators/executors.ts`, `validators/reservedInputs.ts`. Gates: thirteen new
+> shared fixtures (one invalid per code, the valid ones forbid every atlas code, `reserved_input_name`
+> and `unknown_executor_scheme`), byte-identical with the Go port, and
+> `test/v0260-atlas-contract.test.ts`. On the 227 bundled example flows plus the six atlas examples,
+> both ports report zero new findings and agree finding for finding (0 errors, 36 warnings).
+
 > package 0.25.0 — **the `atlas://` executor scheme and seven rules**. `atlas` becomes a known
 > scheme (no `unknown_executor_scheme` warning). The URL form is `atlas://<provider>/<resource>`:
 > provider `agent` has the single resource `run`, provider `capability` takes a capability reference
