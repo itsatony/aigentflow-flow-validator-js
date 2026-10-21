@@ -29,7 +29,7 @@ import {
   REMOVED_AGENT_SURFACES,
   TEMPLATE_ACTION_OPEN,
 } from '../spec/index.js';
-import { goTrimSpace } from './exons.js';
+import { goTrimSpace } from './goUrl.js';
 import { Issues, isRecord } from './util.js';
 
 const SCHEME_SEPARATOR = '://';
@@ -179,7 +179,9 @@ function fillRemovedMessage(format: string, ...args: string[]): string {
 export function validateRemovedFlowKeys(flow: Flow, issues: Issues): void {
   const cfg = REMOVED_AGENT_SURFACES;
   for (const key of cfg.flowKeys) {
-    if (Object.prototype.hasOwnProperty.call(flow, key)) {
+    // A typed block in the reference, so a YAML null decodes as absent.
+    const value: unknown = Object.prototype.hasOwnProperty.call(flow, key) ? flow[key] : undefined;
+    if (value !== undefined && value !== null) {
       issues.error({
         field: key,
         message: fillRemovedMessage(cfg.flowKeyMessageFormat, JSON.stringify(key)),

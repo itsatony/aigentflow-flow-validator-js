@@ -18,7 +18,7 @@
 
 import type { Flow } from '../types.js';
 import { COMPLIANCE_RESIDENCY as CFG, TEMPLATE_ACTION_OPEN } from '../spec/index.js';
-import { goTrimSpace, inspectExonsFrontmatter } from './exons.js';
+import { goTrimSpace } from './goUrl.js';
 import { loopSubStepsOfStep } from './processingOperations.js';
 import { Issues, isArray, isRecord } from './util.js';
 
@@ -166,31 +166,4 @@ export function validateResidencyEnforcement(flow: Flow, issues: Issues): void {
       }
     }
   }
-
-  warnOrchestrator(flow, issues, warn);
-}
-
-/**
- * The orchestrator's provider is `execution.provider` of its exons frontmatter.
- * A document this validator cannot read the way the engine would (a tag in the
- * frontmatter, undecodable YAML) is skipped: no provider is known.
- */
-function warnOrchestrator(
-  flow: Flow,
-  issues: Issues,
-  warn: (site: string, field: string, stepId: string | undefined, provider: string) => void,
-): void {
-  const orch: unknown = flow.orchestrator;
-  if (!isRecord(orch)) return;
-  const source = issues.stringOf(orch, 'exons', 'orchestrator');
-  if (source === null || source === '') return;
-  const report = inspectExonsFrontmatter(source);
-  if (report.parseError !== null || !report.specRead || !report.hasSpec) return;
-  const provider = literalOrEmpty(report.provider);
-  if (!isRegionLane(provider)) return;
-  const region = issues.stringOf(orch, 'region', 'orchestrator');
-  if (region !== null && goTrimSpace(region) !== '') return;
-  if (orch.enforce_region === true) return;
-  if (flowDirectsEndpoint(flow, provider, issues)) return;
-  warn(CFG.siteOrchestrator, CFG.orchestratorField, undefined, provider);
 }

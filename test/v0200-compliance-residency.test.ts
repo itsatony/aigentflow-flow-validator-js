@@ -190,50 +190,10 @@ describe('compliance_residency_unenforced', () => {
     expect(ws[0]?.message).toContain('residency [eu  DE ].');
   });
 
-  describe('orchestrator', () => {
-    const orch = (provider: string, extra = '') => `orchestrator:
-  mode: monitor
-  agentic: true
-${extra}  exons: |
-    ---
-    name: monitor
-    description: observe only
-    type: agent
-    execution:
-      provider: ${provider}
-      model: m
-    ---
-    {~exons.message role="system"~}observe{~/exons.message~}
-`;
-    const withOrch = (provider: string, extra = '', stepExecutor = 'ai://anthropic/chat') =>
-      flow({ stepExecutor }) + orch(provider, extra);
-
-    it('warns at orchestrator.exons with no step id', () => {
-      const ws = warnings(withOrch('openai'));
-      expect(ws).toHaveLength(1);
-      expect(ws[0]?.field).toBe('orchestrator.exons');
-      expect(ws[0]?.stepId).toBeUndefined();
-      expect(ws[0]?.message).toContain('the orchestrator calls provider "openai"');
-    });
-
-    it('is silent when pinned by region, enforce_region or an executor_config base_url', () => {
-      expect(warnings(withOrch('openai', '  region: eu\n'))).toHaveLength(0);
-      expect(warnings(withOrch('openai', '  region: eu\n  enforce_region: true\n'))).toHaveLength(
-        0,
-      );
-      expect(warnings(withOrch('openai', '  region: " "\n'))).toHaveLength(1);
-      const cfg = "executor_config:\n  openai:\n    base_url: 'https://x.example'\n";
-      expect(warnings(cfg + withOrch('openai'))).toHaveLength(0);
-    });
-
-    it('is silent on a provider with no region lane, and on an unreadable provider', () => {
-      expect(warnings(withOrch('anthropic'))).toHaveLength(0);
-      expect(warnings(withOrch('"{{ .query.p }}"'))).toHaveLength(0);
-    });
-
-    it('comes after the steps', () => {
-      const ws = warnings(withOrch('openai', '', 'ai://openai/chat'));
-      expect(ws.map((w) => w.field)).toEqual(['steps.work.executor', 'orchestrator.exons']);
-    });
+  it('has no orchestrator site (AIgentFlow v2.838.0): the block is orchestrator_removed', () => {
+    const y =
+      flow({ stepExecutor: 'ai://anthropic/chat' }) +
+      'orchestrator:\n  exons: |\n    ---\n    name: o\n    execution:\n      provider: openai\n    ---\n    hi\n';
+    expect(warnings(y)).toHaveLength(0);
   });
 });

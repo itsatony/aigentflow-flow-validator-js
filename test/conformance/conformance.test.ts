@@ -59,6 +59,29 @@ const EXAMPLE_WARNING_CODES = Object.entries(EXAMPLES.codes)
   .filter(([, severity]) => severity === 'warning')
   .map(([code]) => code);
 
+// The codes of the orchestrator rules that left with the orchestrator
+// (AIgentFlow v2.838.0). A fixture that forbids them goes red if any of them
+// ever judges a refused block again.
+const RETIRED_ORCHESTRATOR_RULE_CODES = [
+  'orchestrator_exons_required',
+  'orchestrator_mode_invalid',
+  'orchestrator_owner_needs_yield',
+  'orchestrator_trigger_unknown',
+  'orchestrator_timer_no_interval',
+  'orchestrator_timer_bad_interval',
+  'orchestrator_tool_unknown',
+  'orchestrator_not_agentic',
+  'orchestrator_human_question_timeout_invalid',
+  'orchestrator_enforce_region_needs_region',
+  'orchestrator_exons_parse_failed',
+  'orchestrator_exons_no_provider',
+  'exons_resources_unhonoured',
+  'exons_attributes',
+  'orchestrator_tool_withheld',
+  'tool_discovery_invalid',
+  'orchestrator_next_requires_orchestrator',
+];
+
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
   {
@@ -244,44 +267,6 @@ const CASES: Case[] = [
     expectErrorCodes: ['missing_required_field', 'step_not_found'],
   },
   {
-    // DC-COND-1: monitor-mode orchestrator over a self-terminating DAG is valid.
-    file: 'valid-orchestrator-monitor.yaml',
-    valid: true,
-  },
-  {
-    // AIF v2.695.0 (DC-FORGE-125, aigentflow#124): the per-question HITL
-    // deadline. A NEGATIVE duration is well-formed Go, so a bare
-    // isValidGoDuration check accepts it and the reference parser does not —
-    // an oracle looser than its door, in the damaging direction.
-    file: 'invalid-orchestrator-human-question-timeout.yaml',
-    valid: false,
-    expectErrorCodes: ['orchestrator_human_question_timeout_invalid'],
-  },
-  {
-    // The other side of the same rule: a declared deadline with its response is
-    // legal.
-    //
-    // NOTE no `forbidErrorCodes` here, deliberately. `valid: true` already
-    // fails on ANY error, so a rule that misfired on this fixture is caught
-    // either way — unlike a WARNING rule, whose false positive leaves `valid`
-    // untouched and needs the explicit forbid list. Adding the machinery for an
-    // error rule would buy a nicer failure message and no coverage.
-    file: 'valid-orchestrator-human-question-timeout.yaml',
-    valid: true,
-  },
-  {
-    // DC-COND-1: owner mode with no next: orchestrator yield edge is refused.
-    file: 'invalid-orchestrator-owner-no-yield.yaml',
-    valid: false,
-    expectErrorCodes: ['orchestrator_owner_needs_yield'],
-  },
-  {
-    // enforce_region needs a region to enforce; with both set the flow is clean.
-    file: 'valid-orchestrator-region.yaml',
-    valid: true,
-    forbidWarningCodes: ['unknown_key', 'unknown_field'],
-  },
-  {
     // here:// is a known scheme. A rule whose risk is a false positive: a warning
     // never changes the verdict, so the code is forbidden by name.
     file: 'valid-executor-here.yaml',
@@ -318,11 +303,6 @@ const CASES: Case[] = [
     valid: true,
     forbidErrorCodes: ['template_default_piped'],
     forbidWarningCodes: ['template_default_piped', 'template_syntax_error'],
-  },
-  {
-    file: 'invalid-orchestrator-enforce-region-no-region.yaml',
-    valid: false,
-    expectErrorCodes: ['orchestrator_enforce_region_needs_region'],
   },
   {
     // v2.642.0 (DC-FORGE-72): the expression-function catalog is compiled in and
@@ -457,20 +437,6 @@ const CASES: Case[] = [
     expectErrorCodes: ['reserved_step_id_orchestrator'],
   },
   {
-    // All three surfaces: the flow root, the orchestrator (where the number 5
-    // is the string "5"), and a step query.
-    file: 'invalid-tool-discovery-vocabulary.yaml',
-    valid: false,
-    expectErrorCodes: ['tool_discovery_invalid'],
-  },
-  {
-    // The counter-fixture: the three modes, empty, templated, and a non-string
-    // step query value, which is not judged.
-    file: 'valid-tool-discovery-vocabulary.yaml',
-    valid: true,
-    forbidErrorCodes: ['tool_discovery_invalid'],
-  },
-  {
     file: 'invalid-mock-scenario-delay.yaml',
     valid: false,
     expectErrorCodes: ['mock_delay_invalid'],
@@ -540,15 +506,10 @@ const CASES: Case[] = [
     expectErrorCodes: ['mock_delay_invalid', 'invalid_duration'],
   },
   {
-    // The numbers that DO save there: 0, +0, -0 — and a timer interval of 0.
+    // The numbers that DO save there: 0, +0, -0.
     file: 'valid-duration-numeric-zero.yaml',
     valid: true,
-    forbidErrorCodes: [
-      'mock_delay_invalid',
-      'invalid_duration',
-      'orchestrator_timer_no_interval',
-      'orchestrator_timer_bad_interval',
-    ],
+    forbidErrorCodes: ['mock_delay_invalid', 'invalid_duration'],
   },
   // 0.14.1: a step REFERENCE written as a number is the step id of its source
   // text, because the reference decodes every reference into a Go `string`.
@@ -676,73 +637,12 @@ const CASES: Case[] = [
     expectErrorCodes: ['agentic_param_removed'],
   },
   {
-    // No false positive: aiv://, atlas://, a templated executor, a non-ai scheme,
-    // chat-only ai:// parameters and the flow-level discovery keys.
+    // No false positive: aiv://, atlas://, a templated executor, a non-ai scheme
+    // and chat-only ai:// parameters.
     file: 'valid-removed-surfaces-not-refused.yaml',
     valid: true,
     forbidErrorCodes: ['executor_removed', 'agentic_param_removed'],
     forbidWarningCodes: ['unknown_executor_scheme'],
-  },
-  {
-    file: 'invalid-orchestrator-exons-no-spec.yaml',
-    valid: false,
-    expectErrorCodes: ['orchestrator_exons_parse_failed'],
-  },
-  {
-    file: 'invalid-orchestrator-exons-unclosed-frontmatter.yaml',
-    valid: false,
-    expectErrorCodes: ['orchestrator_exons_parse_failed'],
-  },
-  {
-    file: 'invalid-orchestrator-exons-no-provider.yaml',
-    valid: false,
-    expectErrorCodes: ['orchestrator_exons_no_provider'],
-  },
-  {
-    // v2.767.0: every declared resource is refused.
-    file: 'invalid-orchestrator-exons-resources.yaml',
-    valid: false,
-    expectErrorCodes: ['exons_resources_unhonoured'],
-  },
-  {
-    file: 'valid-orchestrator-exons-resources-empty.yaml',
-    valid: true,
-    forbidErrorCodes: ['exons_resources_unhonoured'],
-  },
-  {
-    file: 'invalid-orchestrator-exons-attributes.yaml',
-    valid: false,
-    expectErrorCodes: ['exons_attributes'],
-    exonsEngineOnly: true,
-  },
-  {
-    // The engine's parse validates the decoded spec. Engine-only.
-    file: 'invalid-orchestrator-exons-spec-invalid.yaml',
-    valid: false,
-    expectErrorCodes: ['orchestrator_exons_parse_failed'],
-    exonsEngineOnly: true,
-  },
-  {
-    // v2.760.0: the four withholds, each its own fixture.
-    file: 'warn-orchestrator-tool-withheld-ask-human.yaml',
-    valid: true,
-    expectWarningCodes: ['orchestrator_tool_withheld'],
-  },
-  {
-    file: 'warn-orchestrator-tool-withheld-named.yaml',
-    valid: true,
-    expectWarningCodes: ['orchestrator_tool_withheld'],
-  },
-  {
-    // The counter-fixtures: a false positive here goes red.
-    file: 'valid-orchestrator-tool-allow-consistent.yaml',
-    valid: true,
-    forbidWarningCodes: ['orchestrator_tool_withheld'],
-  },
-  {
-    file: 'valid-orchestrator-tool-allow-absent.yaml',
-    valid: true,
-    forbidWarningCodes: ['orchestrator_tool_withheld'],
   },
   {
     // v2.760.0: `end` is a step, so this is a cycle, and `end` is reachable.
@@ -1220,12 +1120,6 @@ const CASES: Case[] = [
     file: 'invalid-display-name-81-runes-multibyte.yaml',
     valid: false,
     expectErrorCodes: ['display_name_too_long'],
-  },
-  {
-    // Orchestrator region pinned and enforced together: clean.
-    file: 'valid-orchestrator-region-enforced.yaml',
-    valid: true,
-    forbidErrorCodes: ['orchestrator_enforce_region_needs_region'],
   },
   {
     // The removed AigentChat scheme is an ordinary unknown scheme: a warning, and
@@ -1732,27 +1626,9 @@ const CASES: Case[] = [
   },
   {
     // 0.28.0 — AIgentFlow v2.834.0 (AGENTCUT B1): signals and DFM removed.
-    file: 'invalid-signal-removed-enable-signals.yaml',
-    valid: false,
-    expectErrorCodes: ['signal_removed'],
-    forbidErrorCodes: ['unknown_yaml_key'],
-  },
-  {
-    file: 'invalid-signal-removed-tool-lists.yaml',
-    valid: false,
-    expectErrorCodes: ['signal_removed'],
-    forbidWarningCodes: ['orchestrator_tool_unknown', 'orchestrator_tool_withheld'],
-  },
-  {
     file: 'invalid-signal-removed-aiv-step.yaml',
     valid: false,
     expectErrorCodes: ['signal_removed'],
-  },
-  {
-    file: 'invalid-flow-modification-removed-trigger.yaml',
-    valid: false,
-    expectErrorCodes: ['flow_modification_removed'],
-    forbidErrorCodes: ['orchestrator_trigger_unknown'],
   },
   {
     file: 'invalid-flow-modification-removed-step.yaml',
@@ -1766,12 +1642,6 @@ const CASES: Case[] = [
     forbidWarningCodes: ['unknown_yaml_key'],
   },
   {
-    file: 'warn-removed-key-ignored-enable-signals-false.yaml',
-    valid: true,
-    expectWarningCodes: ['removed_key_ignored'],
-    forbidErrorCodes: ['signal_removed'],
-  },
-  {
     // The no-false-positive control.
     file: 'valid-signal-surfaces-not-refused.yaml',
     valid: true,
@@ -1783,7 +1653,7 @@ const CASES: Case[] = [
     file: 'invalid-campaign-removed-block.yaml',
     valid: false,
     expectErrorCodes: ['campaign_removed'],
-    forbidErrorCodes: ['invalid_type', 'step_not_found'],
+    forbidErrorCodes: ['invalid_type', 'step_not_found', 'orchestrator_removed'],
   },
   {
     file: 'invalid-campaign-removed-empty-block.yaml',
@@ -1797,22 +1667,97 @@ const CASES: Case[] = [
     forbidErrorCodes: ['unknown_yaml_key'],
   },
   {
-    file: 'invalid-campaign-removed-tool-lists.yaml',
-    valid: false,
-    expectErrorCodes: ['campaign_removed'],
-    forbidWarningCodes: ['orchestrator_tool_unknown', 'orchestrator_tool_withheld'],
-  },
-  {
-    file: 'invalid-campaign-removed-triggers.yaml',
-    valid: false,
-    expectErrorCodes: ['campaign_removed'],
-    forbidErrorCodes: ['orchestrator_trigger_unknown'],
-  },
-  {
     // The no-false-positive control.
     file: 'valid-campaign-surfaces-not-refused.yaml',
     valid: true,
     forbidErrorCodes: ['campaign_removed'],
+  },
+  // 0.29.0 — AIgentFlow v2.838.0: the orchestrator removed. The block is refused
+  // whole and nothing inside it is judged.
+  {
+    file: 'invalid-orchestrator-removed-block.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+  },
+  {
+    file: 'invalid-orchestrator-removed-empty-block.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+  },
+  {
+    file: 'invalid-orchestrator-removed-scalar.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+    forbidErrorCodes: ['invalid_type'],
+  },
+  {
+    file: 'invalid-orchestrator-removed-inner-surfaces.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+    forbidErrorCodes: [
+      'signal_removed',
+      'campaign_removed',
+      'flow_modification_removed',
+      'unknown_yaml_key',
+      'invalid_type',
+      'invalid_duration',
+      ...RETIRED_ORCHESTRATOR_RULE_CODES,
+    ],
+    forbidWarningCodes: [
+      'removed_key_ignored',
+      'unknown_yaml_key',
+      ...RETIRED_ORCHESTRATOR_RULE_CODES,
+    ],
+  },
+  {
+    file: 'invalid-orchestrator-removed-enable-signals-false.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+    forbidErrorCodes: ['signal_removed'],
+    forbidWarningCodes: ['removed_key_ignored'],
+  },
+  {
+    file: 'invalid-orchestrator-removed-tool-discovery.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+    forbidErrorCodes: ['tool_discovery_invalid'],
+  },
+  {
+    file: 'invalid-orchestrator-removed-discoverable-tools.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+  },
+  {
+    file: 'invalid-orchestrator-removed-next-default.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+    forbidErrorCodes: ['step_not_found', 'orchestrator_next_requires_orchestrator'],
+  },
+  {
+    file: 'invalid-orchestrator-removed-next-with-block.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+    forbidErrorCodes: ['step_not_found', 'orchestrator_owner_needs_yield'],
+  },
+  {
+    file: 'invalid-orchestrator-removed-next-condition.yaml',
+    valid: false,
+    expectErrorCodes: ['orchestrator_removed'],
+    forbidErrorCodes: ['step_not_found'],
+  },
+  {
+    // The no-false-positive control.
+    file: 'valid-orchestrator-removed-not-refused.yaml',
+    valid: true,
+    forbidErrorCodes: ['orchestrator_removed', 'agentic_param_removed', 'tool_discovery_invalid'],
+    forbidWarningCodes: ['unknown_yaml_key'],
+  },
+  {
+    // On ai:// the step keys are agent-loop parameters, never the flow key.
+    file: 'invalid-agentic-param-tool-discovery-only.yaml',
+    valid: false,
+    expectErrorCodes: ['agentic_param_removed'],
+    forbidErrorCodes: ['orchestrator_removed', 'tool_discovery_invalid'],
   },
 ];
 

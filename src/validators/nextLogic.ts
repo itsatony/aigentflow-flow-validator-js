@@ -1,20 +1,20 @@
-// `next.parallel` structure + the orchestrator-next rule.
+// `next.parallel` structure.
 //
 // Default/condition reference checks live in connectivity.ts (they pair with
-// reachability). This module covers the parser-only additions:
-// `validateNextLogic` parallel block + `validateOrchestratorNext`.
+// reachability). This module covers the parser-only addition: the
+// `validateNextLogic` parallel block. (`next: orchestrator` names the hand-over
+// AIgentFlow removed in v2.838.0 and is `orchestrator_removed`; see
+// removedSignalCampaign.ts.)
 
-import type { Flow, NextCondition, NextLogicDefinition, ParallelDefinition } from '../types.js';
+import type { Flow, NextLogicDefinition, ParallelDefinition } from '../types.js';
 import { Issues, isRecord } from './util.js';
 
 const NEXT_NULL = 'null';
-const NEXT_ORCHESTRATOR = 'orchestrator';
 
 export function validateNextLogic(flow: Flow, issues: Issues): void {
   const steps = flow.steps;
   if (!isRecord(steps)) return;
   const available = new Set(Object.keys(steps));
-  const hasOrchestrator = isRecord(flow.orchestrator);
 
   for (const [stepID, step] of Object.entries(steps)) {
     if (!isRecord(step)) continue;
@@ -63,24 +63,6 @@ export function validateNextLogic(flow: Flow, issues: Issues): void {
               stepId: stepID,
             });
           }
-        });
-      }
-    }
-
-    // "orchestrator" as a next target requires an orchestrator block.
-    if (!hasOrchestrator) {
-      const usesOrch =
-        n.default === NEXT_ORCHESTRATOR ||
-        (Array.isArray(n.conditions) &&
-          (n.conditions as NextCondition[]).some(
-            (c) => isRecord(c) && c.goto === NEXT_ORCHESTRATOR,
-          ));
-      if (usesOrch) {
-        issues.error({
-          field: `steps.${stepID}.next`,
-          message: `Step '${stepID}' routes to 'orchestrator' but the flow has no orchestrator block`,
-          code: 'orchestrator_next_requires_orchestrator',
-          stepId: stepID,
         });
       }
     }

@@ -26,7 +26,7 @@ Options:
   --json                 Output machine-readable JSON (a single result, or an
                          array when validating multiple files).
   --strict               Treat warnings as failures (non-zero exit).
-  --strict-registries    Error (not warn) on unknown orchestrator tools and
+  --strict-registries    Error (not warn) on unknown executor schemes and
                          unknown template functions.
   -h, --help             Show this help.
   -v, --version          Show the validator version and tracked AIgentFlow schema.
