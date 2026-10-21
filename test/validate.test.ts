@@ -420,7 +420,7 @@ describe('connectivity', () => {
   });
 });
 
-describe('next.parallel + orchestrator-next', () => {
+describe('next.parallel + next: orchestrator', () => {
   it('requires rendezvous and steps', () => {
     const r = validateFlowObject({
       ...MINIMAL,
@@ -428,12 +428,14 @@ describe('next.parallel + orchestrator-next', () => {
     });
     expect(codes(r).filter((c) => c === 'missing_required_field').length).toBeGreaterThanOrEqual(2);
   });
-  it('requires an orchestrator for orchestrator-next', () => {
+  it('refuses next: orchestrator as the removed hand-over (AIgentFlow v2.838.0)', () => {
     const r = validateFlowObject({
       ...MINIMAL,
       steps: { a: { executor: 'mock://x/y', next: { default: 'orchestrator' } } },
     });
-    expect(codes(r)).toContain('orchestrator_next_requires_orchestrator');
+    expect(r.errors.map((e) => `${e.code}@${e.field}#${e.stepId ?? ''}`)).toEqual([
+      'orchestrator_removed@steps.a#a',
+    ]);
   });
 });
 
@@ -720,23 +722,22 @@ describe('loop / for_each / throttle', () => {
 });
 
 describe('orchestrator / campaign', () => {
-  it('requires exons and validates triggers/tools', () => {
-    const r = validateFlowObject({
-      ...MINIMAL,
-      orchestrator: { triggers: [{ type: 'bogus' }], tools: ['aif_not_real'] },
-    });
-    expect(codes(r)).toContain('orchestrator_exons_required');
-    expect(codes(r)).toContain('orchestrator_trigger_unknown');
-    expect(warnCodes(r)).toContain('orchestrator_tool_unknown');
+  it('refuses the orchestrator block whole and judges nothing inside it (AIgentFlow v2.838.0)', () => {
+    for (const strictRegistries of [false, true]) {
+      const r = validateFlowObject(
+        {
+          ...MINIMAL,
+          orchestrator: { triggers: [{ type: 'bogus' }], tools: ['aif_not_real'], mode: 'x' },
+        },
+        { strictRegistries },
+      );
+      expect(r.errors.map((e) => `${e.code}@${e.field}`)).toEqual([
+        'orchestrator_removed@orchestrator',
+      ]);
+      expect(r.warnings).toEqual([]);
+    }
   });
-  it('escalates unknown tools to errors under strictRegistries', () => {
-    const r = validateFlowObject(
-      { ...MINIMAL, orchestrator: { exons: 'x', tools: ['aif_not_real'] } },
-      { strictRegistries: true },
-    );
-    expect(codes(r)).toContain('orchestrator_tool_unknown');
-  });
-  it('refuses a campaign block whole, with or without an orchestrator (AIgentFlow v2.836.0)', () => {
+  it('refuses a campaign block whole (AIgentFlow v2.836.0)', () => {
     const r = validateFlowObject({ ...MINIMAL, campaign: { children: [] } });
     expect(r.errors.filter((e) => e.code === 'campaign_removed').map((e) => e.field)).toEqual([
       'campaign',
@@ -1366,7 +1367,7 @@ describe('retired limit keys (AIF DC-FORGE-150, v2.721.0)', () => {
       expect(hits[0]?.message).toContain('v2.721.0');
       expect(hits[0]?.message).toContain('refuses to save');
       expect(hits[0]?.suggestion).toContain('billing: { max_credits: N }');
-      expect(hits[0]?.suggestion).toContain('flow:// sub-flows are not checked');
+      expect(hits[0]?.suggestion).toContain('options.max_credits');
     }
   });
 
@@ -1431,53 +1432,6 @@ describe('retired limit keys (AIF DC-FORGE-150, v2.721.0)', () => {
 });
 
 describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
-  const orchFlow = (extra: Record<string, unknown>, campaign?: Record<string, unknown>) => ({
-    ...MINIMAL,
-    orchestrator: {
-      mode: 'monitor',
-      agentic: true,
-      exons:
-        '---\nname: monitor\ndescription: observe only\ntype: agent\nexecution:\n  provider: anthropic\n  model: m\n---\n{~exons.message role="system"~}observe{~/exons.message~}\n',
-      ...extra,
-    },
-    ...(campaign ? { campaign } : {}),
-  });
-
-  it('treats an empty or null human_question_timeout as absent, like the reference', () => {
-    for (const value of ['', null]) {
-      const r = validateFlowObject(orchFlow({ human_question_timeout: value }));
-      expect(codes(r), String(value)).not.toContain('orchestrator_human_question_timeout_invalid');
-    }
-    for (const value of ['0s', '-5m', '30', 'soon']) {
-      const r = validateFlowObject(orchFlow({ human_question_timeout: value }));
-      expect(codes(r), value).toContain('orchestrator_human_question_timeout_invalid');
-    }
-  });
-
-  it('refuses orchestrator.enforce_region without a region, and only then', () => {
-    for (const extra of [
-      { enforce_region: true },
-      { enforce_region: true, region: '' },
-      { enforce_region: true, region: '   ' },
-      { enforce_region: true, region: null },
-    ]) {
-      const r = validateFlowObject(orchFlow(extra));
-      expect(codes(r), JSON.stringify(extra)).toContain('orchestrator_enforce_region_needs_region');
-      expect(r.valid).toBe(false);
-    }
-    for (const extra of [
-      { enforce_region: true, region: 'eu' },
-      { enforce_region: false },
-      { region: 'eu' },
-      {},
-    ]) {
-      const r = validateFlowObject(orchFlow(extra));
-      expect(codes(r), JSON.stringify(extra)).not.toContain(
-        'orchestrator_enforce_region_needs_region',
-      );
-    }
-  });
-
   it('warns on a loop sub-step id that is one of the loop result summary fields', () => {
     for (const id of ['iterations', 'break', 'vars', 'duration_ms']) {
       const r = validateFlowObject({
@@ -1520,7 +1474,7 @@ describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
       { child_flows: [{ flow_name: 'x' }], max_credits_per_child: -1 },
       { child_flows: [{ flow_name: 'x' }], max_credits_per_child: '5' },
     ]) {
-      const r = validateFlowObject(orchFlow({}, body));
+      const r = validateFlowObject({ ...MINIMAL, campaign: body });
       expect(
         r.errors.map((e) => `${e.code}@${e.field}`),
         JSON.stringify(body),
@@ -1564,11 +1518,6 @@ describe('save-door refusals (reference FlowParser.ValidateFlow)', () => {
     ...MINIMAL,
     steps: { a: { executor: 'function://utils/log', query } },
   });
-  const orchestrator = {
-    agentic: true,
-    exons:
-      '---\nname: c\ndescription: c\ntype: agent\nexecution:\n  provider: anthropic\n  model: m\n---\n{~exons.message role="system"~}c{~/exons.message~}\n',
-  };
 
   it("refuses a top-level step called 'orchestrator', case-sensitively", () => {
     const flow = (id: string) => ({
@@ -1585,41 +1534,17 @@ describe('save-door refusals (reference FlowParser.ValidateFlow)', () => {
     }
   });
 
-  it('refuses an unknown tool_discovery on the flow, the orchestrator and a step query', () => {
-    for (const bad of ['of', 'Eager', ' eager', 5, true]) {
-      const flowLevel = validateFlowObject({ ...MINIMAL, tool_discovery: bad });
-      expect(codes(flowLevel), String(bad)).toContain('tool_discovery_invalid');
-      const orchLevel = validateFlowObject({
-        ...MINIMAL,
-        orchestrator: { ...orchestrator, tool_discovery: bad },
-      });
-      expect(
-        orchLevel.errors.find((e) => e.code === 'tool_discovery_invalid')?.field,
-        String(bad),
-      ).toBe('orchestrator.tool_discovery');
-    }
-    for (const bad of ['of', 'Eager', ' eager']) {
-      const r = validateFlowObject(withQuery({ tool_discovery: bad }));
-      expect(r.errors.find((e) => e.code === 'tool_discovery_invalid')?.field, bad).toBe(
-        'steps.a.query.tool_discovery',
+  it('no longer judges the tool_discovery vocabulary (AIgentFlow v2.838.0)', () => {
+    // The flow-level key is orchestrator_removed whatever it holds; on a step it
+    // is a free-form query key (agentic_param_removed on ai://, nothing elsewhere).
+    for (const value of ['of', 'lazy', '', 5]) {
+      const r = validateFlowObject({ ...MINIMAL, tool_discovery: value });
+      expect(codes(r), String(value)).toEqual(['orchestrator_removed']);
+      expect(validateFlowObject(withQuery({ tool_discovery: value })).valid, String(value)).toBe(
+        true,
       );
     }
-  });
-
-  it('accepts the vocabulary, empty, null and templated tool_discovery values', () => {
-    for (const ok of ['eager', 'lazy', 'off', '', null, '{{ .query.mode }}']) {
-      expect(validateFlowObject({ ...MINIMAL, tool_discovery: ok }).valid, String(ok)).toBe(true);
-      expect(
-        validateFlowObject({ ...MINIMAL, orchestrator: { ...orchestrator, tool_discovery: ok } })
-          .valid,
-        String(ok),
-      ).toBe(true);
-      expect(validateFlowObject(withQuery({ tool_discovery: ok })).valid, String(ok)).toBe(true);
-    }
-    // On a step the surface is a free-form query key: only a string is judged.
-    for (const ok of [5, true, { mode: 'x' }]) {
-      expect(validateFlowObject(withQuery({ tool_discovery: ok })).valid, String(ok)).toBe(true);
-    }
+    expect(validateFlowObject({ ...MINIMAL, tool_discovery: null }).valid).toBe(true);
   });
 
   it('refuses a mock_scenarios delay that is not a Go duration', () => {
@@ -1653,7 +1578,7 @@ describe('save-door refusals (reference FlowParser.ValidateFlow)', () => {
   });
 
   it('runs none of the old campaign rules: the block is campaign_removed (AIgentFlow v2.836.0)', () => {
-    const camp = (campaign: unknown) => validateFlowObject({ ...MINIMAL, orchestrator, campaign });
+    const camp = (campaign: unknown) => validateFlowObject({ ...MINIMAL, campaign });
     const old = [
       'campaign_no_child_flows',
       'campaign_child_flow_no_id',
@@ -1762,6 +1687,7 @@ describe('unknown keys and value kinds (KnownFields parity)', () => {
       mock_scenarios: { s: { a: { delay: '5ms', latency: 3 } } },
       billing: { max_credits: 5, currency: 'EUR' },
       executor_config: { openai: { api_key: 'x', region: 'eu' } },
+      // Removed in AIgentFlow v2.838.0 and typed `any`: nothing inside is an unknown key.
       orchestrator: { exons: 'x', triggers: [{ type: 'step_completed', zz: 1 }], zz: 1 },
     });
     expect(fields(r, 'unknown_yaml_key').sort()).toEqual(
@@ -1781,8 +1707,6 @@ describe('unknown keys and value kinds (KnownFields parity)', () => {
         'mock_scenarios.s.a.latency',
         'billing.currency',
         'executor_config.openai.region',
-        'orchestrator.triggers[0].zz',
-        'orchestrator.zz',
       ].sort(),
     );
     // A step-scoped finding carries its step id, so the summary counts it.
@@ -1954,21 +1878,6 @@ describe('duration fields judged by the source spelling of a number', () => {
       'steps.a.for_each.throttle.batch_delay',
     ]);
     expect(validateFlow(fan('0', '0')).valid).toBe(true);
-
-    const timer = (interval: string): string =>
-      doc([
-        'steps:',
-        '  a:',
-        '    executor: mock://x/y',
-        'orchestrator:',
-        '  exons: x',
-        '  triggers:',
-        '    - type: timer',
-        `      interval: ${interval}`,
-      ]);
-    expect(codes(validateFlow(timer('0')))).not.toContain('orchestrator_timer_no_interval');
-    expect(codes(validateFlow(timer('0')))).not.toContain('orchestrator_timer_bad_interval');
-    expect(codes(validateFlow(timer('100')))).toContain('orchestrator_timer_bad_interval');
   });
 
   it('falls back to the parsed value for an object with no source text', () => {

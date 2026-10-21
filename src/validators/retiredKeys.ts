@@ -30,8 +30,8 @@ const BUDGET_MESSAGE =
   'that declares it.';
 const BUDGET_SUGGESTION =
   'Delete it. To cap spend use `billing: { max_credits: N }` — it caps the credit ' +
-  'reservation and refuses further agentic turns (agentic ai://, exons://, the ' +
-  'orchestrator); plain chat steps and flow:// sub-flows are not checked against it.';
+  'reservation of the run (what AIgentFlow itself spends); a run can lower it with ' +
+  '`options.max_credits`.';
 
 function maxRetriesMessage(owner: string): string {
   return (

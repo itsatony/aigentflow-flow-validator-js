@@ -149,7 +149,7 @@ export function validateBasicStructure(flow: Flow, issues: Issues): void {
     if (stepID === RESERVED_STEP_ID_ORCHESTRATOR) {
       issues.error({
         field: `steps.${stepID}`,
-        message: `Step ID '${stepID}' is reserved (the orchestrator's signal namespace and a next: marker)`,
+        message: `Step ID '${stepID}' is reserved (the removed orchestrator's next: marker and state namespace)`,
         code: 'reserved_step_id_orchestrator',
         stepId: stepID,
         suggestion: 'Rename the step',

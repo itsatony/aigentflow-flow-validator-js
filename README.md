@@ -116,13 +116,13 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.831.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.838.0"`).
 
 ### Options
 
-| Option             | Default | Effect                                                                                                                                                                                                                                                       |
-| ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `strictRegistries` | `false` | Report unknown orchestrator tool names and unknown template functions as **errors** instead of **warnings**. Off by default because the vendored allow-lists can lag the live AIgentFlow registries, and a false-positive error is worse than a missed lint. |
+| Option             | Default | Effect                                                                                                                                                                                                                                                |
+| ------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `strictRegistries` | `false` | Report unknown executor schemes and unknown template functions as **errors** instead of **warnings**. Off by default because the vendored allow-lists can lag the live AIgentFlow registries, and a false-positive error is worse than a missed lint. |
 
 ### Result shape
 
@@ -167,14 +167,12 @@ interface ValidationIssue {
 - **Query schema** — parameter types, `array` requires `items`, item-type validity, `min_items`/`max_items`, nested `object`/`array` recursion.
 - **Response expectations** — valid data types; `array` requires `items`; `required` is boolean or template.
 - **Error strategy** — action enum (`retry`/`fail`/`goto`/`continue`), `goto_step` existence, `max_delay` duration, `backoff_multiplier`, `retry_on` categories.
-- **Connectivity** — `next.default` / `next.conditions[].goto` references (error; only `null` and `orchestrator` need no step, so `end` must name one, and is then an ordinary step); unreachable steps (warning); cycles (warning).
-- **Parallel + orchestrator routing** — `next.parallel` rendezvous/steps; `orchestrator` next requires an orchestrator block.
+- **Connectivity** — `next.default` / `next.conditions[].goto` references (error; only `null` and `orchestrator` need no step, so `end` must name one, and is then an ordinary step; `orchestrator` itself is `orchestrator_removed`); unreachable steps (warning); cycles (warning).
+- **Parallel** — `next.parallel` rendezvous/steps.
 - **Loop / for_each / throttle** — required fields, iteration limits, mutual exclusions, throttle ceilings.
 - **Removed agent surfaces** — `executor_removed` (an `exons://` or `agent://` step, or the `exons_uploads` key) and `agentic_param_removed` (an `ai://` step carrying `agentic`, `max_tool_turns`, `mcp_server_url`, …); both errors, one finding per step.
-- **Orchestrator** — exons presence, trigger types, timer intervals, tool names.
-- **Removed surfaces** — the `exons://` / `agent://` executors and the `ai://` agent-loop parameters (`executor_removed`, `agentic_param_removed`); agent signals and dynamic flow modification (`signal_removed`, `flow_modification_removed`, and the `removed_key_ignored` warning for `checkpoint.pre_dfm` and `orchestrator.enable_signals: false`); campaigns (`campaign_removed`: the `campaign:` block, the campaign tools and triggers).
+- **Removed surfaces** — the `exons://` / `agent://` executors and the `ai://` agent-loop parameters (`executor_removed`, `agentic_param_removed`); agent signals and dynamic flow modification (`signal_removed`, `flow_modification_removed`, and the `removed_key_ignored` warning for `checkpoint.pre_dfm`); campaigns (`campaign_removed`: the `campaign:` block, refused whole); the orchestrator (`orchestrator_removed`: the `orchestrator:` block, refused whole with nothing inside it judged, the flow-level `tool_discovery` / `discoverable_tools`, and a step whose `next` names `orchestrator`).
 - **Nexus agent steps** — `nexus://agent/run` and `nexus://capability/<ref>` (also written `atlas://`, an accepted alias): a literal agent and capabilities, exactly one of `prompt` / `prompt_template`, a valid capability reference, no refused parameters (`atlas_*` codes).
-- **Orchestrator `.exons` frontmatter** — the document must open with a closed `---` frontmatter spec (`orchestrator_exons_parse_failed`) that sets `execution.provider` (`orchestrator_exons_no_provider`) and declares no `requirements.resources` (`exons_resources_unhonoured`); a tool that `orchestrator.tools` and the definition's `tools.allow` disagree about is never offered (`orchestrator_tool_withheld`, warning). The document body is not parsed: that needs the `.exons` engine (see PARITY.md).
 - **`executor_config` environment references** — a `${NAME}` value may name only the variables of the provider or protocol it is written under (`executor_config_env_scope`).
 - **Server-owned query keys** — a step's or loop sub-step's `query:` may not declare `aiv_api_key`, `aiv_base_url` or `aiv_delegation`, which only the server sets (`server_owned_query_key`).
 - **Reserved `data:` keys** — a key of the top-level `data:` map may not name engine state: `memory`, `orchestrator`, `campaign`, `voiceagent`, `org_id`, `current_flow`, the `modif*`/`bottleneck_state` bookkeeping names, a key starting with `_` or `.`, or one under `memory.`, `orchestrator.`, `campaign.`, `voiceagent.` (`flow_data_key_reserved`).
@@ -184,7 +182,6 @@ interface ValidationIssue {
 - **`input_schema`** — version, field-name pattern, type enum, per-type constraints, `pattern` compilation, `visible_when` predicate + reference resolution, duplicate-name detection, file-ordering lint.
 - **Step `output_schema`** — the same JSON-Schema subset as `input_schema`, validated at step scope (and on loop sub-steps).
 - **`quality_gate:`** — `rubric` required, `threshold` in `[0,1]`, `on_fail` enum (`fail`/`goto`/`retry`; `human` is rejected as not-yet-supported), `goto_step` existence + no self-goto when `on_fail=goto`, and the composite/parallel-member scope guards.
-- **`tool_discovery`** — `eager`/`lazy`/`off` on the flow, the orchestrator, and a step `query` (empty and templated values skipped).
 - **Mock scenarios** — each `delay` must be a Go duration (`100ms`, not `100`), judged by its written spelling: `0` saves, `0.0` does not.
 - **`output:`** — no empty-string entries.
 - **Templates** — Go `text/template` **syntax** across query, processing, and conditions; and a value piped into `default` (`{{ .x | default "w" }}`, error; warning in a loop body — `default` takes the value first: `{{ default .x "w" }}`).
@@ -195,7 +192,6 @@ These need a live server / org context and are intentionally out of scope:
 
 - **Credentials** — whether a bound credential actually exists or is authorised.
 - **Model compliance** — the `compliance:` block is enforced against the provider catalogue at flow-create time on the server. (The one catalogue-free part, the warning `compliance_residency_unenforced` for an EU-only residency beside an unpinned call, is checked here.)
-- **`.exons` document bodies** — whether the orchestrator's inline `.exons` document parses and whether its tags can render (`exons_attributes`) needs the `.exons` template engine, which this package does not embed.
 - **Template field resolution** — whether `.data.x.y` will actually be populated at runtime (we validate syntax, not data flow).
 - **Publish gates** — `visibility`/`classification`/template-metadata publish rules are server- and org-context dependent.
 

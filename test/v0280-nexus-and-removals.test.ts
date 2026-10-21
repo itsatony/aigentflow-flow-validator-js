@@ -7,7 +7,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateFlow } from '../src/index.js';
 import spec from '../src/spec/aigentflow-spec.json';
-import { ORCHESTRATOR_TOOLS, ORCHESTRATOR_TRIGGERS } from '../src/spec/index.js';
 
 type Result = ReturnType<typeof validateFlow>;
 
@@ -126,46 +125,6 @@ describe('nexus:// and its alias atlas://', () => {
 });
 
 describe('signal_removed / flow_modification_removed (AIgentFlow v2.834.0)', () => {
-  it('refuses the orchestrator block once per list, in list order, never as unknown or withheld', () => {
-    const r = validateFlow(
-      orchFlow(
-        'tools:\n  allow: [aif_ask_human, aif_signal_need_tool, aif_signal_need_tool]\n',
-        '  enable_signals: true\n' +
-          '  tools: [aif_ask_human, aif_signal_complete, aif_signal_need_human, aif_signal_complete]\n' +
-          '  deny_tools: [aif_signal_delegate]\n' +
-          '  require_approval_for: [aif_signal_modify_flow, AIF_SIGNAL_COMPLETE]\n',
-      ),
-      { strictRegistries: true },
-    );
-    expect(fields(r.errors, 'signal_removed')).toEqual([
-      'orchestrator.deny_tools',
-      'orchestrator.enable_signals',
-      'orchestrator.exons',
-      'orchestrator.require_approval_for',
-      'orchestrator.tools',
-    ]);
-    const msg = (field: string): string =>
-      r.errors.find((e) => e.code === 'signal_removed' && e.field === field)?.message ?? '';
-    expect(msg('orchestrator.tools')).toContain(
-      'names aif_signal_complete, aif_signal_need_human:',
-    );
-    expect(msg('orchestrator.exons')).toContain('names aif_signal_need_tool:');
-    expect(codes(r.errors)).not.toContain('orchestrator_tool_unknown');
-    expect(codes(r.warnings)).not.toContain('orchestrator_tool_withheld');
-    expect(codes(r.warnings)).not.toContain('removed_key_ignored');
-  });
-
-  it('reports the dfm_suggestion trigger once, and not as unknown', () => {
-    const r = validateFlow(
-      orchFlow(
-        '',
-        '  triggers:\n    - type: dfm_suggestion\n    - type: step_completed\n    - type: dfm_suggestion\n',
-      ),
-    );
-    expect(fields(r.errors, 'flow_modification_removed')).toEqual(['orchestrator.triggers']);
-    expect(codes(r.errors)).not.toContain('orchestrator_trigger_unknown');
-  });
-
   it.each(['~', 'false', 'true'])('refuses enable_signals: %s on aiv://', (v) => {
     const r = validateFlow(probe('aiv://acme/x', `      topic: t\n      enable_signals: ${v}\n`));
     expect(fields(r.errors, 'signal_removed')).toEqual(['steps.s']);
@@ -223,21 +182,26 @@ describe('signal_removed / flow_modification_removed (AIgentFlow v2.834.0)', () 
     }
   });
 
-  it('warns removed_key_ignored for the two inert keys, and a null is absent', () => {
-    const r = validateFlow(
-      orchFlow('', '  enable_signals: false\n', 'checkpoint:\n  pre_dfm: false\n'),
-    );
+  it('warns removed_key_ignored for checkpoint.pre_dfm, and a null is absent', () => {
+    const r = validateFlow(`${MINIMAL}checkpoint:\n  pre_dfm: false\n`);
     expect(r.valid, JSON.stringify(r.errors)).toBe(true);
-    expect(fields(r.warnings, 'removed_key_ignored')).toEqual([
-      'checkpoint.pre_dfm',
-      'orchestrator.enable_signals',
-    ]);
+    expect(fields(r.warnings, 'removed_key_ignored')).toEqual(['checkpoint.pre_dfm']);
     expect(codes(r.warnings)).not.toContain('unknown_yaml_key');
-    const nulls = validateFlow(
-      orchFlow('', '  enable_signals: ~\n', 'checkpoint:\n  pre_dfm: ~\n'),
-    );
+    const nulls = validateFlow(`${MINIMAL}checkpoint:\n  pre_dfm: ~\n`);
     expect(codes(nulls.warnings)).not.toContain('removed_key_ignored');
-    expect(codes(nulls.errors)).not.toContain('signal_removed');
+  });
+
+  it('judges nothing inside the refused orchestrator block (AIgentFlow v2.838.0)', () => {
+    const r = validateFlow(
+      orchFlow(
+        'tools:\n  allow: [aif_ask_human, aif_signal_need_tool]\n',
+        '  enable_signals: false\n  tools: [aif_signal_complete, aif_campaign_spawn]\n' +
+          '  triggers:\n    - type: dfm_suggestion\n    - type: campaign_child_failed\n',
+      ),
+      { strictRegistries: true },
+    );
+    expect(keys(r.errors)).toEqual(['orchestrator_removed@orchestrator#']);
+    expect(r.warnings).toEqual([]);
   });
 });
 
@@ -258,35 +222,6 @@ describe('campaign_removed (AIgentFlow v2.836.0)', () => {
     expect(codes(validateFlow(`${MINIMAL}campaign: ~\n`).errors)).not.toContain('campaign_removed');
   });
 
-  it('refuses the tool lists and the triggers once each, never as unknown or withheld', () => {
-    const r = validateFlow(
-      orchFlow(
-        'tools:\n  allow: [aif_ask_human, aif_campaign_results]\n',
-        '  tools: [aif_campaign_status, aif_campaign_spawn, aif_campaign_status]\n' +
-          '  deny_tools: [aif_campaign_cancel]\n  require_approval_for: [aif_campaign_spawn]\n' +
-          '  triggers:\n    - type: campaign_child_failed\n    - type: timer\n      interval: 1m\n' +
-          '    - type: campaign_child_completed\n    - type: campaign_child_failed\n',
-      ),
-      { strictRegistries: true },
-    );
-    expect(fields(r.errors, 'campaign_removed')).toEqual([
-      'orchestrator.deny_tools',
-      'orchestrator.exons',
-      'orchestrator.require_approval_for',
-      'orchestrator.tools',
-      'orchestrator.triggers',
-    ]);
-    const msg = (field: string): string =>
-      r.errors.find((e) => e.code === 'campaign_removed' && e.field === field)?.message ?? '';
-    expect(msg('orchestrator.tools')).toContain('names aif_campaign_status, aif_campaign_spawn:');
-    expect(msg('orchestrator.triggers')).toContain(
-      'names campaign_child_failed, campaign_child_completed:',
-    );
-    expect(codes(r.errors)).not.toContain('orchestrator_tool_unknown');
-    expect(codes(r.errors)).not.toContain('orchestrator_trigger_unknown');
-    expect(codes(r.warnings)).not.toContain('orchestrator_tool_withheld');
-  });
-
   it('never judges a step', () => {
     const r = validateFlow(
       probe('flow://stored/c', '      campaign: x\n      max_credits_per_child: 3\n'),
@@ -295,15 +230,15 @@ describe('campaign_removed (AIgentFlow v2.836.0)', () => {
   });
 });
 
-describe('the registries', () => {
-  it('no longer offer the removed names', () => {
-    const tools = [...spec.removedSignalSurfaces.tools, ...spec.removedCampaignSurfaces.tools];
-    const triggers = [
-      ...spec.removedSignalSurfaces.triggers,
-      ...spec.removedCampaignSurfaces.triggers,
-    ];
-    for (const t of tools) expect(ORCHESTRATOR_TOOLS.has(t), t).toBe(false);
-    for (const t of triggers) expect(ORCHESTRATOR_TRIGGERS.has(t), t).toBe(false);
+describe('the spec', () => {
+  it('types the removed blocks as any, so nothing inside them is an unknown key', () => {
+    const root = (spec.knownKeys.types as Record<string, Record<string, string>>)[
+      spec.knownKeys.root
+    ]!;
+    for (const key of ['campaign', 'orchestrator', 'tool_discovery', 'discoverable_tools']) {
+      expect(root[key], key).toBe('any');
+    }
     expect('CampaignConfig' in spec.knownKeys.types).toBe(false);
+    expect('OrchestratorDefinition' in spec.knownKeys.types).toBe(false);
   });
 });

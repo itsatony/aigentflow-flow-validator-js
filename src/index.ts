@@ -17,7 +17,6 @@ import { validateConnectivity } from './validators/connectivity.js';
 import { validateNextLogic } from './validators/nextLogic.js';
 import { validateExpressionFunctions } from './validators/expressionFunctions.js';
 import { validateLoopForEachThrottle } from './validators/loopForEachThrottle.js';
-import { validateOrchestratorCampaign } from './validators/orchestratorCampaign.js';
 import { validateCredentialBindings } from './validators/credentialBindings.js';
 import { validateInputSchema } from './validators/inputSchema.js';
 import { validateReservedInputNames } from './validators/reservedInputs.js';
@@ -33,7 +32,6 @@ import { validateUnknownKeys } from './validators/unknownKeys.js';
 import { validateExecutorConfigEnvScopes } from './validators/executorConfigEnv.js';
 import { validateServerOwnedQueryKeys } from './validators/serverOwnedQueryKeys.js';
 import { validateCredentialEndpointPairing } from './validators/credentialEndpoint.js';
-import { validateOrchestratorExons } from './validators/exons.js';
 import { validateRemovedOrchestratorSurfaces } from './validators/removedSignalCampaign.js';
 import { validateResidencyEnforcement } from './validators/complianceResidency.js';
 import { validateExamples } from './validators/examples.js';
@@ -113,7 +111,6 @@ function validateParsed(
   validateNextLogic(f, issues);
   validateExpressionFunctions(f, issues);
   validateLoopForEachThrottle(f, issues);
-  validateOrchestratorCampaign(f, issues, opts);
   validateCredentialBindings(f, issues);
   validateInputSchema(f, issues);
   validateReservedInputNames(f, issues);
@@ -127,10 +124,6 @@ function validateParsed(
   validateFlowDataKeys(f, issues);
   validateCredentialEndpointPairing(f, issues);
   validateExamples(f, issues);
-  // The orchestrator's inline .exons frontmatter. A tag that cannot render
-  // (`exons_attributes`) needs an .exons ENGINE to judge and is not judged here
-  // at all — PARITY.md, divergence #16.
-  validateOrchestratorExons(f, issues);
   validateRemovedOrchestratorSurfaces(f, issues);
   validateResidencyEnforcement(f, issues);
   // Last among the structural rules: it skips a location another rule has

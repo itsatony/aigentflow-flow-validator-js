@@ -61,8 +61,8 @@ export interface ValidationResult {
 /** Options accepted by {@link validateFlow} and {@link validateFlowObject}. */
 export interface ValidateOptions {
   /**
-   * When true, an unrecognised orchestrator tool name and an unknown template
-   * function are reported as `error` instead of `warning`. Off by default
+   * When true, an unknown executor scheme and an unknown template function are
+   * reported as `error` instead of `warning`. Off by default
    * because the vendored allow-lists can lag the live AIgentFlow registries,
    * and a false-positive error is worse than a missed lint. See PARITY.md.
    */
@@ -256,29 +256,6 @@ export interface InputSchema {
   fields?: InputSchemaField[];
 }
 
-export interface OrchestratorTrigger {
-  type?: string;
-  interval?: string;
-}
-
-export interface OrchestratorDefinition {
-  exons?: string;
-  agentic?: boolean;
-  mode?: string;
-  /** Provider region the orchestrator's model calls are pinned to (e.g. `eu`). */
-  region?: string;
-  /** Makes the provider refuse a call carrying no region. Requires `region`. */
-  enforce_region?: boolean;
-  triggers?: OrchestratorTrigger[];
-  tools?: string[];
-  max_turns?: number;
-  // AIF v2.695.0 (DC-FORGE-125, aigentflow#124): an OPT-IN per-question HITL
-  // deadline. Absent means no deadline — the reference treats a default here as
-  // a policy nobody chose, so this validator must never infer one either.
-  human_question_timeout?: string;
-  human_question_timeout_response?: string;
-}
-
 export interface Flow {
   aigentflow_version?: string;
   name?: string;
@@ -299,7 +276,12 @@ export interface Flow {
   // AIgentFlow v2.721.0 (nothing read either); see validators/retiredKeys.ts.
   currency?: string;
   max_duration?: string;
-  orchestrator?: OrchestratorDefinition;
+  /** Removed in AIgentFlow v2.838.0: any non-null value is `orchestrator_removed`. */
+  orchestrator?: unknown;
+  /** Removed in AIgentFlow v2.838.0: any non-null value is `orchestrator_removed`. */
+  tool_discovery?: unknown;
+  /** Removed in AIgentFlow v2.838.0: any non-null value is `orchestrator_removed`. */
+  discoverable_tools?: unknown;
   /** Removed in AIgentFlow v2.836.0: any non-null value is `campaign_removed`. */
   campaign?: unknown;
   checkpoint?: Record<string, unknown>;

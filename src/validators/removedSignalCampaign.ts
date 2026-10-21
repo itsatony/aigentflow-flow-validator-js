@@ -1,28 +1,29 @@
-// The orchestrator surfaces AIgentFlow removed after its own agent chains:
-// agent signals and dynamic flow modification (v2.834.0, AGENTCUT B1) and
-// campaigns (v2.836.0, AGENTCUT B2). The vocabulary lives in the spec blocks
-// `removedSignalSurfaces` and `removedCampaignSurfaces`; the reference is
-// aigentflow.removed.signalsurfaces.go / .campaignsurfaces.go.
+// The flow surfaces AIgentFlow removed after its own agent chains: agent
+// signals and dynamic flow modification (v2.834.0), campaigns (v2.836.0) and
+// the orchestrator (v2.838.0). The vocabulary lives in the spec blocks
+// `removedSignalSurfaces`, `removedCampaignSurfaces` and
+// `removedOrchestratorSurfaces`; the reference is aigentflow.removed.*surfaces.go.
 //
-// Three ERROR codes (`signal_removed`, `flow_modification_removed`,
-// `campaign_removed`) and one WARNING (`removed_key_ignored`, for the two inert
-// keys AIgentFlow may have written into a stored flow itself). The removed tool
-// and trigger names left the registries but are tolerated by the unknown-name
-// checks, and the removed block keys stay in knownKeys, so each surface is
-// reported once, by its own code, with its advice.
+// Four ERROR codes (`signal_removed`, `flow_modification_removed`,
+// `campaign_removed`, `orchestrator_removed`) and one WARNING
+// (`removed_key_ignored`, for `checkpoint.pre_dfm`, which AIgentFlow may have
+// written into a stored flow itself). The removed blocks are judged on presence
+// and refused WHOLE: nothing inside the `orchestrator:` or `campaign:` block is
+// judged, and both stay in knownKeys typed `any`, so each surface is reported
+// once, by its own code, with its advice.
 //
-// Order, as in the reference: the signal findings on the orchestrator block,
-// the campaign findings (block, lists, triggers), then the step findings, a
-// step's loop sub-steps after it.
+// Order, as in the reference: the signal / DFM step findings, the campaign
+// block, the orchestrator block, the flow-level discovery keys, then the steps
+// that route next to the orchestrator (by id).
 
 import type { Flow } from '../types.js';
 import {
   REMOVED_AGENT_SURFACES,
   REMOVED_CAMPAIGN_SURFACES,
+  REMOVED_ORCHESTRATOR_SURFACES,
   REMOVED_SIGNAL_SURFACES,
 } from '../spec/index.js';
 import { removedExecutorScheme } from './executors.js';
-import { inspectExonsFrontmatter } from './exons.js';
 import { Issues, isRecord } from './util.js';
 
 const TEMPLATE_ACTION_OPEN = '{{';
@@ -33,93 +34,25 @@ function fill(format: string, ...args: string[]): string {
   return format.replace(/%[qs]/g, () => args[i++] ?? '');
 }
 
-/** The string entries of a list-valued key, in order. */
-function stringEntries(m: Record<string, unknown>, key: string): string[] {
-  const raw = m[key];
-  return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === 'string') : [];
+/** An own property holding a non-null value (a YAML null is absent). */
+function present(m: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(m, key) && m[key] !== undefined && m[key] !== null;
 }
 
-/** The string `type` of each orchestrator trigger, in order. */
-function triggerTypes(orch: Record<string, unknown>): string[] {
-  const raw = orch.triggers;
-  if (!Array.isArray(raw)) return [];
-  const out: string[] = [];
-  for (const t of raw) {
-    if (isRecord(t) && typeof t.type === 'string') out.push(t.type);
-  }
-  return out;
-}
-
-/** The entries of `names` that are in `removed`, in list order, each once. */
-function namesIn(names: readonly string[], removed: readonly string[]): string[] {
-  const found: string[] = [];
-  for (const name of names) {
-    if (removed.includes(name) && !found.includes(name)) found.push(name);
-  }
-  return found;
-}
-
-/** The orchestrator definition's `tools.allow`, or [] when it cannot be read. */
-function orchestratorToolsAllow(orch: Record<string, unknown>): string[] {
-  const source = orch.exons;
-  if (typeof source !== 'string' || source === '') return [];
-  const report = inspectExonsFrontmatter(source);
-  if (report.parseError !== null || !report.specRead || !report.toolsAllowDeclared) return [];
-  return [...report.toolsAllow];
+/** Whether a next block names `target` exactly, as its default or any condition's goto. */
+function routesTo(next: unknown, target: string): boolean {
+  if (!isRecord(next)) return false;
+  if (next.default === target) return true;
+  const conditions = next.conditions;
+  return Array.isArray(conditions) && conditions.some((c) => isRecord(c) && c.goto === target);
 }
 
 export function validateRemovedOrchestratorSurfaces(flow: Flow, issues: Issues): void {
-  const sig = REMOVED_SIGNAL_SURFACES;
+  validateRemovedSignalStepKeys(flow, issues);
+
+  // Campaigns: the block, judged on presence (any non-null value), refused whole.
   const camp = REMOVED_CAMPAIGN_SURFACES;
-  const orch = isRecord(flow.orchestrator) ? flow.orchestrator : null;
-
-  // The four tool lists, in the reference's order. tools.allow is reported at
-  // the orchestrator's exons document, as orchestrator_tool_withheld is.
-  const lists: { field: string; names: string[] }[] =
-    orch === null
-      ? []
-      : [
-          ...['tools', 'deny_tools', 'require_approval_for'].map((key) => ({
-            field: `orchestrator.${key}`,
-            names: stringEntries(orch, key),
-          })),
-          { field: 'orchestrator.exons', names: orchestratorToolsAllow(orch) },
-        ];
-
-  // B1: signals and DFM on the orchestrator block.
-  if (orch !== null) {
-    if (orch.enable_signals === true) {
-      issues.error({
-        field: 'orchestrator.enable_signals',
-        code: sig.signalRemovedCode,
-        message: sig.enableSignalsMessage,
-        suggestion: sig.suggestion,
-      });
-    }
-    for (const list of lists) {
-      const named = namesIn(list.names, sig.tools);
-      if (named.length === 0) continue;
-      issues.error({
-        field: list.field,
-        code: sig.signalRemovedCode,
-        message: fill(sig.toolNamesMessageFormat, list.field, named.join(', ')),
-        suggestion: sig.suggestion,
-      });
-    }
-    if (namesIn(triggerTypes(orch), sig.triggers).length > 0) {
-      issues.error({
-        field: 'orchestrator.triggers',
-        code: sig.flowModificationRemovedCode,
-        message: sig.triggersMessage,
-        suggestion: sig.suggestion,
-      });
-    }
-  }
-
-  // B2: campaigns. The block is judged on presence (any non-null value) and
-  // refused whole.
-  const block: unknown = flow[camp.flowKey];
-  if (block !== undefined && block !== null) {
+  if (present(flow, camp.flowKey)) {
     issues.error({
       field: camp.flowKey,
       code: camp.code,
@@ -127,29 +60,30 @@ export function validateRemovedOrchestratorSurfaces(flow: Flow, issues: Issues):
       suggestion: camp.suggestion,
     });
   }
-  if (orch !== null) {
-    for (const list of lists) {
-      const named = namesIn(list.names, camp.tools);
-      if (named.length === 0) continue;
-      issues.error({
-        field: list.field,
-        code: camp.code,
-        message: fill(camp.toolNamesMessageFormat, list.field, named.join(', ')),
-        suggestion: camp.suggestion,
-      });
-    }
-    const triggers = namesIn(triggerTypes(orch), camp.triggers);
-    if (triggers.length > 0) {
-      issues.error({
-        field: 'orchestrator.triggers',
-        code: camp.code,
-        message: fill(camp.triggersMessageFormat, triggers.join(', ')),
-        suggestion: camp.suggestion,
-      });
-    }
-  }
 
-  // B1: the step keys, on map presence (null and false included).
+  validateRemovedOrchestrator(flow, issues);
+
+  // The inert key: a WARNING, never an error. A YAML null is absent.
+  const sig = REMOVED_SIGNAL_SURFACES;
+  const checkpoint = flow.checkpoint;
+  if (isRecord(checkpoint) && checkpoint.pre_dfm !== undefined && checkpoint.pre_dfm !== null) {
+    const field = 'checkpoint.pre_dfm';
+    issues.warn({
+      field,
+      code: sig.removedKeyIgnoredCode,
+      message: fill(sig.ignoredKeyMessageFormat, field),
+      suggestion: sig.ignoredKeySuggestion,
+    });
+  }
+}
+
+// The two removed step keys, on map presence (null and false included):
+// `flow_modification_allowed` on any step, `enable_signals` on an aiv:// step
+// (ai:// reports it as agentic_param_removed). Skipped: templated executors,
+// removed schemes (the step is executor_removed already) and flow:// (its query
+// is the child's inputs).
+function validateRemovedSignalStepKeys(flow: Flow, issues: Issues): void {
+  const sig = REMOVED_SIGNAL_SURFACES;
   const judgeStep = (executor: unknown, query: unknown, field: string, stepID: string): void => {
     if (typeof executor !== 'string' || executor === '') return;
     if (executor.includes(TEMPLATE_ACTION_OPEN)) return;
@@ -177,38 +111,57 @@ export function validateRemovedOrchestratorSurfaces(flow: Flow, issues: Issues):
     }
   };
   const steps = flow.steps;
-  if (isRecord(steps)) {
-    for (const stepID of Object.keys(steps).sort()) {
-      const step = steps[stepID];
-      if (!isRecord(step)) continue;
-      judgeStep(step.executor, step.query, `steps.${stepID}`, stepID);
-      const loop = step.loop;
-      if (!isRecord(loop) || !Array.isArray(loop.steps)) continue;
-      loop.steps.forEach((sub: unknown, i: number) => {
-        if (!isRecord(sub)) return;
-        // The composite id executors.ts gives the same sub-step.
-        const subID = issues.stringOf(sub, 'id', `steps.${stepID}.loop.steps[${i}]`) ?? String(i);
-        judgeStep(
-          sub.executor,
-          sub.query,
-          `steps.${stepID}.loop.steps[${i}]`,
-          `${stepID}.${subID}`,
-        );
-      });
-    }
-  }
-
-  // The inert keys: a WARNING, never an error. A YAML null is absent.
-  const ignored = (field: string): void =>
-    issues.warn({
-      field,
-      code: sig.removedKeyIgnoredCode,
-      message: fill(sig.ignoredKeyMessageFormat, field),
-      suggestion: sig.ignoredKeySuggestion,
+  if (!isRecord(steps)) return;
+  for (const stepID of Object.keys(steps).sort()) {
+    const step = steps[stepID];
+    if (!isRecord(step)) continue;
+    judgeStep(step.executor, step.query, `steps.${stepID}`, stepID);
+    const loop = step.loop;
+    if (!isRecord(loop) || !Array.isArray(loop.steps)) continue;
+    loop.steps.forEach((sub: unknown, i: number) => {
+      if (!isRecord(sub)) return;
+      // The composite id executors.ts gives the same sub-step.
+      const subID = issues.stringOf(sub, 'id', `steps.${stepID}.loop.steps[${i}]`) ?? String(i);
+      judgeStep(sub.executor, sub.query, `steps.${stepID}.loop.steps[${i}]`, `${stepID}.${subID}`);
     });
-  if (orch !== null && orch.enable_signals === false) ignored('orchestrator.enable_signals');
-  const checkpoint = flow.checkpoint;
-  if (isRecord(checkpoint) && checkpoint.pre_dfm !== undefined && checkpoint.pre_dfm !== null) {
-    ignored('checkpoint.pre_dfm');
+  }
+}
+
+// orchestrator_removed: the block (any non-null value, a scalar or list
+// included), each flow-level discovery key (any non-null value, '' and []
+// included), and every top-level step whose next.default or a condition's goto
+// is exactly `orchestrator` (one finding per step). Loop sub-steps are not
+// judged here: their next refuses the marker already (loop_substep_next_sentinel).
+function validateRemovedOrchestrator(flow: Flow, issues: Issues): void {
+  const cfg = REMOVED_ORCHESTRATOR_SURFACES;
+  if (present(flow, cfg.blockKey)) {
+    issues.error({
+      field: cfg.blockKey,
+      code: cfg.code,
+      message: cfg.blockMessage,
+      suggestion: cfg.suggestion,
+    });
+  }
+  for (const key of cfg.discoveryKeys) {
+    if (!present(flow, key)) continue;
+    issues.error({
+      field: key,
+      code: cfg.code,
+      message: fill(cfg.flowKeyMessageFormat, JSON.stringify(key)),
+      suggestion: cfg.suggestion,
+    });
+  }
+  const steps = flow.steps;
+  if (!isRecord(steps)) return;
+  for (const stepID of Object.keys(steps).sort()) {
+    const step = steps[stepID];
+    if (!isRecord(step) || !routesTo(step.next, cfg.nextMarker)) continue;
+    issues.error({
+      field: `steps.${stepID}`,
+      code: cfg.code,
+      stepId: stepID,
+      message: fill(cfg.nextMessageFormat, JSON.stringify(stepID)),
+      suggestion: cfg.suggestion,
+    });
   }
 }

@@ -1,68 +1,21 @@
-// Three save-door refusals from `FlowParser.ValidateFlow` (parser.go) that are
-// pure functions of the document: the `tool_discovery` vocabulary, the mock
-// scenario `delay`, and an empty `output:` entry.
+// Two save-door refusals from `FlowParser.ValidateFlow` (parser.go) that are
+// pure functions of the document: the mock scenario `delay`, and an empty
+// `output:` entry. (The `tool_discovery` vocabulary rule went with the
+// orchestrator in AIgentFlow v2.838.0: the flow-level key is
+// `orchestrator_removed`, and nothing reads the vocabulary any more.)
 //
-// Every one is an ERROR, because the reference refuses the flow at save. Two of
-// them (tool_discovery, mock delay) are routed through the reference's
-// `refuseRetroactively`, so a flow stored before the rule existed is only
-// logged at the load door and still runs. This validator answers "would this
-// save", so it reports them as errors — the same choice as the executor-URL
-// shape rule (PARITY.md, divergence #10).
+// Both are ERRORS, because the reference refuses the flow at save. The mock
+// delay is routed through the reference's `refuseRetroactively`, so a flow
+// stored before the rule existed is only logged at the load door and still
+// runs. This validator answers "would this save", so it reports it as an error
+// — the same choice as the executor-URL shape rule (PARITY.md, divergence #10).
 
 import type { Flow } from '../types.js';
-import { Issues, isRecord, isString, parseGoDuration } from './util.js';
-
-/** The closed `tool_discovery` vocabulary (reference: IsValidDiscoveryMode). */
-const TOOL_DISCOVERY_MODES: ReadonlySet<string> = new Set(['eager', 'lazy', 'off']);
-const TEMPLATE_ACTION_OPEN = '{{';
-const KEY_TOOL_DISCOVERY = 'tool_discovery';
+import { Issues, isRecord, parseGoDuration } from './util.js';
 
 export function validateSaveDoorExtras(flow: Flow, issues: Issues): void {
-  validateToolDiscovery(flow, issues);
   validateMockScenarioDelays(flow, issues);
   validateOutputParameters(flow, issues);
-}
-
-// validateToolDiscovery mirrors validateToolDiscoveryVocabulary (AIF
-// DC-FORGE-48). The value decides TOOL EXPOSURE, and every consuming switch
-// treats an unknown value as `eager` — so `tool_discovery: of`, a typo for
-// `off`, injected every tool. An empty value means "unset" and a templated one
-// is rendered at run time; both are skipped.
-//
-// The flow root and the orchestrator carry a Go `string` field, which yaml.v3
-// fills from ANY scalar: `tool_discovery: 5` is the string "5" and is refused.
-// On a step the surface is a free-form `query` key, so only a YAML string is
-// judged there — a number or boolean is left to the executor.
-function validateToolDiscovery(flow: Flow, issues: Issues): void {
-  const check = (value: string | null, field: string, stepId?: string): void => {
-    if (value === null || value === '' || value.includes(TEMPLATE_ACTION_OPEN)) return;
-    if (TOOL_DISCOVERY_MODES.has(value)) return;
-    issues.error({
-      field,
-      message: `tool_discovery '${value}' is not a recognised mode`,
-      code: 'tool_discovery_invalid',
-      ...(stepId !== undefined ? { stepId } : {}),
-      suggestion: `Use one of: ${[...TOOL_DISCOVERY_MODES].join(', ')}, or omit the key`,
-    });
-  };
-
-  if (KEY_TOOL_DISCOVERY in flow) {
-    check(issues.stringOf(flow, KEY_TOOL_DISCOVERY, ''), KEY_TOOL_DISCOVERY);
-  }
-  const orch: unknown = flow.orchestrator;
-  if (isRecord(orch) && KEY_TOOL_DISCOVERY in orch) {
-    check(
-      issues.stringOf(orch, KEY_TOOL_DISCOVERY, 'orchestrator'),
-      `orchestrator.${KEY_TOOL_DISCOVERY}`,
-    );
-  }
-  if (!isRecord(flow.steps)) return;
-  for (const [stepID, step] of Object.entries(flow.steps as Record<string, unknown>)) {
-    if (!isRecord(step) || !isRecord(step.query)) continue;
-    const value: unknown = step.query[KEY_TOOL_DISCOVERY];
-    if (!isString(value)) continue;
-    check(value, `steps.${stepID}.query.${KEY_TOOL_DISCOVERY}`, stepID);
-  }
 }
 
 // validateMockScenarioDelays mirrors the reference rule of the same name (AIF
