@@ -11,3 +11,6 @@ test/conformance/examples-cases.json
 # Shared byte for byte with the Go port, kept as authored.
 test/conformance/fixtures/invalid-for-each-items-*.yaml
 test/conformance/fixtures/valid-for-each-items-forms.yaml
+# Shared byte for byte with the Go port, kept as authored.
+test/conformance/fixtures/valid-executor-aiflow-alias.yaml
+test/conformance/fixtures/invalid-executor-aiflow-one-segment.yaml
