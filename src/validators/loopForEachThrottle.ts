@@ -11,7 +11,11 @@ import type {
   ThrottleDefinition,
 } from '../types.js';
 import type { Flow } from '../types.js';
-import { FOR_EACH_RESOLUTIONS, LOOP_MAX_ITERATIONS_LIMIT } from '../spec/index.js';
+import {
+  FOR_EACH_ITEMS_SHAPE,
+  FOR_EACH_RESOLUTIONS,
+  LOOP_MAX_ITERATIONS_LIMIT,
+} from '../spec/index.js';
 import { Issues, isInteger, isRecord, parseGoDuration } from './util.js';
 
 // Throttle ceilings (Go: FOR_EACH_MAX_THROTTLE_DELAY = 5m, FOR_EACH_MAX_BATCH_DELAY = 30m), in nanoseconds.
@@ -224,6 +228,21 @@ function validateThrottle(
   }
 }
 
+/** True when the text parses as JSON and the result is an array. */
+function isJsonArrayText(text: string): boolean {
+  try {
+    return Array.isArray(JSON.parse(text));
+  } catch {
+    return false;
+  }
+}
+
+function truncateCodePoints(value: string, max: number, ellipsis: string): string {
+  const points = Array.from(value);
+  if (points.length <= max) return value;
+  return points.slice(0, max).join('') + ellipsis;
+}
+
 function validateForEach(step: Record<string, unknown>, stepID: string, issues: Issues): void {
   const fe = step.for_each as ForEachDefinition;
   const base = `steps.${stepID}.for_each`;
@@ -237,6 +256,25 @@ function validateForEach(step: Record<string, unknown>, stepID: string, issues: 
       code: 'for_each_items_required',
       stepId: stepID,
     });
+  }
+
+  // A non-empty text with no template marker that is not a JSON array can never
+  // resolve to a list. Read as a Go `string` field: `items: 5` is the text "5".
+  // A mapping or list yields null and is not judged here.
+  const items = issues.stringOf(fe, 'items', base);
+  const cfg = FOR_EACH_ITEMS_SHAPE;
+  if (items !== null && items !== '') {
+    if (!items.includes(cfg.templateMarker) && !isJsonArrayText(items.trim())) {
+      issues.error({
+        field: `${base}.items`,
+        message: cfg.messageFormat.replace('%s', () =>
+          truncateCodePoints(items, cfg.maxRunes, cfg.ellipsis),
+        ),
+        code: cfg.code,
+        stepId: stepID,
+        suggestion: cfg.suggestion,
+      });
+    }
   }
 
   const next = step.next;

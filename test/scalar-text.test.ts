@@ -160,6 +160,8 @@ describe('every rule that reads a Go string field reads a number as text', () =>
     {
       name: 'for_each items',
       src: step('    for_each:\n      items: 5\n'),
+      wantError: 'for_each_items_unresolvable',
+      field: 'steps.a.for_each.items',
       forbid: ['for_each_items_required'],
     },
     {

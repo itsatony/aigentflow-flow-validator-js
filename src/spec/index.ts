@@ -455,3 +455,13 @@ export const RESERVED_INPUT_NAMES = {
   queryFieldFormat: spec.reservedInputNames.queryFieldFormat,
   schemaFieldFormat: spec.reservedInputNames.schemaFieldFormat,
 } as const;
+
+/** The `for_each.items` shape rule (`for_each_items_unresolvable`, AIgentFlow v2.841.0). */
+export const FOR_EACH_ITEMS_SHAPE = {
+  code: spec.forEachItemsShape.code,
+  templateMarker: spec.forEachItemsShape.templateMarker,
+  maxRunes: spec.forEachItemsShape.maxRunes,
+  ellipsis: spec.forEachItemsShape.ellipsis,
+  messageFormat: spec.forEachItemsShape.messageFormat,
+  suggestion: spec.forEachItemsShape.suggestion,
+} as const;
