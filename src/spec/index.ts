@@ -194,17 +194,14 @@ export const KNOWN_KEYS = spec.knownKeys as {
  * Which orchestrator tools the inline `.exons` definition's `tools.allow` may
  * withhold (AIgentFlow v2.760.0, `orchestrator_tool_withheld`). A tool is offered
  * only if it passes BOTH `orchestrator.tools` (empty = every tool) AND
- * `tools.allow` (absent = no narrowing). The lifecycle tools, and the signal
- * tools while `enable_signals` is on (the default), are exempt from
- * `tools.allow`.
+ * `tools.allow` (absent = no narrowing). Only the lifecycle tools are exempt
+ * from `tools.allow`; the signal exemption and the campaign arm went with those
+ * tools (AIgentFlow v2.834.0 / v2.836.0).
  */
 export const ORCHESTRATOR_TOOL_ALLOW = {
   warningField: spec.orchestratorToolAllow.warningField,
   askHumanTool: spec.orchestratorToolAllow.askHumanTool,
-  enableSignalsDefault: spec.orchestratorToolAllow.enableSignalsDefault,
   lifecycleTools: spec.orchestratorToolAllow.lifecycleTools as readonly string[],
-  signalTools: spec.orchestratorToolAllow.signalTools as readonly string[],
-  campaignTools: spec.orchestratorToolAllow.campaignTools as readonly string[],
 } as const;
 
 /** How the orchestrator's inline `.exons` document is delimited. */
@@ -232,6 +229,59 @@ export const REMOVED_AGENT_SURFACES = {
   flowKeyMessageFormat: removed.flowKeyMessageFormat,
   suggestion: removed.suggestion,
 } as const;
+
+/**
+ * Signals and dynamic flow modification, removed in AIgentFlow v2.834.0
+ * (AGENTCUT B1): `signal_removed`, `flow_modification_removed` (errors) and
+ * `removed_key_ignored` (a warning, for two inert keys).
+ */
+const signal = spec.removedSignalSurfaces;
+export const REMOVED_SIGNAL_SURFACES = {
+  signalRemovedCode: signal.signalRemovedCode,
+  flowModificationRemovedCode: signal.flowModificationRemovedCode,
+  removedKeyIgnoredCode: signal.removedKeyIgnoredCode,
+  tools: signal.tools as readonly string[],
+  triggers: signal.triggers as readonly string[],
+  stepKey: signal.stepKey,
+  stepKeyScheme: signal.stepKeyScheme,
+  flowModificationStepKey: signal.flowModificationStepKey,
+  stepSkipSchemes: new Set<string>(signal.stepSkipSchemes),
+  enableSignalsMessage: signal.enableSignalsMessage,
+  toolNamesMessageFormat: signal.toolNamesMessageFormat,
+  stepKeyMessageFormat: signal.stepKeyMessageFormat,
+  triggersMessage: signal.triggersMessage,
+  flowModificationStepMessageFormat: signal.flowModificationStepMessageFormat,
+  ignoredKeyMessageFormat: signal.ignoredKeyMessageFormat,
+  ignoredKeySuggestion: signal.ignoredKeySuggestion,
+  suggestion: signal.suggestion,
+} as const;
+
+/** Campaigns, removed in AIgentFlow v2.836.0 (AGENTCUT B2): `campaign_removed`. */
+const campaign = spec.removedCampaignSurfaces;
+export const REMOVED_CAMPAIGN_SURFACES = {
+  code: campaign.code,
+  flowKey: campaign.flowKey,
+  tools: campaign.tools as readonly string[],
+  triggers: campaign.triggers as readonly string[],
+  blockMessage: campaign.blockMessage,
+  toolNamesMessageFormat: campaign.toolNamesMessageFormat,
+  triggersMessageFormat: campaign.triggersMessageFormat,
+  suggestion: campaign.suggestion,
+} as const;
+
+/**
+ * The removed signal and campaign tool / trigger names. They left the
+ * orchestrator registries, but the unknown-name checks TOLERATE them: each is
+ * reported once, by its own removal code, with advice.
+ */
+export const REMOVED_ORCHESTRATOR_TOOLS: ReadonlySet<string> = new Set([
+  ...signal.tools,
+  ...campaign.tools,
+]);
+export const REMOVED_ORCHESTRATOR_TRIGGERS: ReadonlySet<string> = new Set([
+  ...signal.triggers,
+  ...campaign.triggers,
+]);
 
 /**
  * `executor_config` may expand only the environment variables of the key it is
@@ -409,6 +459,8 @@ export const FUNCTION_OPERATIONS = {
 const atlas = spec.atlasExecutor;
 export const ATLAS_EXECUTOR = {
   scheme: atlas.scheme,
+  /** The canonical scheme (nexus) and its aliases (atlas): one set of rules. */
+  schemes: new Set<string>([atlas.scheme, ...atlas.aliases]) as ReadonlySet<string>,
   providerAgent: atlas.providerAgent,
   providerCapability: atlas.providerCapability,
   agentResource: atlas.agentResource,

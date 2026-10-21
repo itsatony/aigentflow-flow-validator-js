@@ -27,7 +27,7 @@ describe('atlas:// executor', () => {
     expect(found[0]!.field).toBe('steps.only');
     expect(found[0]!.stepId).toBe('only');
     expect(found[0]!.message).toBe(
-      'step "only" runs an Atlas agent but query.agent is missing, empty or not a string.',
+      'step "only" runs a Nexus agent but query.agent is missing, empty or not a string.',
     );
   });
 

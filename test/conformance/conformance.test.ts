@@ -270,17 +270,6 @@ const CASES: Case[] = [
     valid: true,
   },
   {
-    // DC-COND-2: monitor-mode campaign with on_children_complete → a real step.
-    file: 'valid-campaign-handoff.yaml',
-    valid: true,
-  },
-  {
-    // DC-COND-2: on_children_complete referencing a nonexistent step is refused.
-    file: 'invalid-campaign-handoff-unknown-step.yaml',
-    valid: false,
-    expectErrorCodes: ['campaign_handoff_step_unknown'],
-  },
-  {
     // DC-COND-1: owner mode with no next: orchestrator yield edge is refused.
     file: 'invalid-orchestrator-owner-no-yield.yaml',
     valid: false,
@@ -400,13 +389,6 @@ const CASES: Case[] = [
     forbidWarningCodes: ['unknown_processing_operation', 'unknown_processing_config_key'],
   },
   {
-    // AIF v2.728.0 (DC-FORGE-155): the campaign's per-child USD cap was deleted
-    // for `max_credits_per_child`. The strict decoder refuses the old key.
-    file: 'invalid-retired-campaign-budget-max-per-child.yaml',
-    valid: false,
-    expectErrorCodes: ['unknown_yaml_key'],
-  },
-  {
     // AIF v2.648.0 (DC-FORGE-78): a sub-step id that is also a loop-result
     // summary field. A warning — the verdict stays valid.
     file: 'warn-loop-sub-step-id-reserved.yaml',
@@ -509,30 +491,6 @@ const CASES: Case[] = [
     file: 'valid-output-null-entry.yaml',
     valid: true,
     forbidErrorCodes: ['output_param_empty'],
-  },
-  {
-    // A list of nothing but nulls is empty after decoding.
-    file: 'invalid-campaign-no-child-flows.yaml',
-    valid: false,
-    expectErrorCodes: ['campaign_no_child_flows'],
-  },
-  {
-    file: 'invalid-campaign-child-flow-no-id.yaml',
-    valid: false,
-    expectErrorCodes: ['campaign_child_flow_no_id'],
-  },
-  {
-    // ⚠️ The false positive this cycle removed: max_credits_per_child 1.5 is
-    // truncated into the int64 field and SAVES. Also a null child entry, a
-    // numeric flow_id, and a max_depth that defaults.
-    file: 'valid-campaign-decoded-shapes.yaml',
-    valid: true,
-    forbidErrorCodes: [
-      'invalid_type',
-      'campaign_invalid_max_credits_per_child',
-      'campaign_no_child_flows',
-      'campaign_child_flow_no_id',
-    ],
   },
   {
     // 0.14.0: `end` is looked up as a STEP by the reference's save door
@@ -776,23 +734,8 @@ const CASES: Case[] = [
     expectWarningCodes: ['orchestrator_tool_withheld'],
   },
   {
-    file: 'warn-orchestrator-tool-withheld-signals-off.yaml',
-    valid: true,
-    expectWarningCodes: ['orchestrator_tool_withheld'],
-  },
-  {
-    file: 'warn-orchestrator-tool-withheld-campaign.yaml',
-    valid: true,
-    expectWarningCodes: ['orchestrator_tool_withheld'],
-  },
-  {
     // The counter-fixtures: a false positive here goes red.
     file: 'valid-orchestrator-tool-allow-consistent.yaml',
-    valid: true,
-    forbidWarningCodes: ['orchestrator_tool_withheld'],
-  },
-  {
-    file: 'valid-orchestrator-tool-allow-campaign.yaml',
     valid: true,
     forbidWarningCodes: ['orchestrator_tool_withheld'],
   },
@@ -1285,9 +1228,10 @@ const CASES: Case[] = [
     forbidErrorCodes: ['orchestrator_enforce_region_needs_region'],
   },
   {
-    // The removed AigentChat schemes are ordinary unknown schemes: a warning, and no
-    // credential/endpoint judgement.
-    file: 'warn-removed-executor-nexus.yaml',
+    // The removed AigentChat scheme is an ordinary unknown scheme: a warning, and
+    // no credential/endpoint judgement. (nexus:// is the agent runtime executor
+    // again since AIgentFlow v2.835.0.)
+    file: 'warn-removed-executor-aigentchat.yaml',
     valid: true,
     expectWarningCodes: ['unknown_executor_scheme'],
     forbidWarningCodes: ['credential_endpoint_unpaired'],
@@ -1752,6 +1696,123 @@ const CASES: Case[] = [
     file: 'valid-compliance-residency-silent-providers.yaml',
     valid: true,
     forbidWarningCodes: ['compliance_residency_unenforced'],
+  },
+  {
+    // 0.28.0 — AIgentFlow v2.835.0: nexus:// is canonical, atlas:// its alias; one set of rules.
+    file: 'valid-nexus-agent-run.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'valid-nexus-capability.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'valid-atlas-alias-agent-run.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'invalid-nexus-agent-missing.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_agent_missing'],
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
+    file: 'invalid-nexus-loop-substep-agent-not-literal.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_agent_not_literal'],
+  },
+  {
+    // The pre-2026-10-20 AigentChat shape names no Nexus operation.
+    file: 'invalid-nexus-aigentchat-shape.yaml',
+    valid: false,
+    expectErrorCodes: ['atlas_operation_unknown'],
+  },
+  {
+    // 0.28.0 — AIgentFlow v2.834.0 (AGENTCUT B1): signals and DFM removed.
+    file: 'invalid-signal-removed-enable-signals.yaml',
+    valid: false,
+    expectErrorCodes: ['signal_removed'],
+    forbidErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    file: 'invalid-signal-removed-tool-lists.yaml',
+    valid: false,
+    expectErrorCodes: ['signal_removed'],
+    forbidWarningCodes: ['orchestrator_tool_unknown', 'orchestrator_tool_withheld'],
+  },
+  {
+    file: 'invalid-signal-removed-aiv-step.yaml',
+    valid: false,
+    expectErrorCodes: ['signal_removed'],
+  },
+  {
+    file: 'invalid-flow-modification-removed-trigger.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_modification_removed'],
+    forbidErrorCodes: ['orchestrator_trigger_unknown'],
+  },
+  {
+    file: 'invalid-flow-modification-removed-step.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_modification_removed'],
+  },
+  {
+    file: 'warn-removed-key-ignored-pre-dfm.yaml',
+    valid: true,
+    expectWarningCodes: ['removed_key_ignored'],
+    forbidWarningCodes: ['unknown_yaml_key'],
+  },
+  {
+    file: 'warn-removed-key-ignored-enable-signals-false.yaml',
+    valid: true,
+    expectWarningCodes: ['removed_key_ignored'],
+    forbidErrorCodes: ['signal_removed'],
+  },
+  {
+    // The no-false-positive control.
+    file: 'valid-signal-surfaces-not-refused.yaml',
+    valid: true,
+    forbidWarningCodes: ['removed_key_ignored'],
+    forbidErrorCodes: ['signal_removed', 'flow_modification_removed'],
+  },
+  {
+    // 0.28.0 — AIgentFlow v2.836.0 (AGENTCUT B2): campaigns removed.
+    file: 'invalid-campaign-removed-block.yaml',
+    valid: false,
+    expectErrorCodes: ['campaign_removed'],
+    forbidErrorCodes: ['invalid_type', 'step_not_found'],
+  },
+  {
+    file: 'invalid-campaign-removed-empty-block.yaml',
+    valid: false,
+    expectErrorCodes: ['campaign_removed'],
+  },
+  {
+    file: 'invalid-campaign-removed-retired-key.yaml',
+    valid: false,
+    expectErrorCodes: ['campaign_removed'],
+    forbidErrorCodes: ['unknown_yaml_key'],
+  },
+  {
+    file: 'invalid-campaign-removed-tool-lists.yaml',
+    valid: false,
+    expectErrorCodes: ['campaign_removed'],
+    forbidWarningCodes: ['orchestrator_tool_unknown', 'orchestrator_tool_withheld'],
+  },
+  {
+    file: 'invalid-campaign-removed-triggers.yaml',
+    valid: false,
+    expectErrorCodes: ['campaign_removed'],
+    forbidErrorCodes: ['orchestrator_trigger_unknown'],
+  },
+  {
+    // The no-false-positive control.
+    file: 'valid-campaign-surfaces-not-refused.yaml',
+    valid: true,
+    forbidErrorCodes: ['campaign_removed'],
   },
 ];
 

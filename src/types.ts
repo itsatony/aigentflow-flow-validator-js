@@ -300,7 +300,8 @@ export interface Flow {
   currency?: string;
   max_duration?: string;
   orchestrator?: OrchestratorDefinition;
-  campaign?: Record<string, unknown>;
+  /** Removed in AIgentFlow v2.836.0: any non-null value is `campaign_removed`. */
+  campaign?: unknown;
   checkpoint?: Record<string, unknown>;
   input_schema?: InputSchema;
   classification?: Record<string, unknown>;

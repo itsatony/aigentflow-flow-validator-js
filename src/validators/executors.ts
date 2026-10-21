@@ -119,7 +119,7 @@ function checkExecutor(executor: string, field: string, stepID: string, issues: 
 // The agent surfaces AIgentFlow removed. The scheme is the text before `://`
 // after trimming whitespace, lower-cased; a templated executor is not judged
 // (nothing can be said about what it renders to).
-function removedExecutorScheme(executor: string): string {
+export function removedExecutorScheme(executor: string): string {
   if (executor.includes(TEMPLATE_ACTION_OPEN)) return '';
   const trimmed = goTrimSpace(executor);
   const at = trimmed.indexOf(SCHEME_SEPARATOR);
@@ -190,12 +190,16 @@ export function validateRemovedFlowKeys(flow: Flow, issues: Issues): void {
   }
 }
 
-// `atlas://` rules. Runs only for an untemplated `atlas://` URL (the scheme match
-// is exact and case-sensitive). The URL says which Atlas operation the step
-// performs; the query is checked against what that operation needs. `stepField`
-// is the step itself, as the findings are about the step as a whole.
+// Agent-runtime rules. Run only for an untemplated `nexus://` URL or one written
+// with its alias `atlas://` (AIgentFlow 2.835.0: one executor, two spellings, the
+// same rules and codes for both; the scheme match is exact and case-sensitive).
+// The URL says which Nexus operation the step performs; the query is checked
+// against what that operation needs. `stepField` is the step itself, as the
+// findings are about the step as a whole. An AigentChat-shaped
+// `nexus://<org>/<agent>` (that executor was removed in 2.819.0) reaches these
+// rules and is `atlas_operation_unknown`.
 //
-// The URL is split at the first slash after `atlas://` rather than through the
+// The URL is split at the first slash after the scheme rather than through the
 // shared executor-URL shape, so a reference the shape refuses (a dot or colon in
 // a capability reference) is still judged by the atlas rules; the shape's own
 // `invalid_executor_url` finding is reported separately, as before.
@@ -207,9 +211,9 @@ function checkAtlasStep(
   issues: Issues,
 ): void {
   if (executor.includes(TEMPLATE_ACTION_OPEN)) return;
-  const prefix = `${ATLAS_EXECUTOR.scheme}://`;
-  if (!executor.startsWith(prefix)) return;
-  const rest = executor.slice(prefix.length);
+  const sep = executor.indexOf(SCHEME_SEPARATOR);
+  if (sep < 0 || !ATLAS_EXECUTOR.schemes.has(executor.slice(0, sep))) return;
+  const rest = executor.slice(sep + SCHEME_SEPARATOR.length);
   const slash = rest.indexOf('/');
   const provider = slash < 0 ? rest : rest.slice(0, slash);
   const resource = slash < 0 ? '' : rest.slice(slash + 1);

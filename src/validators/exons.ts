@@ -16,7 +16,7 @@
 
 import { isMap, isScalar, isSeq, parseAllDocuments } from 'yaml';
 import type { Flow } from '../types.js';
-import { EXONS, ORCHESTRATOR_TOOL_ALLOW } from '../spec/index.js';
+import { EXONS, ORCHESTRATOR_TOOL_ALLOW, REMOVED_ORCHESTRATOR_TOOLS } from '../spec/index.js';
 import { Issues, isArray, isRecord, isString } from './util.js';
 
 const CODE_PARSE_FAILED = 'orchestrator_exons_parse_failed';
@@ -314,7 +314,7 @@ export function validateOrchestratorExons(flow: Flow, issues: Issues): void {
         'Remove requirements.resources, and narrow the agent with tools.mcp_servers and tools.allow',
     });
   }
-  warnOrchestratorToolWithheld(flow, orch, report, issues);
+  warnOrchestratorToolWithheld(orch, report, issues);
 }
 
 /**
@@ -323,13 +323,15 @@ export function validateOrchestratorExons(flow: Flow, issues: Issues): void {
  * narrowing). Two lists that each read as complete can disagree, and the
  * disagreement is silent at run time. Reported: a tool named in
  * `orchestrator.tools` that `tools.allow` omits; with `orchestrator.tools`
- * empty, a `tools.allow` without `aif_ask_human` (human intervention off), and
- * one that names no campaign tool when the flow declares a campaign.
+ * empty, a `tools.allow` without `aif_ask_human` (human intervention off).
+ * Only the lifecycle tools are exempt.
+ *
+ * A removed signal or campaign tool name (AIgentFlow 2.834.0 / 2.836.0) is never
+ * reported as withheld: it is refused as `signal_removed` / `campaign_removed`.
  *
  * A WARNING, never an error: an unattended orchestrator is a legitimate design.
  */
 function warnOrchestratorToolWithheld(
-  flow: Flow,
   orch: Record<string, unknown>,
   report: ExonsFrontmatterReport,
   issues: Issues,
@@ -337,12 +339,9 @@ function warnOrchestratorToolWithheld(
   if (!report.toolsAllowDeclared) return;
   const cfg = ORCHESTRATOR_TOOL_ALLOW;
   const exempt = new Set<string>(cfg.lifecycleTools);
-  // Only a YAML boolean sets it; absent (or anything else) is the default, on.
-  const signals =
-    typeof orch.enable_signals === 'boolean' ? orch.enable_signals : cfg.enableSignalsDefault;
-  if (signals) for (const t of cfg.signalTools) exempt.add(t);
   const allow = new Set(report.toolsAllow);
-  const withheld = (name: string): boolean => !allow.has(name) && !exempt.has(name);
+  const withheld = (name: string): boolean =>
+    !allow.has(name) && !exempt.has(name) && !REMOVED_ORCHESTRATOR_TOOLS.has(name);
   const warn = (message: string): void =>
     issues.warn({ field: cfg.warningField, code: CODE_TOOL_WITHHELD, message });
 
@@ -370,15 +369,6 @@ function warnOrchestratorToolWithheld(
         `${cfg.askHumanTool}, so this orchestrator can never ask a person a question: human ` +
         `intervention is off. Add ${cfg.askHumanTool} to tools.allow if a human should be ` +
         'reachable, or ignore this if the orchestrator is meant to run unattended.',
-    );
-  }
-  // A null `campaign:` is no campaign.
-  if (isRecord(flow.campaign) && !cfg.campaignTools.some((name) => !withheld(name))) {
-    warn(
-      "this flow declares a campaign, but the orchestrator's exons definition has a tools.allow " +
-        `list that names none of the campaign tools (${cfg.campaignTools.join(', ')}), so no ` +
-        'child mission can be spawned or tracked. Add the campaign tools the orchestrator needs ' +
-        'to tools.allow.',
     );
   }
 }
