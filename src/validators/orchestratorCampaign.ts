@@ -1,7 +1,8 @@
-// Orchestrator + campaign structural validation.
+// Orchestrator structural validation. (The campaign block was removed in
+// AIgentFlow 2.836.0: it is refused whole as `campaign_removed` by
+// removedSignalCampaign.ts, and none of its old rules run.)
 //
-// Mirrors the portable parts of `validateOrchestrator` /
-// `validateAndNormalizeCampaign` (parser.go). The exons-spec body is parsed by
+// Mirrors the portable parts of `validateOrchestrator` (parser.go). The exons-spec body is parsed by
 // the go-exons engine in the reference and is NOT re-implemented here — its
 // presence is required, but its contents are out of scope for the static JS
 // validator. See PARITY.md.
@@ -12,7 +13,13 @@ import type {
   OrchestratorTrigger,
   ValidateOptions,
 } from '../types.js';
-import { ORCHESTRATOR_MODES, ORCHESTRATOR_TOOLS, ORCHESTRATOR_TRIGGERS } from '../spec/index.js';
+import {
+  ORCHESTRATOR_MODES,
+  ORCHESTRATOR_TOOLS,
+  ORCHESTRATOR_TRIGGERS,
+  REMOVED_ORCHESTRATOR_TOOLS,
+  REMOVED_ORCHESTRATOR_TRIGGERS,
+} from '../spec/index.js';
 import { Issues, isRecord, isValidGoDuration, parseGoDuration } from './util.js';
 
 const TRIGGER_TIMER = 'timer';
@@ -37,71 +44,6 @@ function flowHasOrchestratorYieldEdge(flow: Flow): boolean {
     }
   }
   return false;
-}
-
-/** 2^63: the first float yaml.v3 will not decode into an int64. */
-const GO_INT64_FLOAT_LIMIT = 2 ** 63;
-
-// decodeGoInt returns the value yaml.v3 stores when it decodes a YAML number
-// into a Go int64 field, or null when the decode fails. A float is truncated
-// toward zero; NaN and anything at or above 2^63 fail; -Inf and very large
-// negative floats land at the bottom of the range (their exact value is
-// platform-defined in Go, but always negative, which is all a caller needs).
-function decodeGoInt(v: unknown): number | null {
-  if (typeof v !== 'number' || Number.isNaN(v)) return null;
-  if (v >= GO_INT64_FLOAT_LIMIT) return null;
-  if (v === -Infinity) return -GO_INT64_FLOAT_LIMIT;
-  return Math.trunc(v);
-}
-
-// validateCampaignChildFlows ports the first two checks of
-// CampaignConfig.Validate (domain.campaign.go): the campaign needs at least one
-// child flow, and each entry names a `flow_id` or a `flow_name`.
-//
-// ⚠️ yaml.v3 DROPS a null list entry when it decodes the list, so `- ` does not
-// count as an entry — a list of nothing but nulls is "no child flows", and a
-// null beside a real entry is simply ignored (measured: both save/refuse as
-// described). `flow_id` and `flow_name` are Go strings, so any scalar counts
-// (`flow_id: 123` saves) and a YAML null is empty. The finding's index is the
-// entry's position in the YAML list; the reference's message counts only the
-// non-null entries.
-function validateCampaignChildFlows(campaign: Record<string, unknown>, issues: Issues): void {
-  const field = 'campaign.child_flows';
-  const raw: unknown = campaign.child_flows;
-  if (raw !== undefined && raw !== null && !Array.isArray(raw)) {
-    issues.error({ field, message: 'campaign.child_flows must be a list', code: 'invalid_type' });
-    return;
-  }
-  const entries = (Array.isArray(raw) ? raw : [])
-    .map((entry: unknown, i: number) => ({ entry, i }))
-    .filter(({ entry }) => entry !== null);
-  if (entries.length === 0) {
-    issues.error({
-      field,
-      message: 'campaign requires at least one entry in child_flows',
-      code: 'campaign_no_child_flows',
-    });
-    return;
-  }
-  for (const { entry, i } of entries) {
-    if (!isRecord(entry)) {
-      issues.error({
-        field: `${field}[${i}]`,
-        message: 'each campaign.child_flows entry must be a mapping',
-        code: 'invalid_type',
-      });
-      continue;
-    }
-    const id = issues.stringOf(entry, 'flow_id', `${field}[${i}]`);
-    const name = issues.stringOf(entry, 'flow_name', `${field}[${i}]`);
-    if ((id !== null && id !== '') || (name !== null && name !== '')) continue;
-    issues.error({
-      field: `${field}[${i}]`,
-      message: `campaign.child_flows[${i}] needs a flow_id or a flow_name`,
-      code: 'campaign_child_flow_no_id',
-      suggestion: 'Name the child flow with flow_name, or pin it with flow_id',
-    });
-  }
 }
 
 export function validateOrchestratorCampaign(
@@ -201,6 +143,9 @@ export function validateOrchestratorCampaign(
         const trigger = rawTrigger as OrchestratorTrigger;
         const base = `orchestrator.triggers[${i}]`;
         const type = issues.stringOf(trigger, 'type', base);
+        // A removed trigger type (dfm_suggestion, campaign_child_*) is refused
+        // by its own code (removedSignalCampaign.ts), never as unknown.
+        if (type !== null && REMOVED_ORCHESTRATOR_TRIGGERS.has(type)) return;
         if (type === null || !ORCHESTRATOR_TRIGGERS.has(type)) {
           issues.error({
             field: `${base}.type`,
@@ -235,7 +180,11 @@ export function validateOrchestratorCampaign(
     if (Array.isArray(orch.tools)) {
       orch.tools.forEach((raw: unknown, i: number) => {
         const tool = issues.stringAt(raw, `orchestrator.tools[${i}]`);
-        if (tool === null || ORCHESTRATOR_TOOLS.has(tool)) return;
+        // A removed signal / campaign name is refused by its own code, never as
+        // unknown.
+        if (tool === null || ORCHESTRATOR_TOOLS.has(tool) || REMOVED_ORCHESTRATOR_TOOLS.has(tool)) {
+          return;
+        }
         const finding = {
           field: `orchestrator.tools[${i}]`,
           message: `Unrecognised orchestrator tool name '${tool}'`,
@@ -255,71 +204,6 @@ export function validateOrchestratorCampaign(
         message: 'orchestrator is most useful with agentic: true',
         code: 'orchestrator_not_agentic',
       });
-    }
-  }
-
-  // Campaign requires an orchestrator.
-  if (flow.campaign !== undefined && flow.campaign !== null) {
-    if (!hasOrchestrator) {
-      issues.error({
-        field: 'campaign',
-        message: 'campaign requires an orchestrator block',
-        code: 'campaign_requires_orchestrator',
-      });
-    }
-    const campaign = flow.campaign;
-
-    // AIF v2.728.0 (DC-FORGE-155): `max_credits_per_child` is a Go int64 and
-    // `CampaignConfig.Validate` refuses a negative value. 0 (and absent, and
-    // null) means "no per-child cap".
-    //
-    // ⚠️ A FRACTION SAVES. yaml.v3 decodes a float into an int field by
-    // truncating toward zero, so `1.5` is stored as 1 and `-0.5` as 0 (which
-    // then passes the `>= 0` check). Measured against the reference's strict
-    // save parser; this validator used to refuse every non-integer, which made
-    // it stricter than the door it predicts. What still fails to decode: a
-    // string, a boolean, NaN, +Inf, and a float at or above 2^63. `-.inf`
-    // decodes to a negative int64 and is refused by the `>= 0` check.
-    if (isRecord(campaign)) {
-      const cap: unknown = campaign.max_credits_per_child;
-      if (cap !== undefined && cap !== null) {
-        const decoded = decodeGoInt(cap);
-        if (decoded === null) {
-          issues.error({
-            field: 'campaign.max_credits_per_child',
-            message: `campaign.max_credits_per_child must be a number of credits, got '${String(cap)}'`,
-            code: 'invalid_type',
-          });
-        } else if (decoded < 0) {
-          issues.error({
-            field: 'campaign.max_credits_per_child',
-            message: 'campaign: max_credits_per_child must be >= 0',
-            code: 'campaign_invalid_max_credits_per_child',
-          });
-        }
-      }
-      validateCampaignChildFlows(campaign, issues);
-    }
-
-    // The rest of CampaignConfig.Validate — max_concurrent, max_depth and
-    // max_total_children must each be >= 1 — is UNREACHABLE at the save door
-    // and deliberately not ported: ApplyDefaults runs first and replaces every
-    // value <= 0 with a positive default, so no document can reach it.
-
-    // DC-COND-2: on_children_complete (if set) must reference a real step — the
-    // engine routes into it deterministically once every child is terminal.
-    const target = isRecord(campaign)
-      ? issues.stringOf(campaign, 'on_children_complete', 'campaign')
-      : null;
-    if (target !== null && target !== '') {
-      const steps = isRecord(flow.steps) ? flow.steps : {};
-      if (!(target in steps)) {
-        issues.error({
-          field: 'campaign.on_children_complete',
-          message: `campaign.on_children_complete references unknown step '${target}'`,
-          code: 'campaign_handoff_step_unknown',
-        });
-      }
     }
   }
 }

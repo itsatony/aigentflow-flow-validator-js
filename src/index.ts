@@ -34,6 +34,7 @@ import { validateExecutorConfigEnvScopes } from './validators/executorConfigEnv.
 import { validateServerOwnedQueryKeys } from './validators/serverOwnedQueryKeys.js';
 import { validateCredentialEndpointPairing } from './validators/credentialEndpoint.js';
 import { validateOrchestratorExons } from './validators/exons.js';
+import { validateRemovedOrchestratorSurfaces } from './validators/removedSignalCampaign.js';
 import { validateResidencyEnforcement } from './validators/complianceResidency.js';
 import { validateExamples } from './validators/examples.js';
 import type { ScalarSources } from './validators/util.js';
@@ -130,6 +131,7 @@ function validateParsed(
   // (`exons_attributes`) needs an .exons ENGINE to judge and is not judged here
   // at all — PARITY.md, divergence #16.
   validateOrchestratorExons(f, issues);
+  validateRemovedOrchestratorSurfaces(f, issues);
   validateResidencyEnforcement(f, issues);
   // Last among the structural rules: it skips a location another rule has
   // already reported with more specific advice.

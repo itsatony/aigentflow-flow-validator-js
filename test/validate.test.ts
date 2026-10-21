@@ -204,7 +204,6 @@ describe('executors', () => {
     'ollama',
     'vllm',
     'aigentchat',
-    'nexus',
     'external',
     'https',
   ])('warns on %s://, which AIgentFlow does not register', (scheme) => {
@@ -737,9 +736,12 @@ describe('orchestrator / campaign', () => {
     );
     expect(codes(r)).toContain('orchestrator_tool_unknown');
   });
-  it('requires an orchestrator for a campaign', () => {
+  it('refuses a campaign block whole, with or without an orchestrator (AIgentFlow v2.836.0)', () => {
     const r = validateFlowObject({ ...MINIMAL, campaign: { children: [] } });
-    expect(codes(r)).toContain('campaign_requires_orchestrator');
+    expect(r.errors.filter((e) => e.code === 'campaign_removed').map((e) => e.field)).toEqual([
+      'campaign',
+    ]);
+    expect(codes(r)).not.toContain('campaign_requires_orchestrator');
   });
 });
 
@@ -1512,46 +1514,17 @@ describe('merge-train review fixes (AIF v2.695.0–v2.728.0)', () => {
     expect(warnCodes(clean)).not.toContain('loop_sub_step_id_reserved');
   });
 
-  it('refuses the retired campaign.budget_max_per_child, whatever its value', () => {
-    for (const value of [1.0, 0, null]) {
-      const r = validateFlowObject(
-        orchFlow({}, { child_flows: [{ flow_name: 'x' }], budget_max_per_child: value }),
-      );
+  it('judges no key inside the removed campaign block (AIgentFlow v2.836.0)', () => {
+    for (const body of [
+      { child_flows: [{ flow_name: 'x' }], budget_max_per_child: 1.0 },
+      { child_flows: [{ flow_name: 'x' }], max_credits_per_child: -1 },
+      { child_flows: [{ flow_name: 'x' }], max_credits_per_child: '5' },
+    ]) {
+      const r = validateFlowObject(orchFlow({}, body));
       expect(
-        r.errors.some(
-          (e) => e.code === 'unknown_yaml_key' && e.field === 'campaign.budget_max_per_child',
-        ),
-        String(value),
-      ).toBe(true);
-    }
-  });
-
-  it('checks campaign.max_credits_per_child the way the reference decodes and validates it', () => {
-    const run = (value: unknown) =>
-      validateFlowObject(
-        orchFlow({}, { child_flows: [{ flow_name: 'x' }], max_credits_per_child: value }),
-      );
-    // A fraction SAVES: yaml.v3 truncates a float into an int64 field toward
-    // zero, so 1.5 is stored as 1 and -0.5 as 0 (measured on the reference's
-    // strict save parser). 9.2e18 is still below 2^63.
-    for (const ok of [0, 500, null, 1.5, 0.9, -0.5, 1e3, 9.2e18]) {
-      const r = run(ok);
-      expect(r.valid, String(ok)).toBe(true);
-      expect(
-        r.errors.filter((e) => e.field === 'campaign.max_credits_per_child'),
-        String(ok),
-      ).toHaveLength(0);
-    }
-    for (const neg of [-1, -1.5, -1e30, -Infinity]) {
-      expect(codes(run(neg)), String(neg)).toContain('campaign_invalid_max_credits_per_child');
-    }
-    for (const bad of ['5', true, NaN, Infinity, 9.3e18, 1e30, [1]]) {
-      expect(
-        run(bad).errors.some(
-          (e) => e.code === 'invalid_type' && e.field === 'campaign.max_credits_per_child',
-        ),
-        String(bad),
-      ).toBe(true);
+        r.errors.map((e) => `${e.code}@${e.field}`),
+        JSON.stringify(body),
+      ).toEqual(['campaign_removed@campaign']);
     }
   });
 });
@@ -1679,53 +1652,35 @@ describe('save-door refusals (reference FlowParser.ValidateFlow)', () => {
     expect(validateFlowObject({ ...MINIMAL, output: ['x', 5] }).valid).toBe(true);
   });
 
-  it('refuses a campaign with no child flow, or a child with neither flow_id nor flow_name', () => {
-    const camp = (campaign: Record<string, unknown>) =>
-      validateFlowObject({ ...MINIMAL, orchestrator, campaign });
-    for (const noChildren of [
+  it('runs none of the old campaign rules: the block is campaign_removed (AIgentFlow v2.836.0)', () => {
+    const camp = (campaign: unknown) => validateFlowObject({ ...MINIMAL, orchestrator, campaign });
+    const old = [
+      'campaign_no_child_flows',
+      'campaign_child_flow_no_id',
+      'campaign_requires_orchestrator',
+      'campaign_handoff_step_unknown',
+      'campaign_invalid_max_credits_per_child',
+      'invalid_type',
+    ];
+    for (const body of [
       {},
       { child_flows: [] },
-      { child_flows: null },
       { child_flows: [null] },
+      { child_flows: [{ alias: 'x' }] },
+      { child_flows: 'x' },
+      { child_flows: [{ flow_id: 'f1' }] },
+      [],
+      1,
     ]) {
-      expect(codes(camp(noChildren)), JSON.stringify(noChildren)).toContain(
-        'campaign_no_child_flows',
-      );
-    }
-    for (const entry of [{ alias: 'x' }, { flow_id: '' }, { flow_id: null, flow_name: '' }]) {
-      const r = camp({ child_flows: [entry] });
+      const r = camp(body);
       expect(
-        r.errors.find((e) => e.code === 'campaign_child_flow_no_id')?.field,
-        JSON.stringify(entry),
-      ).toBe('campaign.child_flows[0]');
+        r.errors.filter((e) => e.code === 'campaign_removed').map((e) => e.field),
+        JSON.stringify(body),
+      ).toEqual(['campaign']);
+      for (const code of old) expect(codes(r), JSON.stringify(body)).not.toContain(code);
     }
-    expect(codes(camp({ child_flows: 'x' }))).toContain('invalid_type');
-    expect(codes(camp({ child_flows: ['x'] }))).toContain('invalid_type');
-  });
-
-  it('accepts child flows named by flow_id or flow_name, with null entries ignored', () => {
-    const camp = (campaign: Record<string, unknown>) =>
-      validateFlowObject({ ...MINIMAL, orchestrator, campaign });
-    for (const entry of [
-      { flow_id: 'f1' },
-      { flow_id: 123 },
-      { flow_name: 'c' },
-      { flow_name: ' ' },
-    ]) {
-      expect(camp({ child_flows: [entry] }).valid, JSON.stringify(entry)).toBe(true);
-    }
-    // Measured: yaml.v3 drops the null entry, so this saves.
-    expect(camp({ child_flows: [{ flow_name: 'c' }, null] }).valid).toBe(true);
-    // max_concurrent / max_depth / max_total_children <= 0 are replaced by
-    // defaults before CampaignConfig.Validate runs, so they never refuse.
-    expect(
-      camp({
-        child_flows: [{ flow_name: 'c' }],
-        max_concurrent: 0,
-        max_depth: -3,
-        max_total_children: 0.5,
-      }).valid,
-    ).toBe(true);
+    // A null campaign is absent.
+    expect(codes(camp(null))).not.toContain('campaign_removed');
   });
 });
 

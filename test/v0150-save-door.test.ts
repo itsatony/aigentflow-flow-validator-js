@@ -358,15 +358,16 @@ describe('orchestrator exons rules', () => {
     expect(codes(r.warnings)).not.toContain('orchestrator_tool_withheld');
   });
 
-  it('reads enable_signals only as a boolean', () => {
+  it('never reports a removed signal tool as withheld (AIgentFlow v2.834.0)', () => {
     const named = '  tools: [aif_signal_complete]\n';
     const allow = 'tools:\n  allow: [aif_ask_human]\n';
     const warns = (orchExtra: string): number =>
       validateFlow(orchFlow(allow, named + orchExtra)).warnings.filter(
         (w) => w.code === 'orchestrator_tool_withheld',
       ).length;
+    // The name is refused as signal_removed instead, whatever enable_signals says.
     expect(warns('')).toBe(0);
     expect(warns('  enable_signals: true\n')).toBe(0);
-    expect(warns('  enable_signals: false\n')).toBe(1);
+    expect(warns('  enable_signals: false\n')).toBe(0);
   });
 });
