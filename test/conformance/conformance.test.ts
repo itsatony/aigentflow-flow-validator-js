@@ -1759,6 +1759,36 @@ const CASES: Case[] = [
     expectErrorCodes: ['agentic_param_removed'],
     forbidErrorCodes: ['orchestrator_removed', 'tool_discovery_invalid'],
   },
+  // 0.30.0 — AIgentFlow v2.841.0: a for_each.items text that is neither a
+  // template nor a JSON array can never resolve to a list. The valid fixture is
+  // the false-positive side: a template, a fromJson template, a JSON array
+  // literal and the empty array must all pass untouched.
+  {
+    file: 'invalid-for-each-items-bare-path.yaml',
+    valid: false,
+    expectErrorCodes: ['for_each_items_unresolvable'],
+  },
+  {
+    file: 'invalid-for-each-items-null-literal.yaml',
+    valid: false,
+    expectErrorCodes: ['for_each_items_unresolvable'],
+  },
+  {
+    file: 'invalid-for-each-items-object-literal.yaml',
+    valid: false,
+    expectErrorCodes: ['for_each_items_unresolvable'],
+  },
+  {
+    file: 'invalid-for-each-items-plain-text.yaml',
+    valid: false,
+    expectErrorCodes: ['for_each_items_unresolvable'],
+  },
+  {
+    file: 'valid-for-each-items-forms.yaml',
+    valid: true,
+    forbidErrorCodes: ['for_each_items_unresolvable', 'for_each_items_required'],
+    forbidWarningCodes: ['for_each_items_unresolvable', 'template_syntax_error'],
+  },
 ];
 
 describe('conformance fixtures', () => {

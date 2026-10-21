@@ -8,3 +8,6 @@ src/spec/aigentflow-spec.json
 # (its parity check compares the files), so they are kept as authored, not reformatted.
 test/conformance/fixtures/examples-*.yaml
 test/conformance/examples-cases.json
+# Shared byte for byte with the Go port, kept as authored.
+test/conformance/fixtures/invalid-for-each-items-*.yaml
+test/conformance/fixtures/valid-for-each-items-forms.yaml
