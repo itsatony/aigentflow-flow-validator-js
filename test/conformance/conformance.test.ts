@@ -1789,6 +1789,20 @@ const CASES: Case[] = [
     forbidErrorCodes: ['for_each_items_unresolvable', 'for_each_items_required'],
     forbidWarningCodes: ['for_each_items_unresolvable', 'template_syntax_error'],
   },
+  // 0.30.1 — AIgentFlow v2.842.0: aiflow:// is a known scheme (the stored-flow
+  // alias aiflow://{org}/{flow}); it must not draw unknown_executor_scheme.
+  {
+    file: 'valid-executor-aiflow-alias.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_executor_scheme'],
+    forbidErrorCodes: ['invalid_executor_url'],
+  },
+  {
+    // The shared URL shape still refuses a one-segment alias.
+    file: 'invalid-executor-aiflow-one-segment.yaml',
+    valid: false,
+    expectErrorCodes: ['invalid_executor_url'],
+  },
 ];
 
 describe('conformance fixtures', () => {
