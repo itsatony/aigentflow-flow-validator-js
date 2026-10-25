@@ -67,6 +67,15 @@ export interface ValidateOptions {
    * and a false-positive error is worse than a missed lint. See PARITY.md.
    */
   strictRegistries?: boolean;
+  /**
+   * Judge a document that is ALREADY stored, not a new save: every error whose
+   * code AIgentFlow tolerates when loading a stored flow (spec block
+   * `storedBytesTolerated`) is reported as a warning instead, with code, field,
+   * message and suggestion unchanged. Every other error stays an error and
+   * `valid` follows the remaining errors. A save or publish gate leaves this
+   * off. See PARITY.md (0.31.0).
+   */
+  storedBytes?: boolean;
 }
 
 // ---------------------------------------------------------------------------

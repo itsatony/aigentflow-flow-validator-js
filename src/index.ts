@@ -8,6 +8,7 @@
 import type { Flow, ValidateOptions, ValidationIssue, ValidationResult } from './types.js';
 import { parseFlow, type ParseOutput } from './parse.js';
 import { Issues } from './validators/util.js';
+import { STORED_BYTES_TOLERATED } from './spec/index.js';
 import { validateBasicStructure } from './validators/basicStructure.js';
 import { validateExecutors, validateRemovedFlowKeys } from './validators/executors.js';
 import { validateQuerySchema } from './validators/querySchema.js';
@@ -130,6 +131,9 @@ function validateParsed(
   // already reported with more specific advice.
   validateUnknownKeys(f, issues);
   const templateStats = validateTemplates(f, issues, opts);
+  if (opts.storedBytes === true) {
+    tolerateStoredBytes(issues);
+  }
 
   const totalSteps =
     f.steps && typeof f.steps === 'object' && !Array.isArray(f.steps)
@@ -183,4 +187,19 @@ export function validateFlow(yamlText: string, opts: ValidateOptions = {}): Vali
     result.summary.warningCount = result.warnings.length;
   }
   return result;
+}
+
+// Demotes the errors AIgentFlow tolerates on LOAD to warnings (storedBytes). Only
+// the severity changes; the finding joins the warnings after the ones already raised.
+function tolerateStoredBytes(issues: Issues): void {
+  const kept: ValidationIssue[] = [];
+  for (const e of issues.errors) {
+    if (STORED_BYTES_TOLERATED.has(e.code)) {
+      issues.warnings.push({ ...e, severity: 'warning' });
+    } else {
+      kept.push(e);
+    }
+  }
+  issues.errors.length = 0;
+  issues.errors.push(...kept);
 }

@@ -465,3 +465,6 @@ export const FOR_EACH_ITEMS_SHAPE = {
   messageFormat: spec.forEachItemsShape.messageFormat,
   suggestion: spec.forEachItemsShape.suggestion,
 } as const;
+
+/** Codes AIgentFlow tolerates when LOADING a stored flow (`ValidateOptions.storedBytes`). */
+export const STORED_BYTES_TOLERATED: ReadonlySet<string> = new Set(spec.storedBytesTolerated.codes);
