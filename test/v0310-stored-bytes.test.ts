@@ -25,13 +25,19 @@ describe('storedBytes', () => {
       const demoted = save.errors.filter((e) => STORED_BYTES_TOLERATED.has(e.code));
       const kept = save.errors.filter((e) => !STORED_BYTES_TOLERATED.has(e.code));
       demoted.forEach((d) => seen.add(d.code));
-      expect(stored.errors.map((e) => e.code), f).toEqual(kept.map((e) => e.code));
+      expect(
+        stored.errors.map((e) => e.code),
+        f,
+      ).toEqual(kept.map((e) => e.code));
       expect(stored.valid, f).toBe(kept.length === 0);
       expect(stored.warnings.length, f).toBe(save.warnings.length + demoted.length);
       const warned = new Map<string, number>();
       stored.warnings.forEach((w) => warned.set(key(w), (warned.get(key(w)) ?? 0) + 1));
       for (const d of demoted) {
-        expect(warned.get(key(d)) ?? 0, `${f}: ${d.code} lost its field or message`).toBeGreaterThan(0);
+        expect(
+          warned.get(key(d)) ?? 0,
+          `${f}: ${d.code} lost its field or message`,
+        ).toBeGreaterThan(0);
         warned.set(key(d), (warned.get(key(d)) ?? 0) - 1);
       }
       stored.warnings.forEach((w) => expect(w.severity, f).toBe('warning'));
@@ -52,7 +58,9 @@ describe('storedBytes', () => {
   });
 
   it('keeps an untolerated error an error', () => {
-    const stored = validateFlow(read('invalid-flow-data-key-reserved-dot.yaml'), { storedBytes: true });
+    const stored = validateFlow(read('invalid-flow-data-key-reserved-dot.yaml'), {
+      storedBytes: true,
+    });
     expect(stored.valid).toBe(false);
     expect(stored.errors.map((e) => e.code)).toContain('flow_data_key_reserved');
   });
