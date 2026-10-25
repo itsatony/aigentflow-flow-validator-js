@@ -85,6 +85,12 @@ const RETIRED_ORCHESTRATOR_RULE_CODES = [
 const CASES: Case[] = [
   { file: 'valid-minimal.yaml', valid: true },
   {
+    // 0.32.0 (AIgentFlow v2.854.0): list, dict, first, last, floor and ceil are standard functions.
+    file: 'valid-template-collection-functions.yaml',
+    valid: true,
+    forbidWarningCodes: ['template_function_unknown', 'template_syntax_error'],
+  },
+  {
     // DC-FORGE-78: the loop body is a SECOND step table, and neither
     // implementation walked it until v2.648.0. ⛔ Every template in this fixture
     // is unparseable and the flow must still be VALID — the reference consults
