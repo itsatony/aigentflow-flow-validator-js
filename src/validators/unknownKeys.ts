@@ -28,6 +28,7 @@
 import type { Flow } from '../types.js';
 import { KNOWN_KEYS } from '../spec/index.js';
 import { Issues, isRecord } from './util.js';
+import { didYouMean } from './keyHints.js';
 
 const CODE_UNKNOWN_YAML_KEY = 'unknown_yaml_key';
 const CODE_INVALID_TYPE = 'invalid_type';
@@ -172,15 +173,20 @@ export function validateUnknownKeys(flow: Flow, issues: Issues): void {
           const field = child(path, key);
           const declared = keys[key];
           if (declared === undefined) {
-            const retired = RETIRED_KEYS.has(key)
+            const accepted = Object.keys(keys).sort();
+            // A retired key was spelled right: it names a key the grammar deleted, so
+            // a "did you mean" would read as "you made a typo" and point the author at
+            // a neighbour (binary_results -> binary_assets) instead of at deleting it.
+            // Only a key that never existed gets the hint.
+            const tail = RETIRED_KEYS.has(key)
               ? ' It was removed from the grammar and AIgentFlow refuses to save a flow that still declares it.'
-              : '';
+              : didYouMean(key, accepted);
             report(
               CODE_UNKNOWN_YAML_KEY,
               field,
               `Unknown key '${key}'${path === '' ? ' at the top level' : ` in '${path}'`}.` +
-                ` AIgentFlow refuses to save a flow with a key its grammar does not declare, because the key would be silently dropped.${retired}`,
-              `Known keys here: ${Object.keys(keys).sort().join(', ')}`,
+                ` AIgentFlow refuses to save a flow with a key its grammar does not declare, because the key would be silently dropped.${tail}`,
+              `Known keys here: ${accepted.join(', ')}`,
             );
             continue;
           }

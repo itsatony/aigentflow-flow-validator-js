@@ -247,3 +247,46 @@ export function parseGoDuration(input: string): number | null {
 export function isValidGoDuration(input: string): boolean {
   return parseGoDuration(input) !== null;
 }
+
+// Go's unicode.IsPrint: letters, marks, numbers, punctuation and symbols, plus
+// the ASCII space. Everything else (controls, other spaces such as U+00A0,
+// format characters such as U+00AD) is escaped by %q.
+const GO_PRINTABLE = /^[\p{L}\p{M}\p{N}\p{P}\p{S}]$/u;
+const GO_SHORT_ESCAPES: Readonly<Record<string, string>> = {
+  '\u0007': '\\a',
+  '\b': '\\b',
+  '\f': '\\f',
+  '\n': '\\n',
+  '\r': '\\r',
+  '\t': '\\t',
+  '\v': '\\v',
+};
+const ASCII_SPACE = 0x20;
+const ASCII_DEL = 0x7f;
+const BMP_LIMIT = 0x10000;
+const SURROGATE_MIN = 0xd800;
+const SURROGATE_MAX = 0xdfff;
+
+/**
+ * Go's `%q` for a string (`strconv.Quote`), byte for byte: `"` and `\` are
+ * backslashed, a printable code point is kept as is, `\a \b \f \n \r \t \v`
+ * are short escapes, any other code point below U+0020 and U+007F is `\xHH`,
+ * the rest `\uHHHH` or `\UHHHHHHHH` (lower-case hex). `JSON.stringify` agrees
+ * only on printable text: it writes `\u0007`, keeps U+007F and U+00A0 raw.
+ * A lone surrogate, which Go cannot hold, is written as U+FFFD.
+ */
+export function goQuote(s: string): string {
+  let out = '"';
+  for (const ch of s) {
+    let cp = ch.codePointAt(0)!;
+    if (cp >= SURROGATE_MIN && cp <= SURROGATE_MAX) cp = 0xfffd;
+    const c = String.fromCodePoint(cp);
+    if (c === '"' || c === '\\') out += `\\${c}`;
+    else if (cp === ASCII_SPACE || GO_PRINTABLE.test(c)) out += c;
+    else if (GO_SHORT_ESCAPES[c] !== undefined) out += GO_SHORT_ESCAPES[c];
+    else if (cp < ASCII_SPACE || cp === ASCII_DEL) out += `\\x${cp.toString(16).padStart(2, '0')}`;
+    else if (cp < BMP_LIMIT) out += `\\u${cp.toString(16).padStart(4, '0')}`;
+    else out += `\\U${cp.toString(16).padStart(8, '0')}`;
+  }
+  return `${out}"`;
+}

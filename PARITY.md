@@ -4,7 +4,55 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.854.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds six standard template functions (package 0.32.0, below). Earlier (v2.851.0): the `storedBytes` option (package 0.31.0, below). Earlier (v2.842.0): `aiflow` became a known executor scheme (package 0.30.1, below). Earlier (v2.841.0): the rule `for_each_items_unresolvable` (package 0.30.0, below). Earlier: it removed the orchestrator (`orchestrator_removed`: the `orchestrator:` block refused whole, the flow-level `tool_discovery` / `discoverable_tools`, and `next: orchestrator`) and every rule that judged the inside of the block (package 0.29.0, below). Earlier: it made `nexus://` the canonical agent-runtime scheme with `atlas://` as its alias, removes signals, dynamic flow modification and campaigns (`signal_removed`, `flow_modification_removed`, `removed_key_ignored`, `campaign_removed`) and drops share links from the removal advice (package 0.28.0, below). Earlier: it removed the `exons://` and `agent://` executors and the `ai://` agent-loop parameters and adds the errors `executor_removed` and `agentic_param_removed` (package 0.27.0, below). Earlier: it added the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.854.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds six standard template functions (package 0.32.0, below); package 0.33.0 adds the reference's "did you mean" to `unknown_yaml_key` with no grammar change (below). Earlier (v2.851.0): the `storedBytes` option (package 0.31.0, below). Earlier (v2.842.0): `aiflow` became a known executor scheme (package 0.30.1, below). Earlier (v2.841.0): the rule `for_each_items_unresolvable` (package 0.30.0, below). Earlier: it removed the orchestrator (`orchestrator_removed`: the `orchestrator:` block refused whole, the flow-level `tool_discovery` / `discoverable_tools`, and `next: orchestrator`) and every rule that judged the inside of the block (package 0.29.0, below). Earlier: it made `nexus://` the canonical agent-runtime scheme with `atlas://` as its alias, removes signals, dynamic flow modification and campaigns (`signal_removed`, `flow_modification_removed`, `removed_key_ignored`, `campaign_removed`) and drops share links from the removal advice (package 0.28.0, below). Earlier: it removed the `exons://` and `agent://` executors and the `ai://` agent-loop parameters and adds the errors `executor_removed` and `agentic_param_removed` (package 0.27.0, below). Earlier: it added the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+
+> package 0.33.0 — **`unknown_yaml_key` says which key was meant (no new rule, no new code).**
+> `SPEC_VERSION` stays `2.854.0`: no grammar changed, the spec only gains the data block `keyAliases`
+> (precedent: `serverOwnedQueryKeys` and `credentialEndpointPairing`, both added with `specVersion`
+> unchanged). It is the reference's `KEYHINT_ALIASES` verbatim (AIgentFlow #322), an object of
+> lower-cased guess → ordered list of grammar keys; AIgentFlow gates its own table against this
+> block. `validators/keyHints.ts` ports the reference's `closeKeys` (`aigentflow.parser.keyhints.go`):
+> the alias targets of the lower-cased guess first, in table order, only those the parent type
+> declares; then every declared key within an edit distance of `max(2, ⌊bytes/3⌋)`, nearest first;
+> deduplicated. When non-empty, the message gains `` Did you mean `a` or `b`?`` at its end; the
+> suggestion ("Known keys here: …") is unchanged. Go string semantics are reproduced exactly, so both
+> ports print the same text: Go's `strings.ToLower` (simple case mapping: `İD` folds to `id`), the
+> distance in CODE POINTS (Go `[]rune`) and the threshold over the UTF-8 BYTE length (Go `len`: the
+> 9-character, 13-byte `mäx_ïtëmß` may be 4 edits away). Two choices shared with the Go port (v0.23.0):
+>
+> - **Ties** keep the SORTED key order both ports print as "Known keys here"; the reference keeps its
+>   struct declaration order, which the spec does not carry, so two keys at the same distance may be
+>   listed in the other order there. The set offered is the same.
+> - **A retired key gets no hint.** It was spelled right; it names a key the grammar deleted, and its
+>   removal sentence tells the author to delete it. A hint would read as "typo" and point at a
+>   neighbour: `binary_results` under a mock step would offer `binary_assets`, a different key, not
+>   its new name. The reference appends both. The retired-key and connectivity sites with their own
+>   advice (`retiredKeys.ts`, `goto_step`) are untouched.
+>
+> Fixture, byte-identical to the Go port's: `invalid-unknown-key-did-you-mean.yaml`, with the
+> manifest `test/conformance/unknown-key-hints-cases.json` (also byte-identical), which pins every
+> finding's exact message, including the three that must carry NO hint. Test:
+> `test/v0330-key-did-you-mean.test.ts`.
+>
+> **Also in 0.33.0: the two ports agree byte for byte again.** The Go port's `make parity-check` had
+> been red since 0.21.0: each port had written its own spec text and fixtures for
+> `template_default_piped`, `strict_templates`, `here://`, `flow_data_key_reserved` and
+> `unknown_function_operation`. This copy of the spec stays authoritative and the Go port's is again a
+> byte copy of it. Changes here:
+>
+> - `templateDefaultPiped.suggestion` is the reference's text again (it had lost the closing
+>   "(the pipe form of other template libraries does not work here)").
+> - `flow_data_key_reserved` and `unknown_function_operation` quote the key / step id with
+>   `goQuote` (`validators/util.ts`), a port of Go's `strconv.Quote`, which is exactly the
+>   reference's `%q`. `JSON.stringify` agreed only on printable text: it wrote BEL as `\u0007` where
+>   Go writes `\a`, and kept DEL, U+00A0 and U+2028 raw where Go escapes them. Pinned against values
+>   Go produced: `test/v0330-go-quote.test.ts`. The other sites that still use `JSON.stringify` as `%q`
+>   (`reservedInputs`, `responseExpectation`, `stepMaxDuration`, the removed-surface messages) are
+>   unchanged; they differ from Go only for a step id or key holding such a character.
+> - Fixtures: both ports carry the UNION, byte-identical. Where the two had different files under one
+>   name, this port's keeps the name and the Go port's is the `-alt` one (eight). New:
+>   `valid-function-operation-scheme-case.yaml` (`FUNCTION://` is not judged; the Go port lower-cased
+>   the scheme and refused it, which the reference does not). No case was loosened.
 
 > package 0.32.0 — **six standard template functions (no new rule).** `SPEC_VERSION` is `2.854.0`.
 > AIgentFlow 2.854.0 registers `list`, `dict`, `first`, `last`, `floor` and `ceil`; they join
@@ -1811,7 +1859,8 @@ integer field, `yes` in a boolean) is left to the rules that already own those f
 (divergence #8). A YAML null is the zero value of any type and is never reported. A key
 the reference deleted from the grammar is named as retired wherever it appears; at the
 locations `retiredKeys.ts` covers, that rule's specific advice is reported instead, and a
-location is never reported twice.
+location is never reported twice. Since package 0.33.0 the message also names the key most likely
+meant (the reference's `closeKeys`; see package 0.33.0 above).
 
 **Regenerating it.** On a grammar change, re-run the derivation above against the new
 reference types (a short Go program: reflect over `Flow`, apply the rules above, print
@@ -1849,6 +1898,10 @@ updated. The trigger conditions and the checklist:
 4. Add a conformance fixture under `test/conformance/fixtures/` plus an entry in
    `test/conformance/conformance.test.ts`, and a focused unit test.
 5. `npm run typecheck && npm run lint && npm test && npm run build` — all green.
+   **A tag requires the Go port's `make parity-check` to exit 0 against a fresh build of this repo,
+   with its cross-language tests RUN, not skipped** (`--- PASS` for
+   `TestParitySpecIsByteIdenticalUpstream`, `TestParityFixtureSetIsIdentical` and
+   `TestParityVerdictsMatchTheJSImplementation`).
 6. Bump the package version and update `SPEC_VERSION` in the README.
 
 > The `aigentflow` repository's `CLAUDE.md` carries a reciprocal note pointing back here,
