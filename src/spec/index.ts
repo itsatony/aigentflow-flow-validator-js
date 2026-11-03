@@ -182,6 +182,18 @@ export const KNOWN_KEYS = spec.knownKeys as {
 };
 
 /**
+ * The reference's `KEYHINT_ALIASES` (AIgentFlow #322): a key authors commonly
+ * guess, lower-cased, mapped IN ORDER to the grammar keys it may have meant.
+ * Edit distance cannot find `key` -> `name` or `params` -> `query`; this table
+ * can. A target is offered only where the unknown key's parent declares it.
+ * A `Map`, so a guess such as `constructor` never reads an `Object` prototype
+ * member.
+ */
+export const KEY_ALIASES: ReadonlyMap<string, readonly string[]> = new Map(
+  Object.entries(spec.keyAliases as Record<string, string[]>),
+);
+
+/**
  * The agent surfaces AIgentFlow removed (AIgentFlow v2.833.0): the `exons://`
  * and `agent://` executors, the flow-level `exons_uploads` key, and the
  * `ai://` parameters that configured its own agent loop. `executor_removed` and

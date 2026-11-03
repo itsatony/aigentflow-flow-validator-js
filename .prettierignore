@@ -14,3 +14,6 @@ test/conformance/fixtures/valid-for-each-items-forms.yaml
 # Shared byte for byte with the Go port, kept as authored.
 test/conformance/fixtures/valid-executor-aiflow-alias.yaml
 test/conformance/fixtures/invalid-executor-aiflow-one-segment.yaml
+# Shared byte for byte with the Go port, kept as authored.
+test/conformance/fixtures/invalid-unknown-key-did-you-mean.yaml
+test/conformance/unknown-key-hints-cases.json

@@ -489,6 +489,14 @@ const CASES: Case[] = [
     expectErrorCodes: ['unknown_yaml_key'],
   },
   {
+    // 0.33.0 (AIgentFlow #322): an unknown key's finding offers the accepted key the
+    // author most likely meant. The exact messages, including the ones that must
+    // carry NO hint, are pinned in unknown-key-hints-cases.json.
+    file: 'invalid-unknown-key-did-you-mean.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_yaml_key'],
+  },
+  {
     // `next: end` is a scalar where a mapping is required; `tags:` must be a list.
     file: 'invalid-value-kind.yaml',
     valid: false,
