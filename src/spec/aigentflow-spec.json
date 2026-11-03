@@ -538,7 +538,7 @@
     "loopStepFieldFormat": "steps.%s.loop.steps.%s.query.%s"
   },
   "functionOperations": {
-    "$comment": "unknown_function_operation (ERROR): a step or loop sub-step whose executor is function://<authority>/<path> where authority+\"/\"+path is not in operations. Templated executors (containing templateActionOpen), unparsable URLs (invalid_executor_url owns them) and other schemes are skipped; the scheme match is exact and case-sensitive, as in the reference. The message is messageFormat with the stepId, the operation, then operations joined by ', '. Reference: validateFunctionOperationKnown (parser.go), functionSchemaOperations.",
+    "$comment": "unknown_function_operation (ERROR): a step or loop sub-step whose executor is function://<authority>/<path> where authority+\"/\"+path is not in operations. Templated executors (containing templateActionOpen), unparsable URLs (invalid_executor_url owns them) and other schemes are skipped; the scheme match is exact and case-sensitive, as in the reference. The message is messageFormat with the stepId quoted exactly as Go's %q (strconv.Quote), the operation, then operations joined by ', '. Reference: validateFunctionOperationKnown (parser.go), functionSchemaOperations.",
     "code": "unknown_function_operation",
     "scheme": "function",
     "messageFormat": "step %s uses function://%s, which is not a built-in function. Available: %s",
@@ -661,7 +661,7 @@
     "schemaFieldFormat": "input_schema.fields.%s"
   },
   "flowDataReservedKeys": {
-    "$comment": "flow_data_key_reserved (ERROR, no loop demotion): a key of the top-level data: map that names engine state. data: is seeded into the mission's .data namespace, where the engine keeps its own bookkeeping, so a flow declaring such a key would forge it. Matching is exact and case-sensitive. A key is reserved when it is one of exact (each with its reason), or starts with one of prefixes (checked in order, first wins; each with its reason). The finding's field is fieldFormat with the key; the message is messageFormat with the key (JSON-quoted, as Go's %q) then the reason; the suggestion is verbatim. Findings are sorted by key. Reference: FlowDataKeyReservation, validateFlowDataKeysAreNotReserved (aigentflow#247 review).",
+    "$comment": "flow_data_key_reserved (ERROR, no loop demotion): a key of the top-level data: map that names engine state. data: is seeded into the mission's .data namespace, where the engine keeps its own bookkeeping, so a flow declaring such a key would forge it. Matching is exact and case-sensitive. A key is reserved when it is one of exact (each with its reason), or starts with one of prefixes (checked in order, first wins; each with its reason). The finding's field is fieldFormat with the key; the message is messageFormat with the key quoted exactly as Go's %q (strconv.Quote) then the reason; the suggestion is verbatim. Findings are sorted by key. Reference: FlowDataKeyReservation, validateFlowDataKeysAreNotReserved (aigentflow#247 review).",
     "code": "flow_data_key_reserved",
     "fieldFormat": "data.%s",
     "messageFormat": "data: key %s is reserved: %s. It would write into the engine's own state, so it is not seeded.",
@@ -1023,7 +1023,7 @@
     "code": "template_default_piped",
     "function": "default",
     "messageFormat": "`default` takes the value FIRST, and a pipe passes the piped value LAST: `%s` is `default <fallback> <value>`, so the fallback is always the result",
-    "suggestion": "write the value first and the fallback second, as a call: `{{ default .x \"fallback\" }}`"
+    "suggestion": "write the value first and the fallback second, as a call: `{{ default .x \"fallback\" }}` (the pipe form of other template libraries does not work here)"
   },
   "complianceResidency": {
     "$comment": "compliance_residency_unenforced (WARNING, never an error; needs no catalogue). When compliance.residency is non-empty and every code (trimmed, upper-cased) is in euResidencyCodes, each top-level step and loop sub-step whose executor starts with aiProtocol+protocolSeparator warns when its provider (literal, lower-cased; skipped when empty or containing templateActionOpen) is in regionLaneProviders and the call is not pinned. Pinned = query region a non-empty string after trimming; OR enforce_region true (bool true or the strings in enforceRegionTrueStrings); OR the author named the endpoint: query <provider>+baseUrlParamSuffix a non-empty string after trimming, or executor_config.<provider>.base_url non-empty after trimming. The provider segment of ai://<provider>/<operation> exists only when a slash follows it. regionLaneProviders is the set of providers whose adapter routes on `region`; a provider outside it has no region lane and is never warned. Message, suggestion and site formats fill %s and %q (a Go-quoted string) in order; the message's last placeholder is the residency list as written, printed [A B]. Reference: validateResidencyEnforcement (validation.residency.go).",

@@ -18,14 +18,9 @@
 
 import type { Flow } from '../types.js';
 import { FLOW_DATA_RESERVED_KEYS } from '../spec/index.js';
-import { Issues, isRecord } from './util.js';
+import { Issues, goQuote, isRecord } from './util.js';
 
 const KEY_DATA = 'data';
-
-/** Go's `%q` for a plain string: double-quoted with the escapes JSON shares. */
-function quote(key: string): string {
-  return JSON.stringify(key);
-}
 
 /** Why `key` names engine state, or undefined when it is an author's key. */
 export function flowDataKeyReservation(key: string): string | undefined {
@@ -47,7 +42,7 @@ export function validateFlowDataKeys(flow: Flow, issues: Issues): void {
     issues.error({
       field: FLOW_DATA_RESERVED_KEYS.fieldFormat.replace('%s', () => key),
       message: FLOW_DATA_RESERVED_KEYS.messageFormat
-        .replace('%s', () => quote(key))
+        .replace('%s', () => goQuote(key))
         .replace('%s', () => reason),
       code: FLOW_DATA_RESERVED_KEYS.code,
       suggestion: FLOW_DATA_RESERVED_KEYS.suggestion,

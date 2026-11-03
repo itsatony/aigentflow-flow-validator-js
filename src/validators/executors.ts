@@ -30,7 +30,7 @@ import {
   TEMPLATE_ACTION_OPEN,
 } from '../spec/index.js';
 import { goTrimSpace } from './goUrl.js';
-import { Issues, isRecord } from './util.js';
+import { Issues, goQuote, isRecord } from './util.js';
 
 const SCHEME_SEPARATOR = '://';
 
@@ -304,7 +304,7 @@ function checkFunctionOperation(
   issues.error({
     field,
     message: FUNCTION_OPERATIONS.messageFormat
-      .replace('%s', () => JSON.stringify(stepID))
+      .replace('%s', () => goQuote(stepID))
       .replace('%s', () => op)
       .replace('%s', () => list),
     code: FUNCTION_OPERATIONS.code,

@@ -33,6 +33,26 @@ discipline for keeping the two in sync.
 > manifest `test/conformance/unknown-key-hints-cases.json` (also byte-identical), which pins every
 > finding's exact message, including the three that must carry NO hint. Test:
 > `test/v0330-key-did-you-mean.test.ts`.
+>
+> **Also in 0.33.0: the two ports agree byte for byte again.** The Go port's `make parity-check` had
+> been red since 0.21.0: each port had written its own spec text and fixtures for
+> `template_default_piped`, `strict_templates`, `here://`, `flow_data_key_reserved` and
+> `unknown_function_operation`. This copy of the spec stays authoritative and the Go port's is again a
+> byte copy of it. Changes here:
+>
+> - `templateDefaultPiped.suggestion` is the reference's text again (it had lost the closing
+>   "(the pipe form of other template libraries does not work here)").
+> - `flow_data_key_reserved` and `unknown_function_operation` quote the key / step id with
+>   `goQuote` (`validators/util.ts`), a port of Go's `strconv.Quote`, which is exactly the
+>   reference's `%q`. `JSON.stringify` agreed only on printable text: it wrote BEL as `\u0007` where
+>   Go writes `\a`, and kept DEL, U+00A0 and U+2028 raw where Go escapes them. Pinned against values
+>   Go produced: `test/v0330-go-quote.test.ts`. The other sites that still use `JSON.stringify` as `%q`
+>   (`reservedInputs`, `responseExpectation`, `stepMaxDuration`, the removed-surface messages) are
+>   unchanged; they differ from Go only for a step id or key holding such a character.
+> - Fixtures: both ports carry the UNION, byte-identical. Where the two had different files under one
+>   name, this port's keeps the name and the Go port's is the `-alt` one (eight). New:
+>   `valid-function-operation-scheme-case.yaml` (`FUNCTION://` is not judged; the Go port lower-cased
+>   the scheme and refused it, which the reference does not). No case was loosened.
 
 > package 0.32.0 — **six standard template functions (no new rule).** `SPEC_VERSION` is `2.854.0`.
 > AIgentFlow 2.854.0 registers `list`, `dict`, `first`, `last`, `floor` and `ceil`; they join
@@ -1878,6 +1898,10 @@ updated. The trigger conditions and the checklist:
 4. Add a conformance fixture under `test/conformance/fixtures/` plus an entry in
    `test/conformance/conformance.test.ts`, and a focused unit test.
 5. `npm run typecheck && npm run lint && npm test && npm run build` — all green.
+   **A tag requires the Go port's `make parity-check` to exit 0 against a fresh build of this repo,
+   with its cross-language tests RUN, not skipped** (`--- PASS` for
+   `TestParitySpecIsByteIdenticalUpstream`, `TestParityFixtureSetIsIdentical` and
+   `TestParityVerdictsMatchTheJSImplementation`).
 6. Bump the package version and update `SPEC_VERSION` in the README.
 
 > The `aigentflow` repository's `CLAUDE.md` carries a reciprocal note pointing back here,

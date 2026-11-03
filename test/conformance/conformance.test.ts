@@ -280,10 +280,23 @@ const CASES: Case[] = [
     forbidWarningCodes: ['unknown_executor_scheme'],
   },
   {
+    // 0.33.0: both ports carry the UNION of what each wrote; where the two had
+    // different fixtures under one name, this port's keeps the name and the Go
+    // port's is the `-alt` one.
+    file: 'valid-executor-here-alt.yaml',
+    valid: true,
+    forbidWarningCodes: ['unknown_executor_scheme'],
+  },
+  {
     file: 'valid-strict-templates.yaml',
     valid: true,
     forbidErrorCodes: ['unknown_yaml_key', 'invalid_type', 'template_default_piped'],
     forbidWarningCodes: ['template_default_piped'],
+  },
+  {
+    file: 'valid-strict-templates-alt.yaml',
+    valid: true,
+    forbidErrorCodes: ['unknown_yaml_key', 'invalid_type'],
   },
   {
     file: 'invalid-strict-templates-type.yaml',
@@ -291,8 +304,18 @@ const CASES: Case[] = [
     expectErrorCodes: ['invalid_type'],
   },
   {
+    file: 'invalid-strict-templates-not-bool.yaml',
+    valid: false,
+    expectErrorCodes: ['invalid_type'],
+  },
+  {
     // `default` is value first; every spelling of a pipe into it is an error.
     file: 'invalid-template-default-piped.yaml',
+    valid: false,
+    expectErrorCodes: ['template_default_piped'],
+  },
+  {
+    file: 'invalid-template-default-piped-alt.yaml',
     valid: false,
     expectErrorCodes: ['template_default_piped'],
   },
@@ -304,11 +327,23 @@ const CASES: Case[] = [
     forbidErrorCodes: ['template_default_piped'],
   },
   {
+    file: 'warn-template-default-piped-loop-alt.yaml',
+    valid: true,
+    expectWarningCodes: ['template_default_piped'],
+    forbidErrorCodes: ['template_default_piped'],
+  },
+  {
     // The control: shapes that merely contain the word, or call it correctly.
     file: 'valid-template-default-clean.yaml',
     valid: true,
     forbidErrorCodes: ['template_default_piped'],
     forbidWarningCodes: ['template_default_piped', 'template_syntax_error'],
+  },
+  {
+    file: 'valid-template-default-lookalikes.yaml',
+    valid: true,
+    forbidErrorCodes: ['template_default_piped'],
+    forbidWarningCodes: ['template_default_piped'],
   },
   {
     // v2.642.0 (DC-FORGE-72): the expression-function catalog is compiled in and
@@ -809,9 +844,44 @@ const CASES: Case[] = [
     valid: true,
     forbidErrorCodes: ['flow_data_key_reserved'],
   },
+  {
+    file: 'invalid-flow-data-key-exact.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-bookkeeping.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-underscore-prefix.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-dot-prefix.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'invalid-flow-data-key-namespace.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_data_key_reserved'],
+  },
+  {
+    file: 'valid-flow-data-keys.yaml',
+    valid: true,
+    forbidErrorCodes: ['flow_data_key_reserved'],
+  },
   // 0.23.0: a function:// operation outside the built-in set is refused (unknown_function_operation).
   {
     file: 'invalid-function-operation-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_function_operation'],
+  },
+  {
+    file: 'invalid-function-operation-unknown-alt.yaml',
     valid: false,
     expectErrorCodes: ['unknown_function_operation'],
   },
@@ -821,12 +891,33 @@ const CASES: Case[] = [
     expectErrorCodes: ['unknown_function_operation'],
   },
   {
+    file: 'invalid-function-operation-unknown-loop-substep-alt.yaml',
+    valid: false,
+    expectErrorCodes: ['unknown_function_operation'],
+  },
+  {
     file: 'valid-function-operation-builtins.yaml',
     valid: true,
     forbidErrorCodes: ['unknown_function_operation'],
   },
   {
+    file: 'valid-function-operation-builtins-alt.yaml',
+    valid: true,
+    forbidErrorCodes: ['unknown_function_operation'],
+  },
+  {
     file: 'valid-function-operation-templated.yaml',
+    valid: true,
+    forbidErrorCodes: ['unknown_function_operation'],
+  },
+  {
+    file: 'valid-function-operation-templated-alt.yaml',
+    valid: true,
+    forbidErrorCodes: ['unknown_function_operation'],
+  },
+  {
+    // The scheme match is exact, as in the reference: FUNCTION:// is not judged.
+    file: 'valid-function-operation-scheme-case.yaml',
     valid: true,
     forbidErrorCodes: ['unknown_function_operation'],
   },

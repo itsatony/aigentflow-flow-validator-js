@@ -104,7 +104,7 @@ describe('template_default_piped severity and text', () => {
       '`default` takes the value FIRST, and a pipe passes the piped value LAST: `.x | default "w"` is `default <fallback> <value>`, so the fallback is always the result',
     );
     expect(e?.suggestion).toBe(
-      'write the value first and the fallback second, as a call: `{{ default .x "fallback" }}`',
+      'write the value first and the fallback second, as a call: `{{ default .x "fallback" }}` (the pipe form of other template libraries does not work here)',
     );
   });
   it('is a warning in a loop body', () => {
