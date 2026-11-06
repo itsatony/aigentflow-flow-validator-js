@@ -31,7 +31,19 @@ export interface TemplateCheckOptions {
 
 const BLOCK_OPENERS = new Set(['if', 'range', 'with', 'block', 'define']);
 const ELSE_CONTEXTS = new Set(['if', 'range', 'with']);
-const KEYWORDS = new Set(['if', 'range', 'with', 'block', 'define', 'template', 'else', 'end']);
+// `break` and `continue` (inside a `range`) are keywords too, not function calls.
+const KEYWORDS = new Set([
+  'if',
+  'range',
+  'with',
+  'block',
+  'define',
+  'template',
+  'else',
+  'end',
+  'break',
+  'continue',
+]);
 const LITERALS = new Set(['true', 'false', 'nil']);
 
 export interface Action {

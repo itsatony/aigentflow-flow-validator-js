@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.854.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.878.0"`).
 
 ### Options
 
@@ -185,6 +185,7 @@ interface ValidationIssue {
 - **Mock scenarios** — each `delay` must be a Go duration (`100ms`, not `100`), judged by its written spelling: `0` saves, `0.0` does not.
 - **`output:`** — no empty-string entries.
 - **Templates** — Go `text/template` **syntax** across query, processing, and conditions; and a value piped into `default` (`{{ .x | default "w" }}`, error; warning in a loop body — `default` takes the value first: `{{ default .x "w" }}`).
+- **Human answers** — a read of a human step's answer under a key no answer door commits (warning, `human_answer_field`): `.data.<h>.content` where `h` is an `async://human/…` step (not `announce`), or `.step.response.text` in that step's own `next:` conditions or `post_processing`. The answer is `response` (with `comments` and `timed_out`); any other key renders `<no value>`.
 
 ## What it does **not** check
 

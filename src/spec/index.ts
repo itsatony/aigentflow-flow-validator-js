@@ -415,6 +415,21 @@ export const TEMPLATE_DEFAULT_PIPED = {
 };
 
 /**
+ * `human_answer_field` (warning): the key set every human answer door commits, the
+ * executor prefix and non-parking modes that make a top-level step a human answer
+ * step, and the message / suggestion formats (`%q` is a Go-quoted string).
+ */
+export const HUMAN_ANSWER_FIELD = {
+  code: spec.humanAnswerField.code,
+  executorPrefix: spec.humanAnswerField.executorPrefix,
+  nonParkingModes: new Set<string>(spec.humanAnswerField.nonParkingModes),
+  answerKeys: new Set<string>(spec.humanAnswerField.answerKeys),
+  dataMessageFormat: spec.humanAnswerField.dataMessageFormat,
+  stepMessageFormat: spec.humanAnswerField.stepMessageFormat,
+  suggestionFormat: spec.humanAnswerField.suggestionFormat,
+} as const;
+
+/**
  * `unknown_function_operation`: the closed set of built-in `function://` operations
  * (authority + "/" + path, sorted). `messageFormat` takes the quoted step id, the
  * operation, then the comma-joined list; `suggestionFormat` takes the list.
