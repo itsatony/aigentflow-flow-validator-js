@@ -4,7 +4,57 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.854.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds six standard template functions (package 0.32.0, below); package 0.33.0 adds the reference's "did you mean" to `unknown_yaml_key` with no grammar change (below). Earlier (v2.851.0): the `storedBytes` option (package 0.31.0, below). Earlier (v2.842.0): `aiflow` became a known executor scheme (package 0.30.1, below). Earlier (v2.841.0): the rule `for_each_items_unresolvable` (package 0.30.0, below). Earlier: it removed the orchestrator (`orchestrator_removed`: the `orchestrator:` block refused whole, the flow-level `tool_discovery` / `discoverable_tools`, and `next: orchestrator`) and every rule that judged the inside of the block (package 0.29.0, below). Earlier: it made `nexus://` the canonical agent-runtime scheme with `atlas://` as its alias, removes signals, dynamic flow modification and campaigns (`signal_removed`, `flow_modification_removed`, `removed_key_ignored`, `campaign_removed`) and drops share links from the removal advice (package 0.28.0, below). Earlier: it removed the `exons://` and `agent://` executors and the `ai://` agent-loop parameters and adds the errors `executor_removed` and `agentic_param_removed` (package 0.27.0, below). Earlier: it added the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+**Tracks AIgentFlow flow schema: `v2.878.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds the warning `human_answer_field` (package 0.34.0, below). Earlier (v2.854.0): six standard template functions (package 0.32.0, below); package 0.33.0 adds the reference's "did you mean" to `unknown_yaml_key` with no grammar change (below). Earlier (v2.851.0): the `storedBytes` option (package 0.31.0, below). Earlier (v2.842.0): `aiflow` became a known executor scheme (package 0.30.1, below). Earlier (v2.841.0): the rule `for_each_items_unresolvable` (package 0.30.0, below). Earlier: it removed the orchestrator (`orchestrator_removed`: the `orchestrator:` block refused whole, the flow-level `tool_discovery` / `discoverable_tools`, and `next: orchestrator`) and every rule that judged the inside of the block (package 0.29.0, below). Earlier: it made `nexus://` the canonical agent-runtime scheme with `atlas://` as its alias, removes signals, dynamic flow modification and campaigns (`signal_removed`, `flow_modification_removed`, `removed_key_ignored`, `campaign_removed`) and drops share links from the removal advice (package 0.28.0, below). Earlier: it removed the `exons://` and `agent://` executors and the `ai://` agent-loop parameters and adds the errors `executor_removed` and `agentic_param_removed` (package 0.27.0, below). Earlier: it added the rule `unknown_function_operation` and a clearer `unknown_executor_scheme` message (package 0.23.0, below). Earlier: the rule `flow_data_key_reserved` (package 0.22.0). Earlier: the `here` executor scheme, the `strict_templates` flow key and the rule `template_default_piped` (package 0.21.0). Earlier: the warning `compliance_residency_unenforced` (package 0.20.0). `orchestrator.region` / `orchestrator.enforce_region` (package 0.19.0). Earlier: the AigentChat executor was removed (package 0.18.0). Earlier additions: the `examples:` block (package 0.17.0), `server_owned_query_key` (package 0.15.1) from the AIgentFlow release after v2.790.0, `credential_endpoint_unpaired` (package 0.15.2) from AIgentFlow v2.793.0 and the release after it, and `display_name_too_long` (package 0.15.3) from AIgentFlow v2.802.0.
+
+> package 0.34.0 — **`human_answer_field` (new WARNING).** `SPEC_VERSION` is `2.878.0`. Contract: the
+> reference's `humanAnswerFieldWarnings` (`validation.humananswer.go`), called on every template that
+> parses. Spec block: `humanAnswerField`. Every door a person answers a human step through commits
+> `response` (plus `comments` and `timed_out`) and nothing else, so a read of any other key renders
+> "<no value>" with no error. The motivating incident: a demo flow read `.step.response.content` on a
+> human step, the answer rendered `<no value>`, a guard ran `atoi` over it and the run could not
+> continue.
+>
+> - **Human answer steps**: top-level steps whose `executor` starts with `async://human/`, with a
+>   non-empty remainder whose mode (up to its first `/`) is not `announce` (the reference's
+>   `AsyncHumanParkURL`: `async://human//x` is one, `async://human/` is not). Never a loop sub-step.
+> - **Sites**: every template `validators/templates.ts` checks, and only one with no syntax or
+>   function finding (the reference judges a template only when its parse succeeds). `.data.<h>.<x>`
+>   (h a human step, x not an answer key) anywhere; `.step.response.<x>` only in a human step's OWN
+>   `next.conditions[i].if` and OWN `post_processing[i]` (values and `if` guard).
+> - **Severity**: a WARNING everywhere (never an error, never demoted or promoted by position,
+>   untouched by `storedBytes` and `strictRegistries`); `valid` is unaffected.
+> - **Addressing**: the site's field path and the step whose template it is, exactly the reference's
+>   (AIgentFlow's save door dedupes the Go port's findings against its own by code and field). One
+>   finding per distinct reference per site, ordered by message. Messages and suggestion are the
+>   reference's text, `%q` being `goQuote`.
+>
+> **Where this port approximates the reference.** The reference walks Go's parse tree
+> (`walkRootFieldChains`); this port has none, so `template/gotmpl-fields.ts` tokenizes each action
+> (strings, raw strings, character literals and comments skipped) and follows the block structure
+> with a stack. Root field: a `.` that starts a word (after whitespace, `(`, `|`, `=`, `,` or at the
+> start of the pipeline) followed by identifiers; `$.data…`, `$x.data…`, `(expr).data…` and `1.5`
+> never are. Judged: `if` / `else if` pipelines, bodies and else branches; the pipelines of `range`
+> and `with`; `define` and `block` bodies; `template` / `block` arguments. Not judged: the bodies and
+> else branches of `range` and `with`. Go accepts `else if` only inside an `if` and `else with` only
+> inside a `with`; any other `else <keyword>` does not parse, so the scanner then yields nothing, as
+> the reference does. Known limits: a chain whose text is not clean identifiers is dropped (a
+> missed warning, never a false one); and a template this port's approximate syntax checker accepts
+> but Go's parser refuses (the existing template-syntax divergence) is still scanned here, so it may
+> carry a `human_answer_field` warning beside no syntax finding, where the Go port and the reference
+> report `template_syntax_error` instead. Such a template fails at run time either way. Over the shared manifest (51 cases, expectations produced by the
+> reference), the five fixtures and the whole conformance corpus, the two ports raise identical
+> `human_answer_field` (code, field) sets.
+>
+> **Also in 0.34.0:** `break` and `continue` are template keywords in the syntax checker
+> (`template/gotmpl-syntax.ts`); they were read as calls to unknown functions and drew a
+> `template_function_unknown` warning the Go port and the reference never raise.
+>
+> Fixtures, byte-identical to the Go port's (v0.24.0): `warn-human-answer-field-post-processing.yaml`,
+> `warn-human-answer-field-next-condition.yaml`, `warn-human-answer-field-data-read.yaml`,
+> `warn-human-answer-field-loop-substep.yaml` and the control `valid-human-answer-field-lookalikes.yaml`
+> (forbids the code). Manifest: `test/conformance/human-answer-field-cases.json` (byte-identical),
+> pinning every finding's field, step id, message and suggestion. Test:
+> `test/v0340-human-answer-field.test.ts`.
 
 > package 0.33.0 — **`unknown_yaml_key` says which key was meant (no new rule, no new code).**
 > `SPEC_VERSION` stays `2.854.0`: no grammar changed, the spec only gains the data block `keyAliases`
@@ -1483,6 +1533,7 @@ Comparison contract: **error `code` + `valid` verdict**, not message wording. Th
 | An EU-only residency beside an unpinned region-lane `ai://` call (`compliance_residency_unenforced`, warning)                                                                                                                                   | `validateResidencyEnforcement` (validation.residency.go)                                                                                        | `validators/complianceResidency.ts`                       | `v0200-compliance-residency.test.ts`, `conformance.test.ts`                           |
 | Go-template syntax                                                                                                                                                                                                                              | `validateTemplateExpression` (Parse step)                                                                                                       | `template/gotmpl-syntax.ts` + `validators/templates.ts`   | `gotmpl-syntax.test.ts`, `validate.test.ts`                                           |
 | A value piped into `default` (`template_default_piped`; error, warning in a loop body)                                                                                                                                                          | `pipedDefaultPipelines` (validation.templatedefault.go)                                                                                         | `template/gotmpl-default.ts` + `validators/templates.ts`  | `v0210-template-default-piped.test.ts`, `conformance.test.ts`                         |
+| A human step's answer read under a key no door commits (`human_answer_field`, warning)                                                                                                                                                          | `humanAnswerFieldWarnings` (validation.humananswer.go)                                                                                          | `template/gotmpl-fields.ts` + `validators/humanAnswer.ts` | `v0340-human-answer-field.test.ts`, `conformance.test.ts`                             |
 
 ---
 

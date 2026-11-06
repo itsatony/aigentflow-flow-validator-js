@@ -17,6 +17,7 @@ import type {
 import { TEMPLATE_FUNCTIONS, TEMPLATE_DEFAULT_PIPED } from '../spec/index.js';
 import { checkGoTemplateSyntax } from '../template/gotmpl-syntax.js';
 import { pipedDefaultPipelines } from '../template/gotmpl-default.js';
+import { checkHumanAnswerFields, humanAnswerSteps } from './humanAnswer.js';
 import { Issues, isArray, isRecord, isString } from './util.js';
 import {
   PROCESSING_OP_GUARD_KEY,
@@ -37,12 +38,17 @@ interface TemplateStats {
   syntaxErrors: number;
 }
 
+/** The walk's state: the counters, plus the flow's human answer steps (humanAnswer.ts). */
+interface TemplateWalk extends TemplateStats {
+  readonly humanSteps: ReadonlySet<string>;
+}
+
 function checkTemplateString(
   value: string,
   field: string,
   stepID: string,
   issues: Issues,
-  stats: TemplateStats,
+  stats: TemplateWalk,
   opts: ValidateOptions,
   demote = false,
 ): void {
@@ -104,6 +110,9 @@ function checkTemplateString(
       suggestion: TEMPLATE_DEFAULT_PIPED.suggestion,
     });
   }
+  // A human answer read under a key no door commits: a WARNING wherever it is,
+  // never an error and never demoted further (it is one already).
+  checkHumanAnswerFields(value, field, stepID, stats.humanSteps, issues);
 }
 
 /** Walk string leaves of an arbitrary value, mirroring walkObjectRecursive. */
@@ -112,7 +121,7 @@ function walkStrings(
   value: unknown,
   stepID: string,
   issues: Issues,
-  stats: TemplateStats,
+  stats: TemplateWalk,
   opts: ValidateOptions,
   check: boolean,
   demote = false,
@@ -155,7 +164,7 @@ function walkStrings(
 function walkProcessingOperation(
   ref: ProcessingOperationRef,
   issues: Issues,
-  stats: TemplateStats,
+  stats: TemplateWalk,
   opts: ValidateOptions,
 ): void {
   const demote = ref.scope === 'loopSubStep';
@@ -193,7 +202,7 @@ function walkLoopSubStep(
   sub: LoopSubStepRef,
   stepID: string,
   issues: Issues,
-  stats: TemplateStats,
+  stats: TemplateWalk,
   opts: ValidateOptions,
 ): void {
   const condition = sub.raw.condition;
@@ -231,9 +240,9 @@ export function validateTemplates(
   issues: Issues,
   opts: ValidateOptions,
 ): TemplateStats {
-  const stats: TemplateStats = { found: 0, syntaxErrors: 0 };
   const steps = flow.steps;
-  if (!isRecord(steps)) return stats;
+  if (!isRecord(steps)) return { found: 0, syntaxErrors: 0 };
+  const stats: TemplateWalk = { found: 0, syntaxErrors: 0, humanSteps: humanAnswerSteps(flow) };
 
   for (const [stepID, rawStep] of Object.entries(steps)) {
     if (!isRecord(rawStep)) continue;
@@ -289,5 +298,5 @@ export function validateTemplates(
     }
   }
 
-  return stats;
+  return { found: stats.found, syntaxErrors: stats.syntaxErrors };
 }

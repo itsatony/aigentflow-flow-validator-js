@@ -332,6 +332,43 @@ const CASES: Case[] = [
     expectWarningCodes: ['template_default_piped'],
     forbidErrorCodes: ['template_default_piped'],
   },
+  // 0.34.0 (AIgentFlow v2.878.0): human_answer_field, a WARNING everywhere (also
+  // inside a loop body, never an error). The control forbids the code: a warning
+  // never changes the verdict, and a false positive on a correct read is the risk.
+  {
+    file: 'warn-human-answer-field-post-processing.yaml',
+    valid: true,
+    expectWarningCodes: ['human_answer_field'],
+    forbidErrorCodes: ['human_answer_field'],
+  },
+  {
+    file: 'warn-human-answer-field-next-condition.yaml',
+    valid: true,
+    expectWarningCodes: ['human_answer_field'],
+    forbidErrorCodes: ['human_answer_field'],
+  },
+  {
+    file: 'warn-human-answer-field-data-read.yaml',
+    valid: true,
+    expectWarningCodes: ['human_answer_field'],
+    forbidErrorCodes: ['human_answer_field'],
+  },
+  {
+    file: 'warn-human-answer-field-loop-substep.yaml',
+    valid: true,
+    expectWarningCodes: ['human_answer_field'],
+    forbidErrorCodes: ['human_answer_field'],
+  },
+  {
+    file: 'valid-human-answer-field-lookalikes.yaml',
+    valid: true,
+    forbidErrorCodes: ['human_answer_field'],
+    forbidWarningCodes: [
+      'human_answer_field',
+      'template_syntax_error',
+      'template_function_unknown',
+    ],
+  },
   {
     // The control: shapes that merely contain the word, or call it correctly.
     file: 'valid-template-default-clean.yaml',
