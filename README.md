@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.878.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.890.0"`).
 
 ### Options
 
@@ -172,7 +172,7 @@ interface ValidationIssue {
 - **Loop / for_each / throttle** — required fields, iteration limits, mutual exclusions, throttle ceilings.
 - **Removed agent surfaces** — `executor_removed` (an `exons://` or `agent://` step, or the `exons_uploads` key) and `agentic_param_removed` (an `ai://` step carrying `agentic`, `max_tool_turns`, `mcp_server_url`, …); both errors, one finding per step.
 - **Removed surfaces** — the `exons://` / `agent://` executors and the `ai://` agent-loop parameters (`executor_removed`, `agentic_param_removed`); agent signals and dynamic flow modification (`signal_removed`, `flow_modification_removed`, and the `removed_key_ignored` warning for `checkpoint.pre_dfm`); campaigns (`campaign_removed`: the `campaign:` block, refused whole); the orchestrator (`orchestrator_removed`: the `orchestrator:` block, refused whole with nothing inside it judged, the flow-level `tool_discovery` / `discoverable_tools`, and a step whose `next` names `orchestrator`).
-- **Nexus agent steps** — `nexus://agent/run` and `nexus://capability/<ref>` (also written `atlas://`, an accepted alias): a literal agent and capabilities, exactly one of `prompt` / `prompt_template`, a valid capability reference, no refused parameters (`atlas_*` codes).
+- **Nexus agent steps** — `nexus://agent/run` and `nexus://capability/<ref>` (also written `atlas://`, an accepted alias): a literal agent, capabilities, model and (on an agent run) skills, exactly one of `prompt` / `prompt_template`, a valid capability reference, no refused parameters (`atlas_*` codes).
 - **`executor_config` environment references** — a `${NAME}` value may name only the variables of the provider or protocol it is written under (`executor_config_env_scope`).
 - **Server-owned query keys** — a step's or loop sub-step's `query:` may not declare `aiv_api_key`, `aiv_base_url` or `aiv_delegation`, which only the server sets (`server_owned_query_key`).
 - **Reserved `data:` keys** — a key of the top-level `data:` map may not name engine state: `memory`, `orchestrator`, `campaign`, `voiceagent`, `org_id`, `current_flow`, the `modif*`/`bottleneck_state` bookkeeping names, a key starting with `_` or `.`, or one under `memory.`, `orchestrator.`, `campaign.`, `voiceagent.` (`flow_data_key_reserved`).
