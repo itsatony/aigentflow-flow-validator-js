@@ -464,6 +464,7 @@ export const ATLAS_EXECUTOR = {
   promptBoth: atlas.promptBoth,
   capabilityRefInvalid: atlas.capabilityRefInvalid,
   modelNotLiteral: atlas.modelNotLiteral,
+  skillsNotLiteral: atlas.skillsNotLiteral,
   paramRefused: {
     code: atlas.paramRefused.code,
     messageFormat: atlas.paramRefused.messageFormat,

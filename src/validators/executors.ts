@@ -257,6 +257,10 @@ function checkAtlasStep(
     if (!hasPrompt && !hasTemplate) report(ATLAS_EXECUTOR.promptMissing);
     else if (hasPrompt && hasTemplate) report(ATLAS_EXECUTOR.promptBoth);
     if (anyTemplate(q.model)) report(ATLAS_EXECUTOR.modelNotLiteral);
+    // `skills` is fixed on the agent door only: it picks which of the
+    // organization's templates the run starts with. On a capability step a
+    // `skills` key is a tool argument and may be templated.
+    if (anyTemplate(q.skills)) report(ATLAS_EXECUTOR.skillsNotLiteral);
   } else {
     report(ATLAS_EXECUTOR.operationUnknown, executor);
     return;
