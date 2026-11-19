@@ -1761,6 +1761,41 @@ const CASES: Case[] = [
     expectErrorCodes: ['atlas_agent_not_literal'],
   },
   {
+    // 0.37.0 (AIgentFlow 2.913.0): assets.
+    file: 'invalid-asset-declaration.yaml',
+    valid: false,
+    expectErrorCodes: ['asset_declaration_invalid'],
+  },
+  {
+    file: 'invalid-asset-reference-unknown.yaml',
+    valid: false,
+    expectErrorCodes: ['asset_reference_unknown'],
+  },
+  {
+    file: 'invalid-asset-reference-placement.yaml',
+    valid: false,
+    expectErrorCodes: ['asset_reference_placement'],
+  },
+  {
+    // A loop sub-step: only its query is a site.
+    file: 'invalid-asset-loop-substep-placement.yaml',
+    valid: false,
+    expectErrorCodes: ['asset_reference_placement'],
+  },
+  {
+    // The false-positive side: the three source forms, every site, prose that
+    // mentions asset:// and a reference with a trailing space.
+    file: 'valid-assets.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'asset_declaration_invalid',
+      'asset_reference_unknown',
+      'asset_reference_placement',
+      'unknown_yaml_key',
+    ],
+    forbidWarningCodes: ['unknown_yaml_key'],
+  },
+  {
     // 0.36.0 (AIgentFlow 2.912.0): catalogue sub-flows and partials.
     file: 'invalid-catalog-flow-version-not-semver.yaml',
     valid: false,

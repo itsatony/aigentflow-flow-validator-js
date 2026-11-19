@@ -116,7 +116,7 @@ Low-level: parse YAML into `{ flow?, parseErrors, parseWarnings }` without valid
 
 ### `SPEC_VERSION: string`
 
-The AIgentFlow flow-schema version this build tracks (e.g. `"2.912.0"`).
+The AIgentFlow flow-schema version this build tracks (e.g. `"2.913.0"`).
 
 ### Options
 
@@ -172,6 +172,7 @@ interface ValidationIssue {
 - **Loop / for_each / throttle** — required fields, iteration limits, mutual exclusions, throttle ceilings.
 - **Removed agent surfaces** — `executor_removed` (an `exons://` or `agent://` step, or the `exons_uploads` key) and `agentic_param_removed` (an `ai://` step carrying `agentic`, `max_tool_turns`, `mcp_server_url`, …); both errors, one finding per step.
 - **Removed surfaces** — the `exons://` / `agent://` executors and the `ai://` agent-loop parameters (`executor_removed`, `agentic_param_removed`); agent signals and dynamic flow modification (`signal_removed`, `flow_modification_removed`, and the `removed_key_ignored` warning for `checkpoint.pre_dfm`); campaigns (`campaign_removed`: the `campaign:` block, refused whole); the orchestrator (`orchestrator_removed`: the `orchestrator:` block, refused whole with nothing inside it judged, the flow-level `tool_discovery` / `discoverable_tools`, and a step whose `next` names `orchestrator`).
+- **Assets** — a flow-level `assets:` block declares each asset with exactly one pinned source (`content`, `trove_key` + `sha256`, or `aiv_ref` + `version` + `sha256`); a step value `asset://<name>` must name a declared asset and sit in the step's query, its quality_gate rubric or a loop sub-step's query (`asset_declaration_invalid`, `asset_reference_unknown`, `asset_reference_placement`).
 - **Catalogue sub-flows and partials** — `flow://aiv/<org>/<name>` and `include://aiv/<org>/<name>` name exactly one org and one name; `flow_version` is a semver and belongs only on such a step (`catalog_ref_invalid`, `flow_version_invalid`, `flow_version_not_catalog`).
 - **Nexus agent steps** — `nexus://agent/run` and `nexus://capability/<ref>` (also written `atlas://`, an accepted alias): a literal agent, capabilities, model and (on an agent run) skills, exactly one of `prompt` / `prompt_template`, a valid capability reference, no refused parameters (`atlas_*` codes).
 - **`executor_config` environment references** — a `${NAME}` value may name only the variables of the provider or protocol it is written under (`executor_config_env_scope`).
