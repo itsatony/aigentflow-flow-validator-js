@@ -444,6 +444,20 @@ export const FUNCTION_OPERATIONS = {
 } as const;
 
 /**
+ * Catalogue sub-flows and partials (AIgentFlow 2.912.0): `flow://aiv/<org>/<name>`
+ * and `include://aiv/<org>/<name>`, and the `flow_version` step key.
+ */
+const catalog = spec.catalogFlow;
+export const CATALOG_FLOW = {
+  refPrefixes: catalog.refPrefixes as readonly string[],
+  segmentPattern: new RegExp(catalog.segmentPattern),
+  versionPattern: new RegExp(catalog.versionPattern),
+  refInvalid: catalog.refInvalid,
+  versionInvalid: catalog.versionInvalid,
+  versionPlacement: catalog.versionPlacement,
+} as const;
+
+/**
  * `atlas://` rules. Every message format takes the quoted step id first; the
  * operation and capability-ref messages take one more value.
  */

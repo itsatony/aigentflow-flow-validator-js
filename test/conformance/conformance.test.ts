@@ -1761,6 +1761,35 @@ const CASES: Case[] = [
     expectErrorCodes: ['atlas_agent_not_literal'],
   },
   {
+    // 0.36.0 (AIgentFlow 2.912.0): catalogue sub-flows and partials.
+    file: 'invalid-catalog-flow-version-not-semver.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_version_invalid'],
+  },
+  {
+    file: 'invalid-catalog-flow-version-placement.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_version_not_catalog'],
+  },
+  {
+    file: 'invalid-catalog-ref.yaml',
+    valid: false,
+    expectErrorCodes: ['catalog_ref_invalid'],
+  },
+  {
+    // An error in a loop body too.
+    file: 'invalid-catalog-loop-substep-flow-version.yaml',
+    valid: false,
+    expectErrorCodes: ['flow_version_not_catalog'],
+  },
+  {
+    // The false-positive side: pinned, floating, templated, a pre-release
+    // version, a partial, and a loop sub-step calling the catalogue.
+    file: 'valid-catalog-flows.yaml',
+    valid: true,
+    forbidErrorCodes: ['catalog_ref_invalid', 'flow_version_invalid', 'flow_version_not_catalog'],
+  },
+  {
     // 0.35.0: query.skills on an agent run is written out, never templated.
     file: 'invalid-atlas-skills-not-literal.yaml',
     valid: false,

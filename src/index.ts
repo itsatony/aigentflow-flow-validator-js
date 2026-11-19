@@ -36,6 +36,7 @@ import { validateCredentialEndpointPairing } from './validators/credentialEndpoi
 import { validateRemovedOrchestratorSurfaces } from './validators/removedSignalCampaign.js';
 import { validateResidencyEnforcement } from './validators/complianceResidency.js';
 import { validateExamples } from './validators/examples.js';
+import { validateCatalogFlowSteps } from './validators/catalogFlow.js';
 import type { ScalarSources } from './validators/util.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
@@ -105,6 +106,7 @@ function validateParsed(
   validateRetiredKeys(f, issues);
   validateRemovedFlowKeys(f, issues);
   validateExecutors(f, issues);
+  validateCatalogFlowSteps(f, issues);
   validateQuerySchema(f, issues);
   validateResponseExpectations(f, issues);
   validateErrorStrategies(f, issues);
