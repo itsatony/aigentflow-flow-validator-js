@@ -4,7 +4,24 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.913.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which adds assets: the flow-level `assets` key and the errors `asset_declaration_invalid`, `asset_reference_unknown` and `asset_reference_placement` (package 0.37.0, below). Earlier (v2.912.0): catalogue sub-flows and partials: the `include` executor scheme, the `flow_version` step key and the errors `catalog_ref_invalid`, `flow_version_invalid` and `flow_version_not_catalog` (package 0.36.0, below).
+**Tracks AIgentFlow flow schema: `v2.914.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which makes the inline asset size and the asset count save-door findings of `asset_declaration_invalid` (package 0.38.0, below). Earlier (v2.913.0) it added assets: the flow-level `assets` key and the errors `asset_declaration_invalid`, `asset_reference_unknown` and `asset_reference_placement` (package 0.37.0, below). Earlier (v2.912.0): catalogue sub-flows and partials: the `include` executor scheme, the `flow_version` step key and the errors `catalog_ref_invalid`, `flow_version_invalid` and `flow_version_not_catalog` (package 0.36.0, below).
+
+> package 0.38.0 — **the inline size and the count are save-door rules (no new code).** `SPEC_VERSION`
+> is `2.914.0` (the AIgentFlow release that ships assets; 2.913.0 became another fix, so 0.37.0's label
+> names a release that does not carry them). Contract: the reference's `AssetDeclarationProblem` and
+> `validateAssets`. Spec: `assetGrammar.declarationInvalid.problems.inlineTooLarge` and
+> `assetGrammar.declarationInvalid.tooManyFormat`, byte-identical to the Go port's.
+>
+> - **Inline size**: right after the inline-pin problem and before the sha256 one, inline `content`
+>   longer than `maxBytes` (262144) **UTF-8 bytes** (`TextEncoder`, not `string.length`) is
+>   `asset "<name>": inline content is larger than 262144 bytes`.
+> - **Count**: before the per-asset findings, more than `maxCount` (32) declared assets is ONE finding
+>   at field `assets` (no step): `the flow declares <n> assets, more than 32`.
+> - **Does not fire** at exactly 32 assets or exactly 262144 bytes.
+>
+> Fixtures, byte-identical to the Go port's: `invalid-asset-too-many.yaml`,
+> `invalid-asset-inline-too-large.yaml` (131073 two-byte characters: over in bytes, under in
+> characters) and the control `valid-assets-at-the-limits.yaml`. Test: `test/v0380-asset-limits.test.ts`.
 
 > package 0.37.0 — **assets (three new ERRORS, one flow key).** `SPEC_VERSION` is `2.913.0`. Contract:
 > the reference's `validateAssets` (validation.assets.go) and `AssetDeclarationProblem`

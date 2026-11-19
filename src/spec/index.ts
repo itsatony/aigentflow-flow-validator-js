@@ -459,13 +459,15 @@ export const CATALOG_FLOW = {
 
 /**
  * Assets (AIgentFlow 2.913.0): the flow-level `assets:` block and `asset://<name>`
- * step values.
+ * step values. The inline size and the count are save-door rules since 2.914.0.
  */
 const assets = spec.assetGrammar;
 export const ASSET_GRAMMAR = {
   referencePrefix: assets.referencePrefix,
   namePattern: new RegExp(assets.namePattern),
   sha256Pattern: new RegExp(assets.sha256Pattern),
+  maxCount: assets.maxCount,
+  maxBytes: assets.maxBytes,
   declarationInvalid: assets.declarationInvalid,
   placementOutside: assets.placementOutside,
   referenceUnknown: assets.referenceUnknown,
