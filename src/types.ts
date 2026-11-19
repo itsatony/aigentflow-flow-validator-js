@@ -265,6 +265,15 @@ export interface InputSchema {
   fields?: InputSchemaField[];
 }
 
+/** One entry of a flow's `assets:` block: exactly one of content, trove_key, aiv_ref. */
+export interface AssetDefinition {
+  content?: string;
+  trove_key?: string;
+  aiv_ref?: string;
+  version?: string;
+  sha256?: string;
+}
+
 export interface Flow {
   aigentflow_version?: string;
   name?: string;
@@ -293,6 +302,11 @@ export interface Flow {
   discoverable_tools?: unknown;
   /** Removed in AIgentFlow v2.836.0: any non-null value is `campaign_removed`. */
   campaign?: unknown;
+  /**
+   * Assets (AIgentFlow 2.913.0): long step bodies kept outside the flow, used as a
+   * whole step value `asset://<name>`. See validators/assets.ts.
+   */
+  assets?: Record<string, AssetDefinition | null>;
   checkpoint?: Record<string, unknown>;
   input_schema?: InputSchema;
   classification?: Record<string, unknown>;

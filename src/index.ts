@@ -37,6 +37,7 @@ import { validateRemovedOrchestratorSurfaces } from './validators/removedSignalC
 import { validateResidencyEnforcement } from './validators/complianceResidency.js';
 import { validateExamples } from './validators/examples.js';
 import { validateCatalogFlowSteps } from './validators/catalogFlow.js';
+import { validateAssets } from './validators/assets.js';
 import type { ScalarSources } from './validators/util.js';
 
 export { SPEC_VERSION, INPUT_SCHEMA_VERSION } from './spec/index.js';
@@ -107,6 +108,7 @@ function validateParsed(
   validateRemovedFlowKeys(f, issues);
   validateExecutors(f, issues);
   validateCatalogFlowSteps(f, issues);
+  validateAssets(f, issues);
   validateQuerySchema(f, issues);
   validateResponseExpectations(f, issues);
   validateErrorStrategies(f, issues);

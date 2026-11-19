@@ -458,6 +458,20 @@ export const CATALOG_FLOW = {
 } as const;
 
 /**
+ * Assets (AIgentFlow 2.913.0): the flow-level `assets:` block and `asset://<name>`
+ * step values.
+ */
+const assets = spec.assetGrammar;
+export const ASSET_GRAMMAR = {
+  referencePrefix: assets.referencePrefix,
+  namePattern: new RegExp(assets.namePattern),
+  sha256Pattern: new RegExp(assets.sha256Pattern),
+  declarationInvalid: assets.declarationInvalid,
+  placementOutside: assets.placementOutside,
+  referenceUnknown: assets.referenceUnknown,
+} as const;
+
+/**
  * `atlas://` rules. Every message format takes the quoted step id first; the
  * operation and capability-ref messages take one more value.
  */
