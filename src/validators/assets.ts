@@ -12,10 +12,12 @@ import type { Flow } from '../types.js';
 import { Issues, isRecord } from './util.js';
 
 const WHITESPACE = /\s/u;
+// The reference measures inline content in UTF-8 bytes (Go's len), not characters.
+const utf8Encoder = new TextEncoder();
 
 function format(messageFormat: string, ...args: string[]): string {
   let message = messageFormat;
-  for (const a of args) message = message.replace(/%[sq]/, () => a);
+  for (const a of args) message = message.replace(/%[sqd]/, () => a);
   return message;
 }
 
@@ -89,6 +91,9 @@ function declarationProblem(
   if (sources === 0) return p.noSource;
   if (sources > 1) return p.manySources;
   if (content !== '' && (sha256 !== '' || version !== '')) return p.inlinePin;
+  if (utf8Encoder.encode(content).length > ASSET_GRAMMAR.maxBytes) {
+    return format(p.inlineTooLarge, String(ASSET_GRAMMAR.maxBytes));
+  }
   if (content === '' && !ASSET_GRAMMAR.sha256Pattern.test(sha256)) return p.sha256;
   if (trove !== '' && version !== '') return p.troveVersion;
   if (aiv !== '' && !CATALOG_FLOW.versionPattern.test(version)) return p.aivVersion;
@@ -104,6 +109,15 @@ function declarationProblem(
 export function validateAssets(f: Flow, issues: Issues): void {
   const declared = isRecord(f.assets) ? f.assets : {};
   const rule = ASSET_GRAMMAR.declarationInvalid;
+  const count = Object.keys(declared).length;
+  if (count > ASSET_GRAMMAR.maxCount) {
+    issues.error({
+      field: 'assets',
+      message: format(rule.tooManyFormat, String(count), String(ASSET_GRAMMAR.maxCount)),
+      code: rule.code,
+      suggestion: rule.suggestion,
+    });
+  }
   for (const name of Object.keys(declared).sort()) {
     const problem = declarationProblem(name, declared[name], `assets.${name}`, issues);
     if (problem !== null) {

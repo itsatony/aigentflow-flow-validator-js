@@ -1761,6 +1761,30 @@ const CASES: Case[] = [
     expectErrorCodes: ['atlas_agent_not_literal'],
   },
   {
+    // 0.38.0 (AIgentFlow 2.914.0): the inline size and the count are save-door rules.
+    file: 'invalid-asset-too-many.yaml',
+    valid: false,
+    expectErrorCodes: ['asset_declaration_invalid'],
+  },
+  {
+    // Over the limit in BYTES (two-byte characters), under it in characters.
+    file: 'invalid-asset-inline-too-large.yaml',
+    valid: false,
+    expectErrorCodes: ['asset_declaration_invalid'],
+  },
+  {
+    // The false-positive side: exactly 32 assets, one inline at exactly the byte limit.
+    file: 'valid-assets-at-the-limits.yaml',
+    valid: true,
+    forbidErrorCodes: [
+      'asset_declaration_invalid',
+      'asset_reference_unknown',
+      'asset_reference_placement',
+      'unknown_yaml_key',
+    ],
+    forbidWarningCodes: ['unknown_yaml_key'],
+  },
+  {
     // 0.37.0 (AIgentFlow 2.913.0): assets.
     file: 'invalid-asset-declaration.yaml',
     valid: false,
