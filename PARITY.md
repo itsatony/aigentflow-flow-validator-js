@@ -4,7 +4,22 @@ This document maps every rule in this JavaScript validator back to the AIgentFlo
 Go reference implementation, records the intentional divergences, and defines the
 discipline for keeping the two in sync.
 
-**Tracks AIgentFlow flow schema: `v2.914.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which makes the inline asset size and the asset count save-door findings of `asset_declaration_invalid` (package 0.38.0, below). Earlier (v2.913.0) it added assets: the flow-level `assets` key and the errors `asset_declaration_invalid`, `asset_reference_unknown` and `asset_reference_placement` (package 0.37.0, below). Earlier (v2.912.0): catalogue sub-flows and partials: the `include` executor scheme, the `flow_version` step key and the errors `catalog_ref_invalid`, `flow_version_invalid` and `flow_version_not_catalog` (package 0.36.0, below).
+**Tracks AIgentFlow flow schema: `v2.917.0`** (`SPEC_VERSION` in [`src/spec/aigentflow-spec.json`](./src/spec/aigentflow-spec.json)), which counts the `EUROPE` residency code as EU-bound for `compliance_residency_unenforced` (package 0.39.0, below). Earlier (v2.914.0) it made the inline asset size and the asset count save-door findings of `asset_declaration_invalid` (package 0.38.0, below). Earlier (v2.913.0) it added assets: the flow-level `assets` key and the errors `asset_declaration_invalid`, `asset_reference_unknown` and `asset_reference_placement` (package 0.37.0, below). Earlier (v2.912.0): catalogue sub-flows and partials: the `include` executor scheme, the `flow_version` step key and the errors `catalog_ref_invalid`, `flow_version_invalid` and `flow_version_not_catalog` (package 0.36.0, below).
+
+> package 0.39.0 — **`EUROPE` is EU-bound (no new code).** `SPEC_VERSION` is `2.917.0`. AIgentFlow's model
+> catalogue split the residency codes: `EU` is the 27 member states only, and the new `EUROPE` is the EU
+> plus the GDPR-safe European countries (EEA, Switzerland, the UK, a few others). A vendor "EU" lane that
+> may process in EEA/CH (Mistral `eu`, the OpenAI EU lane, Azure EU Data Zone) is now `EUROPE`. Such a
+> code binds a call to a jurisdiction exactly as `EU` does, so the reference's `euOnlyResidency` accepts
+> it. Spec: `complianceResidency.euResidencyCodes` gains `EUROPE`, byte-identical to the Go port's.
+>
+> - **Fires** under `['EUROPE']`, `['EU', 'EUROPE']`, `[' europe ']` (trimmed, upper-cased) and
+>   `['DE', 'Europe']` beside an unpinned region-lane call.
+> - **Does not fire** under `['EUROPE', 'US']` (not EU-bound), or on an unknown code such as `EEA` or
+>   `EUROPEAN`.
+>
+> Fixtures, byte-identical to the Go port's: `warn-compliance-residency-unenforced-europe.yaml` and the
+> control `valid-compliance-residency-europe-pinned.yaml`. Test: `test/v0390-residency-europe.test.ts`.
 
 > package 0.38.0 — **the inline size and the count are save-door rules (no new code).** `SPEC_VERSION`
 > is `2.914.0` (the AIgentFlow release that ships assets; 2.913.0 became another fix, so 0.37.0's label
@@ -594,7 +609,7 @@ own state, so it is not seeded.` and the suggestion its text (spec keys `message
 > model catalogue's declared deployments: it says a (provider, model) pair is _eligible_,
 > not which host a call dials. The new rule is the catalogue-free counterpart. When the
 > residency is non-empty and **every** code (trimmed, upper-cased) is `EU`, `DE`, `FR`,
-> `IE`, `NL`, `IT` or `ES` (so `["EU","US"]` is not EU-only), each top-level step and
+> `IE`, `NL`, `IT` or `ES` (so `["EU","US"]` is not EU-only; `EUROPE` joined the set in 0.39.0), each top-level step and
 > loop sub-step whose executor starts `ai://`, then the orchestrator, warns when its
 > provider is a **region-lane provider** (the providers whose adapter routes on `region`:
 > `bedrock`, `google`, `azure`, `openai`, `assemblyai`, `speechmatics`, `deepgram`,
