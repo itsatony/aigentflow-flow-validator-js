@@ -194,7 +194,7 @@ interface ValidationIssue {
 These need a live server / org context and are intentionally out of scope:
 
 - **Credentials** — whether a bound credential actually exists or is authorised.
-- **Model compliance** — the `compliance:` block is enforced against the provider catalogue at flow-create time on the server. (The one catalogue-free part, the warning `compliance_residency_unenforced` for an EU-only residency beside an unpinned call, is checked here.)
+- **Model compliance** — the `compliance:` block is enforced against the provider catalogue at flow-create time on the server. (The one catalogue-free part, the warning `compliance_residency_unenforced` for an EU-bound residency (`EU`, `EUROPE` or an EU member state) beside an unpinned call, is checked here.)
 - **Template field resolution** — whether `.data.x.y` will actually be populated at runtime (we validate syntax, not data flow).
 - **Publish gates** — `visibility`/`classification`/template-metadata publish rules are server- and org-context dependent.
 

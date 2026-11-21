@@ -1734,6 +1734,18 @@ const CASES: Case[] = [
     forbidWarningCodes: ['compliance_residency_unenforced'],
   },
   {
+    // 0.39.0 (AIgentFlow 2.917.0): EUROPE is EU-bound, alone or beside EU.
+    file: 'warn-compliance-residency-unenforced-europe.yaml',
+    valid: true,
+    expectWarningCodes: ['compliance_residency_unenforced'],
+  },
+  {
+    // The false-positive side: every call under ' europe ' is pinned.
+    file: 'valid-compliance-residency-europe-pinned.yaml',
+    valid: true,
+    forbidWarningCodes: ['compliance_residency_unenforced'],
+  },
+  {
     // 0.28.0 — AIgentFlow v2.835.0: nexus:// is canonical, atlas:// its alias; one set of rules.
     file: 'valid-nexus-agent-run.yaml',
     valid: true,
